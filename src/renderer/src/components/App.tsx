@@ -420,6 +420,8 @@ export function App() {
       (item) => item.id === owner.connectionId
     )
     const stopped = ['completed', 'error'].includes(session.state)
+    const providerSessionReference =
+      session.providerSessionId ?? session.providerSessionName
     return [
       {
         id: 'open',
@@ -455,20 +457,22 @@ export function App() {
             }
           ]
         : []),
-      ...(session.providerSessionId
+      ...(providerSessionReference
         ? [
             {
               id: 'copy-provider-session',
-              label: 'Copy Codex session ID',
+              label: session.providerSessionId
+                ? 'Copy Codex session ID'
+                : 'Copy Codex session name',
               icon: <Clipboard size={14} />,
               action: () =>
-                window.projectConsole.system.copyText(session.providerSessionId!)
+                window.projectConsole.system.copyText(providerSessionReference)
             }
           ]
         : []),
       ...(stopped
         ? [
-            ...(session.profile === 'codex' && session.providerSessionId
+            ...(session.profile === 'codex' && providerSessionReference
               ? [
                   {
                     id: 'resume-codex',
@@ -483,7 +487,7 @@ export function App() {
               id: 'archive',
               label: 'Archive terminal',
               icon: <Archive size={14} />,
-              separatorBefore: !(session.profile === 'codex' && session.providerSessionId),
+              separatorBefore: !(session.profile === 'codex' && providerSessionReference),
               action: () => archiveSession(session)
             },
             {

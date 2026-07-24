@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename } from 'node:path'
@@ -12,6 +13,11 @@ import type {
   StartTerminalInput,
   TerminalSession
 } from '../shared/types'
+import {
+  codexComposerIsReady,
+  codexRenameInput,
+  createCodexSessionName
+} from './codex-session-name'
 import { ConversationIndexer } from './conversation-indexer'
 import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import { acknowledgedAgentState, ScreenActivityDetector } from './screen-activity-detector'
@@ -28,6 +34,7 @@ interface Runtime {
   scanTimer: NodeJS.Timeout | null
   providerTimer: NodeJS.Timeout | null
   providerAttempts: number
+  pendingProviderSessionName: string | null
   closingForAppExit: boolean
   session: TerminalSession
 }
@@ -68,7 +75,7 @@ function launchCommand(
   profile: LaunchProfile,
   customCommand: string | null,
   dangerous: boolean,
-  providerSessionId: string | null = null
+  providerSessionReference: string | null = null
 ): string {
   if (profile === 'shell') return 'exec "${SHELL:-/bin/sh}" -l'
   if (profile === 'custom') {
@@ -76,8 +83,8 @@ function launchCommand(
   }
   if (profile === 'codex') {
     const flag = dangerous ? ' --dangerously-bypass-approvals-and-sandbox' : ''
-    if (providerSessionId) {
-      return `exec codex resume${flag} ${quote(providerSessionId)}`
+    if (providerSessionReference) {
+      return `exec codex resume${flag} ${quote(providerSessionReference)}`
     }
     return `exec codex${flag}`
   }
@@ -136,10 +143,13 @@ export class TerminalManager {
       }
     }
     const tmuxName = tmuxAvailable ? sessionName : null
+    const providerSessionName =
+      input.profile === 'codex' ? createCodexSessionName(sessionName, randomUUID()) : null
     const session = this.store.createSession({
       projectId: input.projectId,
       name: sessionName,
       profile: input.profile,
+      providerSessionName,
       customCommand: input.customCommand?.trim() || null,
       backend: tmuxAvailable ? 'tmux' : 'pty',
       tmuxName,
@@ -221,7 +231,9 @@ export class TerminalManager {
     if (session.profile !== 'codex') {
       throw new Error('Only Codex terminals can resume a linked Codex chat.')
     }
-    if (!session.providerSessionId) {
+    const providerSessionReference =
+      session.providerSessionId ?? session.providerSessionName
+    if (!providerSessionReference) {
       throw new Error('This terminal is not linked to a Codex session yet.')
     }
     if (!['completed', 'error'].includes(session.state)) {
@@ -238,7 +250,7 @@ export class TerminalManager {
       session.backend === 'tmux' && session.tmuxName
         ? this.tmuxSessionExists(connection, session.tmuxName)
         : false
-    this.changeState(session, 'idle', `Resumed Codex session ${session.providerSessionId}.`)
+    this.changeState(session, 'idle', `Resumed Codex session ${providerSessionReference}.`)
     const latest = this.requireSession(sessionId)
     try {
       this.launch(
@@ -325,17 +337,13 @@ export class TerminalManager {
   stop(sessionId: string): void {
     const session = this.requireSession(sessionId)
     const runtime = this.runtimes.get(sessionId)
-    if (runtime) {
-      if (session.backend === 'tmux') {
-        runtime.pty.write('\u0002:kill-session\r')
-      } else {
-        runtime.pty.kill()
-      }
-      setTimeout(() => {
-        const current = this.runtimes.get(sessionId)
-        if (current) current.pty.kill()
-      }, 750).unref()
+    if (session.backend === 'tmux' && session.tmuxName) {
+      const project = this.store.getProject(session.projectId)
+      const connection = project ? this.store.getConnection(project.connectionId) : null
+      if (!connection) throw new Error('Project connection not found.')
+      this.killTmuxSession(connection, session.tmuxName)
     }
+    runtime?.pty.kill()
     this.changeState(session, 'completed', `${session.name} was stopped.`)
   }
 
@@ -376,7 +384,9 @@ export class TerminalManager {
       session.profile,
       session.customCommand,
       session.dangerousMode,
-      resumeProvider ? session.providerSessionId : null
+      resumeProvider
+        ? (session.providerSessionId ?? session.providerSessionName)
+        : null
     )
     const child = this.spawnTerminal(session, folder, connection, command, cols, rows, create)
     const screen = new HeadlessTerminal({
@@ -392,6 +402,10 @@ export class TerminalManager {
       scanTimer: null,
       providerTimer: null,
       providerAttempts: 0,
+      pendingProviderSessionName:
+        session.profile === 'codex' && create && !resumeProvider
+          ? session.providerSessionName
+          : null,
       closingForAppExit: false,
       session
     }
@@ -551,6 +565,11 @@ export class TerminalManager {
       for (let index = start; index < end; index += 1) {
         lines.push(buffer.getLine(index)?.translateToString(true) ?? '')
       }
+      if (runtime.pendingProviderSessionName && codexComposerIsReady(lines)) {
+        const providerSessionName = runtime.pendingProviderSessionName
+        runtime.pendingProviderSessionName = null
+        runtime.pty.write(codexRenameInput(providerSessionName))
+      }
       const nextState = runtime.detector?.inspect(lines.join('\n'))
       if (nextState) {
         const latest = this.store.getSession(runtime.session.id)
@@ -596,6 +615,49 @@ export class TerminalManager {
         }
       ).status === 0
     )
+  }
+
+  private killTmuxSession(connection: Connection, name: string): void {
+    if (connection.kind === 'local') {
+      if (!this.tmuxPath) {
+        throw new Error('Tmux is unavailable, so the persistent session could not be stopped.')
+      }
+      if (!this.tmuxSessionExists(connection, name)) return
+      const result = spawnSync(this.tmuxPath, ['kill-session', '-t', `=${name}`], {
+        encoding: 'utf8',
+        timeout: 3_000
+      })
+      if (result.error || result.status !== 0) {
+        const detail = result.error?.message || result.stderr?.trim()
+        throw new Error(detail || `Could not stop tmux session “${name}”.`)
+      }
+      if (this.tmuxSessionExists(connection, name)) {
+        throw new Error(`Tmux session “${name}” is still running.`)
+      }
+      return
+    }
+
+    const target = quote(`=${name}`)
+    const remoteCommand =
+      `if tmux has-session -t ${target} 2>/dev/null; then ` +
+      `tmux kill-session -t ${target}; else status=$?; test "$status" -eq 1; fi`
+    const result = spawnSync(
+      'ssh',
+      [
+        '-T',
+        '-o',
+        'BatchMode=yes',
+        '-o',
+        'ConnectTimeout=5',
+        connection.sshAlias ?? connection.name,
+        remoteCommand
+      ],
+      { encoding: 'utf8', timeout: 7_000 }
+    )
+    if (result.error || result.status !== 0) {
+      const detail = result.error?.message || result.stderr?.trim()
+      throw new Error(detail || `Could not stop remote tmux session “${name}”.`)
+    }
   }
 
   private changeState(session: TerminalSession, state: AgentState, message?: string): void {

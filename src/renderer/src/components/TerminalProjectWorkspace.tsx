@@ -323,6 +323,8 @@ export function TerminalProjectWorkspace({
             {(() => {
               const session = visibleSessions.find((item) => item.id === menu.sessionId)
               if (!session) return null
+              const providerSessionReference =
+                session.providerSessionId ?? session.providerSessionName
               return (
                 <>
                   <button onClick={() => run(rename(session))}>
@@ -332,17 +334,20 @@ export function TerminalProjectWorkspace({
                     {session.pinned ? <PinOff size={14} /> : <Pin size={14} />}
                     {session.pinned ? 'Unpin' : 'Pin'}
                   </button>
-                  {session.providerSessionId && (
+                  {providerSessionReference && (
                     <button
                       onClick={() =>
                         run(
                           window.projectConsole.system.copyText(
-                            session.providerSessionId!
+                            providerSessionReference
                           )
                         )
                       }
                     >
-                      <Clipboard size={14} /> Copy Codex session ID
+                      <Clipboard size={14} />
+                      {session.providerSessionId
+                        ? 'Copy Codex session ID'
+                        : 'Copy Codex session name'}
                     </button>
                   )}
                   {!['completed', 'error'].includes(session.state) ? (
@@ -351,7 +356,7 @@ export function TerminalProjectWorkspace({
                     </button>
                   ) : (
                     <>
-                      {session.profile === 'codex' && session.providerSessionId && (
+                      {session.profile === 'codex' && providerSessionReference && (
                         <button onClick={() => run(resumeCodex(session))}>
                           <RotateCcw size={14} /> Resume Codex chat
                         </button>
@@ -425,8 +430,8 @@ export function TerminalProjectWorkspace({
                     <strong>{session.name}</strong>
                     <span>
                       {session.profile} · {session.backend}
-                      {session.providerSessionId &&
-                        ` · ${session.providerSessionId.slice(0, 8)}…`}
+                      {(session.providerSessionId ?? session.providerSessionName) &&
+                        ` · ${(session.providerSessionId ?? session.providerSessionName)!.slice(0, 18)}…`}
                     </span>
                   </div>
                   <button onClick={() => run(rename(session))}>

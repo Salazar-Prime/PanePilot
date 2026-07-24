@@ -45,7 +45,7 @@ These are owner-approved decisions and should be treated as product invariants u
 18. Terminal pinning is persisted. Pinned terminals remain first while the remaining terminals follow the user's selected sort order.
 19. Projects can be archived only after all of their terminals stop. Archived projects have a separate library view and do not contribute to live status counts.
 20. SSH port forwards are explicit, bind to `127.0.0.1`, use `ExitOnForwardFailure`, and stop when PanePilot exits.
-21. A Codex terminal stores the provider's Codex session ID separately from PanePilot's terminal ID. Resuming a stopped Codex terminal must use that exact provider ID on the terminal's original local or SSH connection.
+21. A new Codex terminal receives a stable, unique provider session name before launch. PanePilot applies it with `/rename` when the Codex composer becomes ready, then attaches the provider's actual session ID when archive metadata appears. Resume uses the exact provider ID when known and the unique provider name only during the pre-ID window.
 
 ## Agent lifecycle semantics
 
@@ -127,7 +127,7 @@ Core tables:
 
 - `connections`: local or SSH connection identities.
 - `projects`: base project identity, type, connection, folder, repository URL, aggregate state, and timestamps.
-- `terminal_sessions`: terminal profile, command, backend, tmux identity, provider session identity, lifecycle state, dangerous-mode flag, archive flag, and saved output.
+- `terminal_sessions`: terminal profile, command, backend, tmux identity, provider session name and ID, lifecycle state, dangerous-mode flag, archive flag, and saved output.
 - `activities`: project timeline entries.
 - `agent_events`: idempotently ingested provider lifecycle payloads.
 - `port_forwards`: saved loopback-only SSH forwarding configurations. Running processes are intentionally not persisted across app exits.
@@ -143,8 +143,10 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - The tmux session name must exactly match the PanePilot terminal name. Rename both as one operation.
 - Closing/detaching the renderer does not kill a persistent tmux session.
 - A PTY fallback is used when tmux cannot be found or created.
-- Tmux preserves a still-running Codex process. Separately, `provider_session_id` allows a stopped Codex terminal to restart with `codex resume <exact-id>`.
+- Tmux preserves a still-running Codex process. A new Codex terminal persists `provider_session_name` before spawn and applies it through `/rename` once the TUI composer is ready; Codex has no create-time name flag. `provider_session_id` is linked from archive metadata after the first spawn.
+- A stopped Codex terminal restarts with `codex resume <exact-id>` when the ID is known, or its unique provider session name while ID discovery is still pending.
 - Provider session discovery reads Codex `session_meta` archive records and does not depend on lifecycle hooks. Existing unlinked Codex terminals are reconciled on startup when their archives are available.
+- Stopping a tmux-backed terminal must directly kill the exact tmux session and verify that it is gone before marking the terminal `completed`. Do not simulate tmux prefix keystrokes through the terminal UI.
 - Local tmux resolution checks PATH plus common Homebrew/system locations.
 - Custom hook environment variables must be passed through the pane's initial `env` command. A pre-existing tmux server does not automatically import arbitrary client variables.
 - Saved terminal output is capped in SQLite.

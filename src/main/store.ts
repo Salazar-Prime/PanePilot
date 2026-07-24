@@ -48,6 +48,7 @@ type SessionRow = {
   name: string
   profile: LaunchProfile
   provider_session_id: string | null
+  provider_session_name: string | null
   custom_command: string | null
   backend: TerminalBackend
   tmux_name: string | null
@@ -111,6 +112,7 @@ function mapSession(row: SessionRow): TerminalSession {
     name: row.name,
     profile: row.profile,
     providerSessionId: row.provider_session_id,
+    providerSessionName: row.provider_session_name,
     customCommand: row.custom_command,
     backend: row.backend,
     tmuxName: row.tmux_name,
@@ -187,6 +189,7 @@ export class Store {
         name TEXT NOT NULL,
         profile TEXT NOT NULL,
         provider_session_id TEXT,
+        provider_session_name TEXT,
         custom_command TEXT,
         backend TEXT NOT NULL,
         tmux_name TEXT,
@@ -233,6 +236,7 @@ export class Store {
     this.ensureColumn('projects', 'archived', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('terminal_sessions', 'name', `TEXT NOT NULL DEFAULT ''`)
     this.ensureColumn('terminal_sessions', 'provider_session_id', 'TEXT')
+    this.ensureColumn('terminal_sessions', 'provider_session_name', 'TEXT')
     this.ensureColumn('terminal_sessions', 'custom_command', 'TEXT')
     this.ensureColumn('terminal_sessions', 'tmux_name', 'TEXT')
     this.ensureColumn('terminal_sessions', 'dangerous_mode', 'INTEGER NOT NULL DEFAULT 0')
@@ -272,13 +276,15 @@ export class Store {
         ON terminal_sessions(project_id, archived);
       CREATE INDEX IF NOT EXISTS terminal_sessions_provider_idx
         ON terminal_sessions(provider_session_id);
+      CREATE INDEX IF NOT EXISTS terminal_sessions_provider_name_idx
+        ON terminal_sessions(provider_session_name);
       CREATE INDEX IF NOT EXISTS activities_project_idx
         ON activities(project_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS port_forwards_connection_idx
         ON port_forwards(connection_id, created_at);
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 3;
+      PRAGMA user_version = 4;
     `)
   }
 
@@ -411,7 +417,8 @@ export class Store {
     const sessions = (
       this.db
         .prepare(
-          `SELECT id, project_id, name, profile, provider_session_id, custom_command, backend, tmux_name, state,
+          `SELECT id, project_id, name, profile, provider_session_id, provider_session_name,
+                  custom_command, backend, tmux_name, state,
                   dangerous_mode, archived, pinned, output, created_at, updated_at
            FROM terminal_sessions WHERE project_id = ? ORDER BY created_at`
         )
@@ -446,6 +453,7 @@ export class Store {
     projectId: string
     name: string
     profile: LaunchProfile
+    providerSessionName: string | null
     customCommand: string | null
     backend: TerminalBackend
     tmuxName: string | null
@@ -457,10 +465,10 @@ export class Store {
       this.db
         .prepare(
           `INSERT INTO terminal_sessions
-           (id, project_id, name, label, profile, custom_command, command, backend, tmux_name,
-            backend_name, state, dangerous_mode, dangerous, archived, pinned, output,
+           (id, project_id, name, label, profile, provider_session_name, custom_command, command,
+            backend, tmux_name, backend_name, state, dangerous_mode, dangerous, archived, pinned, output,
             created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, 0, '', ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, 0, '', ?, ?)`
         )
         .run(
           id,
@@ -468,6 +476,7 @@ export class Store {
           input.name,
           input.name,
           input.profile,
+          input.providerSessionName,
           input.customCommand,
           input.customCommand,
           input.backend,
@@ -482,15 +491,16 @@ export class Store {
       this.db
         .prepare(
           `INSERT INTO terminal_sessions
-           (id, project_id, name, profile, custom_command, backend, tmux_name, state,
+           (id, project_id, name, profile, provider_session_name, custom_command, backend, tmux_name, state,
             dangerous_mode, archived, pinned, output, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, 0, 0, '', ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, 0, 0, '', ?, ?)`
         )
         .run(
           id,
           input.projectId,
           input.name,
           input.profile,
+          input.providerSessionName,
           input.customCommand,
           input.backend,
           input.tmuxName,
@@ -511,7 +521,8 @@ export class Store {
   getSession(id: string): TerminalSession | null {
     const row = this.db
       .prepare(
-        `SELECT id, project_id, name, profile, provider_session_id, custom_command, backend, tmux_name, state,
+        `SELECT id, project_id, name, profile, provider_session_id, provider_session_name,
+                custom_command, backend, tmux_name, state,
                 dangerous_mode, archived, pinned, output, created_at, updated_at
          FROM terminal_sessions WHERE id = ?`
       )

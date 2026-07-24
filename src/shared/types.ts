@@ -24,6 +24,7 @@ export interface TerminalSession {
   name: string
   profile: LaunchProfile
   providerSessionId: string | null
+  providerSessionName: string | null
   customCommand: string | null
   backend: TerminalBackend
   tmuxName: string | null

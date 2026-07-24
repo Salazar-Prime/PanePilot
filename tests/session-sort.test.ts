@@ -14,6 +14,7 @@ function session(
     name,
     profile: 'codex',
     providerSessionId: null,
+    providerSessionName: null,
     customCommand: null,
     backend: 'tmux',
     tmuxName: name,
