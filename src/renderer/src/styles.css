@@ -809,12 +809,17 @@ select:focus-visible {
 .files-layout {
   display: grid;
   min-height: 0;
+  overflow: hidden;
   flex: 1;
   grid-template-columns: minmax(260px, 32%) minmax(0, 1fr);
 }
 
 .file-browser {
+  display: flex;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
   border-right: 1px solid #222630;
   background: #0c0e13;
 }
@@ -865,8 +870,10 @@ select:focus-visible {
 }
 
 .file-list {
-  height: calc(100% - 40px);
+  min-height: 0;
+  flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6px;
 }
 
