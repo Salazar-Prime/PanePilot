@@ -1,14 +1,29 @@
 import { useEffect, useState } from 'react'
-import { ChevronUp, Folder, FolderOpen, Laptop, LoaderCircle, Server, X } from 'lucide-react'
+import {
+  ChevronUp,
+  FileText,
+  Folder,
+  FolderOpen,
+  Github,
+  Laptop,
+  Link2,
+  LoaderCircle,
+  Server,
+  TerminalSquare,
+  X
+} from 'lucide-react'
 import type {
   Connection,
   CreateProjectInput,
+  ProjectType,
   RemoteFolderListing
 } from '@shared/types'
+import { projectTypeRegistry } from '../projectTypeRegistry'
 
 interface Props {
   connections: Connection[]
   initialConnectionId?: string
+  initialProjectType?: ProjectType
   onClose(): void
   onCreate(input: CreateProjectInput): Promise<void>
 }
@@ -16,20 +31,27 @@ interface Props {
 export function NewProjectDialog({
   connections,
   initialConnectionId,
+  initialProjectType = 'terminal',
   onClose,
   onCreate
 }: Props) {
+  const [type, setType] = useState<ProjectType>(initialProjectType)
   const [name, setName] = useState('')
   const [nameEdited, setNameEdited] = useState(false)
   const [connectionId, setConnectionId] = useState(
     initialConnectionId ?? connections[0]?.id ?? 'local'
   )
   const [folder, setFolder] = useState('')
+  const [repositoryUrl, setRepositoryUrl] = useState('')
+  const [mainFile, setMainFile] = useState('main.tex')
+  const [contextFolder, setContextFolder] = useState('context')
+  const [overleafUrl, setOverleafUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [remoteListing, setRemoteListing] = useState<RemoteFolderListing | null>(null)
   const [remoteLoading, setRemoteLoading] = useState(false)
   const connection = connections.find((item) => item.id === connectionId)
+  const definition = projectTypeRegistry[type]
 
   useEffect(() => {
     if (!nameEdited && folder) {
@@ -70,7 +92,25 @@ export function NewProjectDialog({
     setSubmitting(true)
     setError('')
     try {
-      await onCreate({ name, connectionId, folder })
+      const base = {
+        name,
+        connectionId,
+        folder,
+        repositoryUrl: repositoryUrl.trim() || undefined
+      }
+      const input: CreateProjectInput =
+        type === 'latex'
+          ? {
+              ...base,
+              type: 'latex',
+              latex: {
+                mainFile: mainFile.trim() || 'main.tex',
+                contextFolder: contextFolder.trim() || 'context',
+                overleafUrl: overleafUrl.trim() || undefined
+              }
+            }
+          : { ...base, type: 'terminal' }
+      await onCreate(input)
       onClose()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -91,13 +131,33 @@ export function NewProjectDialog({
         <div className="modal-heading">
           <div>
             <span className="eyebrow">NEW WORKSPACE</span>
-            <h2 id="new-project-title">Add a terminal project</h2>
+            <h2 id="new-project-title">Add a {definition.label} project</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Close">
             <X size={17} />
           </button>
         </div>
         <form onSubmit={submit}>
+          <div className="project-type-grid" aria-label="Project type">
+            {Object.values(projectTypeRegistry).map((item) => {
+              const Icon = item.id === 'latex' ? FileText : TerminalSquare
+              return (
+                <button
+                  type="button"
+                  key={item.id}
+                  className={type === item.id ? 'selected' : ''}
+                  onClick={() => setType(item.id)}
+                >
+                  <Icon size={19} />
+                  <span>
+                    <strong>{item.label}</strong>
+                    <small>{item.description}</small>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
           <label className="field">
             <span>Connection</span>
             <select
@@ -126,7 +186,7 @@ export function NewProjectDialog({
               <span>
                 {connection?.kind === 'ssh'
                   ? `SSH alias · ${connection.sshAlias}`
-                  : 'Local folders and terminals'}
+                  : 'Local files and persistent terminals'}
               </span>
             </div>
           </div>
@@ -179,9 +239,10 @@ export function NewProjectDialog({
                   <p>This folder has no subfolders.</p>
                 )}
               </div>
-              <small>Open folders to browse. The path above is the folder that will be used.</small>
+              <small>Open folders to browse. The path above will be used.</small>
             </div>
           )}
+
           <label className="field">
             <span>Project name</span>
             <input
@@ -193,13 +254,65 @@ export function NewProjectDialog({
               placeholder="My project"
             />
           </label>
+
+          {type === 'latex' && (
+            <div className="latex-create-fields">
+              <div className="field-pair">
+                <label className="field">
+                  <span>Main LaTeX file</span>
+                  <input
+                    value={mainFile}
+                    onChange={(event) => setMainFile(event.target.value)}
+                    placeholder="main.tex"
+                  />
+                </label>
+                <label className="field">
+                  <span>Context folder</span>
+                  <input
+                    value={contextFolder}
+                    onChange={(event) => setContextFolder(event.target.value)}
+                    placeholder="context"
+                  />
+                </label>
+              </div>
+              <p className="form-help">
+                Paths are relative to the project folder. The context folder is optional and may
+                contain notes, sources, and reference material for attached agents.
+              </p>
+              <label className="field">
+                <span>
+                  <Link2 size={12} /> Overleaf URL <small>optional</small>
+                </span>
+                <input
+                  value={overleafUrl}
+                  onChange={(event) => setOverleafUrl(event.target.value)}
+                  placeholder="https://www.overleaf.com/project/…"
+                />
+              </label>
+            </div>
+          )}
+
+          <label className="field">
+            <span>
+              <Github size={12} /> Repository URL <small>optional</small>
+            </span>
+            <input
+              value={repositoryUrl}
+              onChange={(event) => setRepositoryUrl(event.target.value)}
+              placeholder="Auto-detected locally, or paste a GitHub URL"
+            />
+          </label>
+
           {error && <p className="form-error">{error}</p>}
           <div className="modal-actions">
             <button type="button" className="secondary-button" onClick={onClose}>
               Cancel
             </button>
-            <button className="primary-button" disabled={submitting || !name || !folder}>
-              {submitting ? 'Creating…' : 'Create project'}
+            <button
+              className="primary-button"
+              disabled={submitting || !name || !folder || (type === 'latex' && !mainFile)}
+            >
+              {submitting ? 'Creating…' : `Create ${definition.label} project`}
             </button>
           </div>
         </form>

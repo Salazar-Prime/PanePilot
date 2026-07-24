@@ -3,11 +3,15 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import type {
   CreatePortForwardInput,
   CreateProjectInput,
-  StartTerminalInput
+  LatexChatMode,
+  StartLatexChatInput,
+  StartTerminalInput,
+  UpdateLatexProjectInput
 } from '../shared/types'
 import { ConversationIndexer } from './conversation-indexer'
 import { listLocalFiles, previewLocalFile, writeLocalFile } from './file-service'
-import { discoverRepository } from './git'
+import { LatexProjectService } from './latex-project-service'
+import { normalizeOptionalWebUrl } from './latex-paths'
 import { PortForwardManager, testSshConnection } from './port-forward-manager'
 import { projectTypeServices } from './project-type-services'
 import { RemoteConversationIndexer } from './remote-conversation-indexer'
@@ -27,6 +31,7 @@ let terminals: TerminalManager
 let conversations: ConversationIndexer
 let remoteConversations: RemoteConversationIndexer
 let portForwards: PortForwardManager
+let latex: LatexProjectService
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -77,14 +82,9 @@ function registerIpc(): void {
   ipcMain.handle('projects:create', (_event, input: CreateProjectInput) => {
     const connection = store.getConnection(input.connectionId)
     if (!connection) throw new Error('Choose a valid connection.')
-    projectTypeServices.get('terminal')!.validateCreate(input, connection)
-    const repositoryUrl = connection.kind === 'local' ? discoverRepository(input.folder) : null
-    return store.createProject({
-      name: input.name.trim(),
-      connectionId: input.connectionId,
-      folder: input.folder.trim(),
-      repositoryUrl
-    })
+    const service = projectTypeServices.get(input.type)
+    if (!service) throw new Error('Choose a supported project type.')
+    return service.create(store, input, connection)
   })
   ipcMain.handle('projects:rename', (_event, projectId: string, name: string) => {
     store.renameProject(projectId, name)
@@ -95,6 +95,15 @@ function registerIpc(): void {
   ipcMain.handle('projects:restore', (_event, projectId: string) => {
     store.archiveProject(projectId, false)
   })
+  ipcMain.handle(
+    'projects:update-repository',
+    (_event, projectId: string, rawUrl: string | null) => {
+      store.updateProjectRepository(
+        projectId,
+        normalizeOptionalWebUrl(rawUrl ?? undefined, 'Repository URL')
+      )
+    }
+  )
   ipcMain.handle('projects:open-repository', async (_event, url: string) => {
     if (!/^https?:\/\//i.test(url)) throw new Error('Only web repository URLs can be opened.')
     await shell.openExternal(url)
@@ -106,6 +115,31 @@ function registerIpc(): void {
     (_event, sessionId: string, cols: number, rows: number) =>
       terminals.attach(sessionId, cols, rows)
   )
+
+  ipcMain.handle('latex:get-workspace', (_event, projectId: string) =>
+    latex.getWorkspace(projectId)
+  )
+  ipcMain.handle('latex:update', (_event, input: UpdateLatexProjectInput) =>
+    latex.update(input)
+  )
+  ipcMain.handle('latex:start-chat', (_event, input: StartLatexChatInput) =>
+    latex.startChat(input)
+  )
+  ipcMain.handle(
+    'latex:set-chat-mode',
+    (_event, sessionId: string, mode: LatexChatMode) => {
+      latex.setChatMode(sessionId, mode)
+    }
+  )
+  ipcMain.handle('latex:send-prompt', (_event, sessionId: string, prompt: string) => {
+    latex.sendPrompt(sessionId, prompt)
+  })
+  ipcMain.handle('latex:changes', (_event, sessionId: string) =>
+    latex.changes(sessionId)
+  )
+  ipcMain.handle('latex:clear-changes', (_event, sessionId: string) => {
+    latex.clearChanges(sessionId)
+  })
   ipcMain.handle('terminals:write', (_event, sessionId: string, data: string) => {
     terminals.write(sessionId, data)
   })
@@ -203,6 +237,11 @@ function registerIpc(): void {
     const error = await shell.openPath(project.folder)
     if (error) throw new Error(error)
   })
+  ipcMain.handle('system:open-external', async (_event, rawUrl: string) => {
+    const url = normalizeOptionalWebUrl(rawUrl, 'External URL')
+    if (!url) throw new Error('External URL is required.')
+    await shell.openExternal(url)
+  })
 
   ipcMain.handle(
     'remote-folders:list',
@@ -260,6 +299,7 @@ app
       conversations,
       remoteConversations
     )
+    latex = new LatexProjectService(store, terminals)
     portForwards = new PortForwardManager(store, () => {
       mainWindow?.webContents.send('port-forward:changed')
     })

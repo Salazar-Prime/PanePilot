@@ -1,7 +1,9 @@
-export type ProjectType = 'terminal'
+export type ProjectType = 'terminal' | 'latex'
 export type ConnectionKind = 'local' | 'ssh'
 export type LaunchProfile = 'shell' | 'codex' | 'claude' | 'custom'
 export type TerminalBackend = 'tmux' | 'pty'
+export type LatexChatMode = 'ask' | 'edit'
+export type LatexChatScope = 'project' | 'section'
 export type AgentState =
   | 'idle'
   | 'running'
@@ -33,6 +35,7 @@ export interface TerminalSession {
   archived: boolean
   pinned: boolean
   output: string
+  latexChat: LatexChatAttachment | null
   createdAt: string
   updatedAt: string
 }
@@ -53,6 +56,7 @@ export interface Project {
   connectionId: string
   folder: string
   repositoryUrl: string | null
+  latex: LatexProjectDetails | null
   state: AgentState
   archived: boolean
   createdAt: string
@@ -61,11 +65,25 @@ export interface Project {
   activities: Activity[]
 }
 
-export interface CreateProjectInput {
+export interface CreateProjectBaseInput {
   name: string
   connectionId: string
   folder: string
+  repositoryUrl?: string
 }
+
+export type CreateProjectInput =
+  | (CreateProjectBaseInput & {
+      type: 'terminal'
+    })
+  | (CreateProjectBaseInput & {
+      type: 'latex'
+      latex: {
+        mainFile?: string
+        overleafUrl?: string
+        contextFolder?: string
+      }
+    })
 
 export interface StartTerminalInput {
   projectId: string
@@ -75,6 +93,82 @@ export interface StartTerminalInput {
   dangerousMode: boolean
   cols?: number
   rows?: number
+}
+
+export interface LatexProjectDetails {
+  projectId: string
+  mainFile: string
+  overleafUrl: string | null
+  contextFolder: string
+}
+
+export interface LatexSection {
+  id: string
+  projectId: string
+  title: string
+  level: number
+  sourceFile: string
+  startLine: number
+  endLine: number
+  ordinal: number
+}
+
+export interface LatexChatAttachment {
+  terminalSessionId: string
+  projectId: string
+  scope: LatexChatScope
+  sectionId: string | null
+  mode: LatexChatMode
+  createdAt: string
+}
+
+export interface LatexWorkspace {
+  details: LatexProjectDetails
+  sections: LatexSection[]
+  contextAvailable: boolean
+}
+
+export interface StartLatexChatInput {
+  projectId: string
+  name?: string
+  provider: ConversationProvider
+  scope: LatexChatScope
+  sectionId?: string
+  mode: LatexChatMode
+  dangerousMode: boolean
+}
+
+export interface UpdateLatexProjectInput {
+  projectId: string
+  mainFile: string
+  overleafUrl?: string
+  contextFolder: string
+}
+
+export type LatexChangeKind = 'added' | 'modified' | 'deleted'
+
+export interface LatexChangeHighlight {
+  kind: LatexChangeKind
+  startLine: number
+  endLine: number
+  startColumn: number
+  endColumn: number
+  originalText: string
+  currentText: string
+}
+
+export interface LatexFileChanges {
+  path: string
+  additions: number
+  modifications: number
+  deletions: number
+  highlights: LatexChangeHighlight[]
+}
+
+export interface LatexChangeSet {
+  sessionId: string
+  capturedAt: string | null
+  files: LatexFileChanges[]
 }
 
 export interface TerminalDataEvent {
@@ -178,6 +272,7 @@ export interface ProjectConsoleApi {
     rename(projectId: string, name: string): Promise<void>
     archive(projectId: string): Promise<void>
     restore(projectId: string): Promise<void>
+    updateRepository(projectId: string, url: string | null): Promise<void>
     chooseFolder(): Promise<string | null>
     openRepository(url: string): Promise<void>
   }
@@ -210,6 +305,15 @@ export interface ProjectConsoleApi {
     list(projectId: string, query?: string): Promise<ConversationSummary[]>
     get(projectId: string, conversationId: string, query?: string): Promise<ConversationDetail>
   }
+  latex: {
+    getWorkspace(projectId: string): Promise<LatexWorkspace>
+    update(input: UpdateLatexProjectInput): Promise<LatexWorkspace>
+    startChat(input: StartLatexChatInput): Promise<TerminalSession>
+    setChatMode(sessionId: string, mode: LatexChatMode): Promise<void>
+    sendPrompt(sessionId: string, prompt: string): Promise<void>
+    changes(sessionId: string): Promise<LatexChangeSet>
+    clearChanges(sessionId: string): Promise<void>
+  }
   portForwards: {
     list(connectionId: string): Promise<PortForward[]>
     create(input: CreatePortForwardInput): Promise<PortForward>
@@ -221,5 +325,6 @@ export interface ProjectConsoleApi {
   system: {
     copyText(text: string): Promise<void>
     openProjectFolder(projectId: string): Promise<void>
+    openExternal(url: string): Promise<void>
   }
 }

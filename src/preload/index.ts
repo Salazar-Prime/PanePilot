@@ -2,11 +2,14 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   CreatePortForwardInput,
   CreateProjectInput,
+  LatexChatMode,
   ProjectConsoleApi,
+  StartLatexChatInput,
   StartTerminalInput,
   TerminalDataEvent,
   TerminalMetadataEvent,
-  TerminalStateEvent
+  TerminalStateEvent,
+  UpdateLatexProjectInput
 } from '../shared/types'
 
 const api: ProjectConsoleApi = {
@@ -21,6 +24,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('projects:rename', projectId, name),
     archive: (projectId: string) => ipcRenderer.invoke('projects:archive', projectId),
     restore: (projectId: string) => ipcRenderer.invoke('projects:restore', projectId),
+    updateRepository: (projectId: string, url: string | null) =>
+      ipcRenderer.invoke('projects:update-repository', projectId, url),
     chooseFolder: () => ipcRenderer.invoke('projects:choose-folder'),
     openRepository: (url: string) => ipcRenderer.invoke('projects:open-repository', url)
   },
@@ -82,6 +87,20 @@ const api: ProjectConsoleApi = {
     get: (projectId: string, conversationId: string, query = '') =>
       ipcRenderer.invoke('conversations:get', projectId, conversationId, query)
   },
+  latex: {
+    getWorkspace: (projectId: string) =>
+      ipcRenderer.invoke('latex:get-workspace', projectId),
+    update: (input: UpdateLatexProjectInput) => ipcRenderer.invoke('latex:update', input),
+    startChat: (input: StartLatexChatInput) =>
+      ipcRenderer.invoke('latex:start-chat', input),
+    setChatMode: (sessionId: string, mode: LatexChatMode) =>
+      ipcRenderer.invoke('latex:set-chat-mode', sessionId, mode),
+    sendPrompt: (sessionId: string, prompt: string) =>
+      ipcRenderer.invoke('latex:send-prompt', sessionId, prompt),
+    changes: (sessionId: string) => ipcRenderer.invoke('latex:changes', sessionId),
+    clearChanges: (sessionId: string) =>
+      ipcRenderer.invoke('latex:clear-changes', sessionId)
+  },
   portForwards: {
     list: (connectionId: string) => ipcRenderer.invoke('port-forwards:list', connectionId),
     create: (input: CreatePortForwardInput) =>
@@ -101,7 +120,8 @@ const api: ProjectConsoleApi = {
   system: {
     copyText: (text: string) => ipcRenderer.invoke('system:copy-text', text),
     openProjectFolder: (projectId: string) =>
-      ipcRenderer.invoke('system:open-project-folder', projectId)
+      ipcRenderer.invoke('system:open-project-folder', projectId),
+    openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url)
   }
 }
 

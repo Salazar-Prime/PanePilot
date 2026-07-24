@@ -5,8 +5,14 @@ import type {
   Activity,
   AgentState,
   Connection,
+  LatexChatAttachment,
+  LatexChatMode,
+  LatexChatScope,
+  LatexProjectDetails,
+  LatexSection,
   LaunchProfile,
   Project,
+  ProjectType,
   TerminalBackend,
   TerminalSession
 } from '../shared/types'
@@ -31,7 +37,7 @@ type ConnectionRow = {
 
 type ProjectRow = {
   id: string
-  type: 'terminal'
+  type: ProjectType
   name: string
   connection_id: string
   folder: string
@@ -40,6 +46,50 @@ type ProjectRow = {
   archived: number
   created_at: string
   updated_at: string
+}
+
+type LatexProjectRow = {
+  project_id: string
+  main_file: string
+  overleaf_url: string | null
+  context_folder: string
+}
+
+type LatexSectionRow = {
+  id: string
+  project_id: string
+  title: string
+  level: number
+  source_file: string
+  start_line: number
+  end_line: number
+  ordinal: number
+  missing: number
+  updated_at: string
+}
+
+type LatexChatRow = {
+  terminal_session_id: string
+  project_id: string
+  scope: LatexChatScope
+  section_id: string | null
+  mode: LatexChatMode
+  created_at: string
+}
+
+export interface ParsedLatexSection {
+  title: string
+  level: number
+  sourceFile: string
+  startLine: number
+  endLine: number
+  ordinal: number
+}
+
+export interface LatexEditSnapshot {
+  relativePath: string
+  content: string
+  createdAt: string
 }
 
 type SessionRow = {
@@ -105,7 +155,43 @@ function mapConnection(row: ConnectionRow): Connection {
   }
 }
 
-function mapSession(row: SessionRow): TerminalSession {
+function mapLatexProject(row: LatexProjectRow): LatexProjectDetails {
+  return {
+    projectId: row.project_id,
+    mainFile: row.main_file,
+    overleafUrl: row.overleaf_url,
+    contextFolder: row.context_folder
+  }
+}
+
+function mapLatexSection(row: LatexSectionRow): LatexSection {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    title: row.title,
+    level: row.level,
+    sourceFile: row.source_file,
+    startLine: row.start_line,
+    endLine: row.end_line,
+    ordinal: row.ordinal
+  }
+}
+
+function mapLatexChat(row: LatexChatRow): LatexChatAttachment {
+  return {
+    terminalSessionId: row.terminal_session_id,
+    projectId: row.project_id,
+    scope: row.scope,
+    sectionId: row.section_id,
+    mode: row.mode,
+    createdAt: row.created_at
+  }
+}
+
+function mapSession(
+  row: SessionRow,
+  latexChat: LatexChatAttachment | null = null
+): TerminalSession {
   return {
     id: row.id,
     projectId: row.project_id,
@@ -121,6 +207,7 @@ function mapSession(row: SessionRow): TerminalSession {
     archived: Boolean(row.archived),
     pinned: Boolean(row.pinned),
     output: row.output,
+    latexChat,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
@@ -229,6 +316,43 @@ export class Store {
         remote_port INTEGER NOT NULL,
         created_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS latex_projects (
+        project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+        main_file TEXT NOT NULL DEFAULT 'main.tex',
+        overleaf_url TEXT,
+        context_folder TEXT NOT NULL DEFAULT 'context'
+      );
+
+      CREATE TABLE IF NOT EXISTS latex_sections (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        level INTEGER NOT NULL,
+        source_file TEXT NOT NULL,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL,
+        ordinal INTEGER NOT NULL,
+        missing INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS latex_chat_sessions (
+        terminal_session_id TEXT PRIMARY KEY REFERENCES terminal_sessions(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        scope TEXT NOT NULL CHECK (scope IN ('project', 'section')),
+        section_id TEXT REFERENCES latex_sections(id),
+        mode TEXT NOT NULL CHECK (mode IN ('ask', 'edit')),
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS latex_edit_snapshots (
+        terminal_session_id TEXT NOT NULL REFERENCES terminal_sessions(id) ON DELETE CASCADE,
+        relative_path TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (terminal_session_id, relative_path)
+      );
     `)
 
     this.ensureColumn('connections', 'ssh_alias', 'TEXT')
@@ -282,9 +406,13 @@ export class Store {
         ON activities(project_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS port_forwards_connection_idx
         ON port_forwards(connection_id, created_at);
+      CREATE INDEX IF NOT EXISTS latex_sections_project_idx
+        ON latex_sections(project_id, missing, ordinal);
+      CREATE INDEX IF NOT EXISTS latex_chat_sessions_project_idx
+        ON latex_chat_sessions(project_id, scope, section_id);
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 4;
+      PRAGMA user_version = 5;
     `)
   }
 
@@ -331,30 +459,69 @@ export class Store {
   }
 
   createProject(input: {
+    type: ProjectType
     name: string
     connectionId: string
     folder: string
     repositoryUrl: string | null
+    latex?: {
+      mainFile: string
+      overleafUrl: string | null
+      contextFolder: string
+    }
   }): Project {
     const id = randomUUID()
     const timestamp = now()
-    this.db
-      .prepare(
-        `INSERT INTO projects
-         (id, type, name, connection_id, folder, repository_url, state, created_at, updated_at)
-         VALUES (?, 'terminal', ?, ?, ?, ?, 'idle', ?, ?)`
-      )
-      .run(
-        id,
-        input.name,
-        input.connectionId,
-        input.folder,
-        input.repositoryUrl,
-        timestamp,
-        timestamp
-      )
+    this.inTransaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO projects
+           (id, type, name, connection_id, folder, repository_url, state, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'idle', ?, ?)`
+        )
+        .run(
+          id,
+          input.type,
+          input.name,
+          input.connectionId,
+          input.folder,
+          input.repositoryUrl,
+          timestamp,
+          timestamp
+        )
+      if (input.type === 'latex') {
+        if (!input.latex) throw new Error('LaTeX project settings are required.')
+        this.db
+          .prepare(
+            `INSERT INTO latex_projects
+             (project_id, main_file, overleaf_url, context_folder)
+             VALUES (?, ?, ?, ?)`
+          )
+          .run(
+            id,
+            input.latex.mainFile,
+            input.latex.overleafUrl,
+            input.latex.contextFolder
+          )
+      }
+    })
     this.addActivity(id, null, 'project-created', `Created project in ${input.folder}`)
     return this.getProject(id)!
+  }
+
+  updateProjectRepository(id: string, repositoryUrl: string | null): void {
+    const project = this.getProject(id)
+    if (!project) throw new Error('Project not found.')
+    if (project.repositoryUrl === repositoryUrl) return
+    this.db
+      .prepare('UPDATE projects SET repository_url = ?, updated_at = ? WHERE id = ?')
+      .run(repositoryUrl, now(), id)
+    this.addActivity(
+      id,
+      null,
+      'repository-updated',
+      repositoryUrl ? 'Updated the project repository link' : 'Removed the project repository link'
+    )
   }
 
   renameProject(id: string, name: string): void {
@@ -377,7 +544,7 @@ export class Store {
       archived &&
       project.sessions.some((session) => !['completed', 'error'].includes(session.state))
     ) {
-      throw new Error('Stop every running terminal before archiving this project.')
+      throw new Error('Stop every running terminal or chat before archiving this project.')
     }
     this.db
       .prepare('UPDATE projects SET archived = ?, updated_at = ? WHERE id = ?')
@@ -413,7 +580,256 @@ export class Store {
     return rows.map((row) => this.hydrateProject(row))
   }
 
+  getLatexProject(projectId: string): LatexProjectDetails | null {
+    const row = this.db
+      .prepare(
+        `SELECT project_id, main_file, overleaf_url, context_folder
+         FROM latex_projects WHERE project_id = ?`
+      )
+      .get(projectId) as LatexProjectRow | undefined
+    return row ? mapLatexProject(row) : null
+  }
+
+  updateLatexProject(
+    projectId: string,
+    input: {
+      mainFile: string
+      overleafUrl: string | null
+      contextFolder: string
+    }
+  ): void {
+    const project = this.getProject(projectId)
+    if (!project || project.type !== 'latex' || !project.latex) {
+      throw new Error('LaTeX project not found.')
+    }
+    this.db
+      .prepare(
+        `UPDATE latex_projects
+         SET main_file = ?, overleaf_url = ?, context_folder = ?
+         WHERE project_id = ?`
+      )
+      .run(input.mainFile, input.overleafUrl, input.contextFolder, projectId)
+    this.addActivity(projectId, null, 'latex-settings-updated', 'Updated LaTeX project settings')
+  }
+
+  syncLatexSections(
+    projectId: string,
+    parsedSections: ParsedLatexSection[]
+  ): LatexSection[] {
+    const existing = this.db
+      .prepare(
+        `SELECT id, project_id, title, level, source_file, start_line, end_line,
+                ordinal, missing, updated_at
+         FROM latex_sections WHERE project_id = ? ORDER BY ordinal`
+      )
+      .all(projectId) as LatexSectionRow[]
+    const available = new Set(existing.map((row) => row.id))
+    const timestamp = now()
+
+    this.inTransaction(() => {
+      this.db
+        .prepare('UPDATE latex_sections SET missing = 1, updated_at = ? WHERE project_id = ?')
+        .run(timestamp, projectId)
+      for (const section of parsedSections) {
+        const exact = existing.find(
+          (row) =>
+            available.has(row.id) &&
+            row.source_file === section.sourceFile &&
+            row.title === section.title &&
+            row.level === section.level
+        )
+        const positional =
+          exact ??
+          existing.find(
+            (row) =>
+              available.has(row.id) &&
+              row.source_file === section.sourceFile &&
+              row.ordinal === section.ordinal
+          )
+        const id = positional?.id ?? randomUUID()
+        available.delete(id)
+        this.db
+          .prepare(
+            `INSERT INTO latex_sections
+             (id, project_id, title, level, source_file, start_line, end_line,
+              ordinal, missing, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               title = excluded.title,
+               level = excluded.level,
+               source_file = excluded.source_file,
+               start_line = excluded.start_line,
+               end_line = excluded.end_line,
+               ordinal = excluded.ordinal,
+               missing = 0,
+               updated_at = excluded.updated_at`
+          )
+          .run(
+            id,
+            projectId,
+            section.title,
+            section.level,
+            section.sourceFile,
+            section.startLine,
+            section.endLine,
+            section.ordinal,
+            timestamp
+          )
+      }
+    })
+    return this.listLatexSections(projectId)
+  }
+
+  listLatexSections(projectId: string): LatexSection[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, project_id, title, level, source_file, start_line, end_line,
+                ordinal, missing, updated_at
+         FROM latex_sections
+         WHERE project_id = ? AND missing = 0
+         ORDER BY ordinal`
+      )
+      .all(projectId) as LatexSectionRow[]
+    return rows.map(mapLatexSection)
+  }
+
+  getLatexSection(id: string): LatexSection | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, project_id, title, level, source_file, start_line, end_line,
+                ordinal, missing, updated_at
+         FROM latex_sections WHERE id = ? AND missing = 0`
+      )
+      .get(id) as LatexSectionRow | undefined
+    return row ? mapLatexSection(row) : null
+  }
+
+  attachLatexChat(
+    terminalSessionId: string,
+    input: {
+      projectId: string
+      scope: LatexChatScope
+      sectionId: string | null
+      mode: LatexChatMode
+    }
+  ): LatexChatAttachment {
+    const session = this.getSession(terminalSessionId)
+    const project = this.getProject(input.projectId)
+    if (!session || session.projectId !== input.projectId) {
+      throw new Error('The terminal does not belong to this LaTeX project.')
+    }
+    if (!project || project.type !== 'latex') throw new Error('LaTeX project not found.')
+    if (input.scope === 'section') {
+      const section = input.sectionId ? this.getLatexSection(input.sectionId) : null
+      if (!section || section.projectId !== input.projectId) {
+        throw new Error('Choose a section from this LaTeX project.')
+      }
+    }
+    const timestamp = now()
+    this.db
+      .prepare(
+        `INSERT INTO latex_chat_sessions
+         (terminal_session_id, project_id, scope, section_id, mode, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        terminalSessionId,
+        input.projectId,
+        input.scope,
+        input.scope === 'section' ? input.sectionId : null,
+        input.mode,
+        timestamp
+      )
+    this.addActivity(
+      input.projectId,
+      terminalSessionId,
+      'latex-chat-attached',
+      `Attached ${session.name} to ${input.scope === 'project' ? 'the project' : 'a section'} in ${input.mode} mode`
+    )
+    return this.getLatexChat(terminalSessionId)!
+  }
+
+  getLatexChat(terminalSessionId: string): LatexChatAttachment | null {
+    const row = this.db
+      .prepare(
+        `SELECT terminal_session_id, project_id, scope, section_id, mode, created_at
+         FROM latex_chat_sessions WHERE terminal_session_id = ?`
+      )
+      .get(terminalSessionId) as LatexChatRow | undefined
+    return row ? mapLatexChat(row) : null
+  }
+
+  setLatexChatMode(terminalSessionId: string, mode: LatexChatMode): void {
+    const chat = this.getLatexChat(terminalSessionId)
+    if (!chat) throw new Error('LaTeX chat not found.')
+    if (chat.mode === mode) return
+    this.db
+      .prepare('UPDATE latex_chat_sessions SET mode = ? WHERE terminal_session_id = ?')
+      .run(mode, terminalSessionId)
+    this.addActivity(
+      chat.projectId,
+      terminalSessionId,
+      'latex-chat-mode-changed',
+      `Changed the chat to ${mode === 'ask' ? 'Ask' : 'Edit'} mode`
+    )
+  }
+
+  replaceLatexSnapshots(
+    terminalSessionId: string,
+    files: Record<string, string>
+  ): void {
+    const timestamp = now()
+    const insert = this.db.prepare(
+      `INSERT INTO latex_edit_snapshots
+       (terminal_session_id, relative_path, content, created_at)
+       VALUES (?, ?, ?, ?)`
+    )
+    this.inTransaction(() => {
+      this.db
+        .prepare('DELETE FROM latex_edit_snapshots WHERE terminal_session_id = ?')
+        .run(terminalSessionId)
+      for (const [relativePath, content] of Object.entries(files)) {
+        insert.run(terminalSessionId, relativePath, content, timestamp)
+      }
+    })
+  }
+
+  getLatexSnapshots(terminalSessionId: string): LatexEditSnapshot[] {
+    const rows = this.db
+      .prepare(
+        `SELECT relative_path, content, created_at
+         FROM latex_edit_snapshots
+         WHERE terminal_session_id = ?
+         ORDER BY relative_path`
+      )
+      .all(terminalSessionId) as Array<{
+      relative_path: string
+      content: string
+      created_at: string
+    }>
+    return rows.map((row) => ({
+      relativePath: row.relative_path,
+      content: row.content,
+      createdAt: row.created_at
+    }))
+  }
+
+  clearLatexSnapshots(terminalSessionId: string): void {
+    this.db
+      .prepare('DELETE FROM latex_edit_snapshots WHERE terminal_session_id = ?')
+      .run(terminalSessionId)
+  }
+
   private hydrateProject(row: ProjectRow): Project {
+    const latexChatRows = this.db
+      .prepare(
+        `SELECT terminal_session_id, project_id, scope, section_id, mode, created_at
+         FROM latex_chat_sessions WHERE project_id = ?`
+      )
+      .all(row.id) as LatexChatRow[]
+    const latexChats = new Map(
+      latexChatRows.map((chat) => [chat.terminal_session_id, mapLatexChat(chat)])
+    )
     const sessions = (
       this.db
         .prepare(
@@ -423,7 +839,7 @@ export class Store {
            FROM terminal_sessions WHERE project_id = ? ORDER BY created_at`
         )
         .all(row.id) as SessionRow[]
-    ).map(mapSession)
+    ).map((session) => mapSession(session, latexChats.get(session.id) ?? null))
     const activities = (
       this.db
         .prepare(
@@ -440,6 +856,7 @@ export class Store {
       connectionId: row.connection_id,
       folder: row.folder,
       repositoryUrl: row.repository_url,
+      latex: this.getLatexProject(row.id),
       state: row.state,
       archived: Boolean(row.archived),
       createdAt: row.created_at,
@@ -527,7 +944,7 @@ export class Store {
          FROM terminal_sessions WHERE id = ?`
       )
       .get(id) as SessionRow | undefined
-    return row ? mapSession(row) : null
+    return row ? mapSession(row, this.getLatexChat(id)) : null
   }
 
   appendOutput(id: string, data: string): void {
@@ -585,7 +1002,7 @@ export class Store {
       session.projectId,
       id,
       'provider-session-linked',
-      `Linked ${session.name} to Codex session ${cleaned}`
+      `Linked ${session.name} to ${session.profile === 'claude' ? 'Claude' : 'Codex'} session ${cleaned}`
     )
     return true
   }

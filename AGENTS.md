@@ -19,7 +19,7 @@ The application is intentionally a single desktop UI:
 - A type-specific main workspace.
 - A bottom status bar for cross-project agent counts.
 
-The current implementation supports only terminal projects. Writing projects were part of the original vision but are deliberately not implemented yet.
+The current implementation supports terminal projects and section-aware LaTeX projects. General writing projects were part of the original vision but are deliberately not implemented yet.
 
 ## Confirmed product decisions
 
@@ -114,6 +114,12 @@ Every new capability that crosses the Electron boundary must be updated in all o
 - `src/main/remote-file-service.ts`: SSH-backed file listing and previews.
 - `src/main/ssh-config.ts`: SSH alias discovery.
 - `src/main/git.ts`: repository URL discovery.
+- `src/main/latex-project-service.ts`: LaTeX outline parsing, project settings, scoped chat launch, edit snapshots, and source diffs.
+- `src/main/latex-paths.ts`: bounded relative LaTeX path and external URL validation.
+- `src/renderer/src/components/LatexProjectWorkspace.tsx`: LaTeX capability tabs and workspace orchestration.
+- `src/renderer/src/components/LatexManuscript.tsx`: section outline, editable Monaco source, and agent-change decorations.
+- `src/renderer/src/components/LatexAgentPane.tsx`: project/section chat selection, Ask/Edit modes, prompt composer, and tmux transcript.
+- `src/renderer/src/projectTypeRegistry.ts`: renderer project-type definitions and workspace dispatch.
 - `scripts/agent-event-hook.mjs`: no-op-outside-PanePilot hook bridge.
 - `scripts/install-agent-hooks.mjs`: additive user-level hook installer with backups.
 
@@ -131,6 +137,10 @@ Core tables:
 - `activities`: project timeline entries.
 - `agent_events`: idempotently ingested provider lifecycle payloads.
 - `port_forwards`: saved loopback-only SSH forwarding configurations. Running processes are intentionally not persisted across app exits.
+- `latex_projects`: type-owned main file, Overleaf URL, and context-folder settings.
+- `latex_sections`: stable section identities reconciled from the main file and included sources.
+- `latex_chat_sessions`: project/section scope and Ask/Edit mode for a terminal session.
+- `latex_edit_snapshots`: bounded `.tex` baselines used to highlight agent changes until the user clears them.
 
 The old `projects.parent_id` column remains for migration compatibility but is unused and cleared on startup.
 
@@ -246,6 +256,21 @@ Known scaling limitation: search currently scans the in-memory parsed conversati
 - Repository URLs are currently auto-discovered only for local projects.
 - The project context menu opens the repository when one is available.
 
+## LaTeX projects
+
+- A LaTeX project is folder- and connection-backed, like a terminal project, but its type-specific settings live in `latex_projects`.
+- The default main file is `main.tex`; users can choose another project-relative `.tex` file during creation or in project settings.
+- The optional context folder defaults to `context`. Agents are told they may inspect it and other paper sections when relevant.
+- The outline reads sectioning commands from the main document and recursively included `.tex` files. A common `\section{...}` followed by `\input{...}` maps the section to the included source file.
+- Section rows are reconciled rather than recreated so attached chat identities survive ordinary title and line-number changes.
+- A LaTeX chat is a normal persistent Codex or Claude terminal session plus a type-owned attachment to the whole project or one section.
+- Ask mode tells the provider not to modify files. Edit mode scopes the requested edit and captures a baseline of bounded `.tex` files before the first submitted edit.
+- The renderer polls source diffs while an edit runs. Added and modified source is decorated in Monaco; removed source is displayed in an inline view zone. Highlights remain until the user clears them.
+- Chat prompts must go through the LaTeX composer so PanePilot can add the current mode, section, main-file, and context-folder instructions.
+- Git repository URLs use the base project capability. Local repositories are auto-discovered, while any LaTeX project can store a manual web URL. The Overleaf URL is independent and type-owned.
+- Both GitHub/repository and Overleaf actions use validated HTTP(S) external links.
+- Do not store document source in SQLite. Files remain authoritative locally or on the selected SSH host.
+
 ## Adding another project type
 
 This is the most important extension point. Do not add a large `if (project.type === ...)` chain throughout `App.tsx`. The current single-type implementation is compact but should be refactored into a project-type registry before implementing writing projects.
@@ -313,21 +338,18 @@ This prevents the renderer registry from becoming responsible for persistence.
 
 ### Concrete implementation sequence
 
-Before adding the second type:
+The renderer and main-process project-type registries are now in place. Before adding another type:
 
-1. Move terminal-specific project content out of `App.tsx` into `TerminalProjectWorkspace.tsx`.
-2. Move History and Files panels into reusable capability components.
-3. Add the renderer `projectTypeRegistry`.
-4. Replace the hard-coded `projectTypes` array and workspace rendering with registry lookups.
-5. Add a main-process project-type service registry.
-6. Decide whether every project type requires a folder and connection.
+1. Add the renderer definition and main-process type service instead of branching throughout `App.tsx`.
+2. Reuse capability components such as Files, History, and agent conversation history.
+3. Decide whether the new type requires a folder and connection.
    - If not, migrate `projects.folder` and `connection_id` into a generic optional location model.
    - Do not use fake folders or fake local connections for non-location projects.
-7. Add a type-specific table and migration.
-8. Extend `ProjectType` in `src/shared/types.ts`.
-9. Add type-specific IPC methods and mirror them through preload and renderer declarations.
-10. Add type-aware creation validation.
-11. Add focused tests for creation, reload, switching, and deletion.
+4. Add a type-specific table and migration.
+5. Extend `ProjectType` in `src/shared/types.ts`.
+6. Add type-specific IPC methods and mirror them through preload and renderer declarations.
+7. Add type-aware creation validation.
+8. Add focused tests for creation, reload, switching, and deletion.
 
 ### Writing project example
 
@@ -363,7 +385,7 @@ Do not implement the writing type until these decisions are answered.
 
 ## Known gaps and future work
 
-- Refactor `App.tsx` and the single CSS file into project-type/capability modules.
+- Continue splitting the single CSS file into project-type/capability modules.
 - Add formal unit and integration tests.
 - Add SQLite FTS when conversation volume warrants it.
 - Add packaged-app-safe hook installation; the current hook command references the development checkout.

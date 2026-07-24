@@ -9,6 +9,7 @@ import HeadlessXterm from '@xterm/headless'
 import type {
   AgentState,
   Connection,
+  ConversationProvider,
   LaunchProfile,
   StartTerminalInput,
   TerminalSession
@@ -89,6 +90,9 @@ function launchCommand(
     return `exec codex${flag}`
   }
   const flag = dangerous ? ' --dangerously-skip-permissions' : ''
+  if (providerSessionReference) {
+    return `exec claude${flag} --resume ${quote(providerSessionReference)}`
+  }
   return `exec claude${flag}`
 }
 
@@ -164,7 +168,7 @@ export class TerminalManager {
       const connection = this.store.getConnection(project.connectionId)
       if (!connection) continue
       for (const session of project.sessions) {
-        if (session.profile !== 'codex' || session.providerSessionId) continue
+        if (!AGENT_PROFILES.has(session.profile) || session.providerSessionId) continue
         try {
           await this.discoverProviderSession(session, project.folder, connection)
         } catch {
@@ -211,6 +215,18 @@ export class TerminalManager {
     runtime.pty.write(data)
   }
 
+  sendPrompt(sessionId: string, prompt: string): void {
+    const runtime = this.runtimes.get(sessionId)
+    if (!runtime) throw new Error('Open the chat before sending a message.')
+    const cleaned = prompt.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim()
+    if (!cleaned) throw new Error('Enter a message for the agent.')
+    runtime.pty.write(`\x1b[200~${cleaned}\x1b[201~\r`)
+    const latest = this.store.getSession(sessionId)
+    if (latest && AGENT_PROFILES.has(latest.profile)) {
+      this.changeState(latest, 'running', `${latest.name} is working.`)
+    }
+  }
+
   resize(sessionId: string, cols: number, rows: number): void {
     const runtime = this.runtimes.get(sessionId)
     if (!runtime) return
@@ -228,13 +244,13 @@ export class TerminalManager {
 
   resumeAgent(sessionId: string): void {
     const session = this.requireSession(sessionId)
-    if (session.profile !== 'codex') {
-      throw new Error('Only Codex terminals can resume a linked Codex chat.')
+    if (!AGENT_PROFILES.has(session.profile)) {
+      throw new Error('Only Codex or Claude terminals can resume a linked chat.')
     }
     const providerSessionReference =
       session.providerSessionId ?? session.providerSessionName
     if (!providerSessionReference) {
-      throw new Error('This terminal is not linked to a Codex session yet.')
+      throw new Error(`This terminal is not linked to a ${session.profile} session yet.`)
     }
     if (!['completed', 'error'].includes(session.state)) {
       throw new Error('This Codex terminal is already running.')
@@ -250,7 +266,12 @@ export class TerminalManager {
       session.backend === 'tmux' && session.tmuxName
         ? this.tmuxSessionExists(connection, session.tmuxName)
         : false
-    this.changeState(session, 'idle', `Resumed Codex session ${providerSessionReference}.`)
+    const providerLabel = session.profile === 'claude' ? 'Claude' : 'Codex'
+    this.changeState(
+      session,
+      'idle',
+      `Resumed ${providerLabel} session ${providerSessionReference}.`
+    )
     const latest = this.requireSession(sessionId)
     try {
       this.launch(
@@ -440,7 +461,7 @@ export class TerminalManager {
     folder: string,
     connection: Connection
   ): void {
-    if (runtime.session.profile !== 'codex' || runtime.session.providerSessionId) return
+    if (!AGENT_PROFILES.has(runtime.session.profile) || runtime.session.providerSessionId) return
     if (runtime.providerTimer || runtime.providerAttempts >= 45) return
     runtime.providerTimer = setTimeout(() => {
       runtime.providerTimer = null
@@ -469,13 +490,20 @@ export class TerminalManager {
     connection: Connection
   ): Promise<boolean> {
     const latest = this.store.getSession(session.id)
-    if (!latest || latest.profile !== 'codex') return false
+    if (!latest || !AGENT_PROFILES.has(latest.profile)) return false
     if (latest.providerSessionId) return true
     const excludedIds = this.store.listClaimedProviderSessionIds(connection.id)
+    const provider = latest.profile as ConversationProvider
     const providerSessionId =
       connection.kind === 'local'
-        ? this.conversations.findCodexSessionId(folder, latest.createdAt, excludedIds)
-        : await this.remoteConversations.findCodexSessionId(
+        ? this.conversations.findProviderSessionId(
+            provider,
+            folder,
+            latest.createdAt,
+            excludedIds
+          )
+        : await this.remoteConversations.findProviderSessionId(
+            provider,
             connection.sshAlias ?? connection.name,
             folder,
             latest.createdAt,

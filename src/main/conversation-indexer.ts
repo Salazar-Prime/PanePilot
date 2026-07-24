@@ -381,6 +381,38 @@ export class ConversationIndexer {
     return candidates[0]?.id ?? null
   }
 
+  findProviderSessionId(
+    provider: ConversationProvider,
+    projectFolder: string,
+    terminalCreatedAt: string,
+    excludedIds: Set<string>
+  ): string | null {
+    if (provider === 'codex') {
+      return this.findCodexSessionId(projectFolder, terminalCreatedAt, excludedIds)
+    }
+    const normalizedFolder = resolve(projectFolder)
+    const terminalTime = Date.parse(terminalCreatedAt)
+    const earliest = Number.isFinite(terminalTime) ? terminalTime - 10_000 : 0
+    return (
+      this.indexAll()
+        .filter((conversation) => {
+          const timestamp = Date.parse(conversation.updatedAt)
+          return (
+            conversation.provider === provider &&
+            Boolean(conversation.providerSessionId) &&
+            !excludedIds.has(conversation.providerSessionId!) &&
+            resolve(conversation.workingDirectory) === normalizedFolder &&
+            (!Number.isFinite(timestamp) || timestamp >= earliest)
+          )
+        })
+        .sort((a, b) => {
+          const aTime = Date.parse(a.updatedAt)
+          const bTime = Date.parse(b.updatedAt)
+          return Math.abs(aTime - terminalTime) - Math.abs(bTime - terminalTime)
+        })[0]?.providerSessionId ?? null
+    )
+  }
+
   private indexAll(): ParsedConversation[] {
     const found: ParsedConversation[] = []
     const livePaths = new Set<string>()

@@ -92,6 +92,54 @@ with open(target, "wb") as handle:
 print("{}")
 `
 
+const READ_TEXT_FILES_SCRIPT = String.raw`
+import base64, json, os, sys
+payload = json.load(sys.stdin)
+root = os.path.realpath(os.path.expanduser(payload["root"]))
+extension = payload.get("extension", "")
+max_files = int(payload.get("maxFiles", 256))
+max_total = int(payload.get("maxTotalBytes", 8 * 1024 * 1024))
+files = {}
+total = 0
+if not os.path.isdir(root):
+    raise RuntimeError("The remote project folder does not exist.")
+for directory, directories, filenames in os.walk(root):
+    directories[:] = [
+        name for name in directories
+        if name not in (".git", "node_modules") and not name.startswith(".")
+    ]
+    for filename in sorted(filenames):
+        if extension and not filename.lower().endswith(extension.lower()):
+            continue
+        path = os.path.realpath(os.path.join(directory, filename))
+        if os.path.commonpath([root, path]) != root or not os.path.isfile(path):
+            continue
+        size = os.path.getsize(path)
+        if size > 1024 * 1024 or total + size > max_total:
+            continue
+        with open(path, "rb") as handle:
+            content = handle.read()
+        if b"\0" in content:
+            continue
+        relative = os.path.relpath(path, root).replace(os.sep, "/")
+        files[relative] = base64.b64encode(content).decode("ascii")
+        total += size
+        if len(files) >= max_files:
+            break
+    if len(files) >= max_files:
+        break
+print(json.dumps(files, separators=(",", ":")))
+`
+
+const DIRECTORY_EXISTS_SCRIPT = String.raw`
+import json, os, sys
+payload = json.load(sys.stdin)
+root = os.path.realpath(os.path.expanduser(payload["root"]))
+target = os.path.realpath(os.path.join(root, payload["relativePath"]))
+inside = os.path.commonpath([root, target]) == root
+print(json.dumps({"exists": inside and os.path.isdir(target)}))
+`
+
 function quote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
 }
@@ -99,7 +147,8 @@ function quote(value: string): string {
 function runRemotePython<T>(
   sshAlias: string,
   script: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  maxBuffer = 4 * 1024 * 1024
 ): T {
   const encodedScript = Buffer.from(script, 'utf8').toString('base64')
   const loader = `import base64;exec(base64.b64decode('${encodedScript}'))`
@@ -110,7 +159,7 @@ function runRemotePython<T>(
     {
       encoding: 'utf8',
       input: JSON.stringify(payload),
-      maxBuffer: 4 * 1024 * 1024,
+      maxBuffer,
       timeout: 15_000
     }
   )
@@ -177,4 +226,37 @@ export function writeRemoteFile(
     relativePath,
     content
   })
+}
+
+export function readRemoteTextFiles(
+  sshAlias: string,
+  root: string,
+  extension: string,
+  maxFiles = 256,
+  maxTotalBytes = 8 * 1024 * 1024
+): Record<string, string> {
+  const encoded = runRemotePython<Record<string, string>>(
+    sshAlias,
+    READ_TEXT_FILES_SCRIPT,
+    { root, extension, maxFiles, maxTotalBytes },
+    16 * 1024 * 1024
+  )
+  return Object.fromEntries(
+    Object.entries(encoded).map(([path, content]) => [
+      path,
+      Buffer.from(content, 'base64').toString('utf8')
+    ])
+  )
+}
+
+export function remoteDirectoryExists(
+  sshAlias: string,
+  root: string,
+  relativePath: string
+): boolean {
+  return runRemotePython<{ exists: boolean }>(
+    sshAlias,
+    DIRECTORY_EXISTS_SCRIPT,
+    { root, relativePath }
+  ).exists
 }

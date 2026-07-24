@@ -30,8 +30,14 @@ self.MonacoEnvironment = {
   }
 }
 
-export function FilesPanel({ project }: { project: Project }) {
-  const [path, setPath] = useState('.')
+export function FilesPanel({
+  project,
+  initialPath = '.'
+}: {
+  project: Project
+  initialPath?: string
+}) {
+  const [path, setPath] = useState(initialPath)
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [preview, setPreview] = useState<FilePreview | null>(null)
   const [draft, setDraft] = useState('')
@@ -67,11 +73,11 @@ export function FilesPanel({ project }: { project: Project }) {
   }
 
   useEffect(() => {
-    setPath('.')
+    setPath(initialPath)
     setPreview(null)
     setEditing(false)
-    void load('.')
-  }, [project.id])
+    void load(initialPath)
+  }, [project.id, initialPath])
 
   const pathParts = path === '.' ? [] : path.split('/')
 

@@ -1,0 +1,253 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Activity,
+  FileClock,
+  Files,
+  FileText,
+  LoaderCircle,
+  MessageSquareText,
+  Plus
+} from 'lucide-react'
+import type {
+  LatexChangeSet,
+  LatexWorkspace,
+  StartLatexChatInput
+} from '@shared/types'
+import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
+import { ChatHistoryPanel } from './ChatHistoryPanel'
+import { FilesPanel } from './FilesPanel'
+import { HistoryPanel } from './HistoryPanel'
+import { LatexAgentPane } from './LatexAgentPane'
+import { LatexChatLauncher } from './LatexChatLauncher'
+import { LatexManuscript } from './LatexManuscript'
+
+type WorkspaceTab = 'manuscript' | 'files' | 'chats' | 'activity'
+
+export function LatexProjectWorkspace({
+  project,
+  selectedSessionId,
+  launchTerminalRequest,
+  onSelectSession,
+  onChanged
+}: ProjectWorkspaceProps) {
+  const [tab, setTab] = useState<WorkspaceTab>('manuscript')
+  const [workspace, setWorkspace] = useState<LatexWorkspace | null>(null)
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
+  const [showLauncher, setShowLauncher] = useState(false)
+  const [filesInitialPath, setFilesInitialPath] = useState('.')
+  const [changes, setChanges] = useState<LatexChangeSet | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const sessions = useMemo(
+    () =>
+      project.sessions.filter(
+        (session) => !session.archived && session.latexChat != null
+      ),
+    [project.sessions]
+  )
+  const archivedSessions = useMemo(
+    () =>
+      project.sessions.filter(
+        (session) => session.archived && session.latexChat != null
+      ),
+    [project.sessions]
+  )
+  const activeSession =
+    sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null
+
+  const loadWorkspace = useCallback(async () => {
+    setError('')
+    try {
+      const next = await window.projectConsole.latex.getWorkspace(project.id)
+      setWorkspace(next)
+      setSelectedSectionId((current) =>
+        current && next.sections.some((section) => section.id === current)
+          ? current
+          : null
+      )
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setLoading(false)
+    }
+  }, [project.id])
+
+  useEffect(() => {
+    setLoading(true)
+    setWorkspace(null)
+    setChanges(null)
+    setSelectedSectionId(null)
+    void loadWorkspace()
+  }, [project.id, loadWorkspace])
+
+  useEffect(() => {
+    if (!activeSession) return
+    if (activeSession.id !== selectedSessionId) onSelectSession(activeSession.id)
+    if (
+      activeSession.latexChat?.scope === 'section' &&
+      activeSession.latexChat.sectionId
+    ) {
+      setSelectedSectionId(activeSession.latexChat.sectionId)
+    }
+    void window.projectConsole.terminals.acknowledge(activeSession.id).then(onChanged)
+  }, [activeSession?.id])
+
+  useEffect(() => {
+    if (launchTerminalRequest > 0) setShowLauncher(true)
+  }, [launchTerminalRequest])
+
+  const refreshChanges = useCallback(async () => {
+    if (!activeSession?.latexChat || activeSession.latexChat.mode !== 'edit') {
+      setChanges(null)
+      return
+    }
+    try {
+      setChanges(await window.projectConsole.latex.changes(activeSession.id))
+    } catch {
+      // Change tracking is supplemental; the editor and terminal should remain usable.
+    }
+  }, [activeSession?.id, activeSession?.latexChat?.mode])
+
+  useEffect(() => {
+    void refreshChanges()
+    if (activeSession?.state !== 'running') return
+    const timer = window.setInterval(() => void refreshChanges(), 1_800)
+    return () => window.clearInterval(timer)
+  }, [refreshChanges, activeSession?.state])
+
+  async function startChat(input: StartLatexChatInput) {
+    const session = await window.projectConsole.latex.startChat(input)
+    onSelectSession(session.id)
+    setTab('manuscript')
+    await onChanged()
+  }
+
+  async function clearChanges() {
+    if (!activeSession) return
+    await window.projectConsole.latex.clearChanges(activeSession.id)
+    setChanges({ sessionId: activeSession.id, capturedAt: null, files: [] })
+  }
+
+  function openContext() {
+    if (!workspace) return
+    setFilesInitialPath(workspace.details.contextFolder)
+    setTab('files')
+  }
+
+  const chatCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const session of sessions) {
+      const key =
+        session.latexChat?.scope === 'section'
+          ? session.latexChat.sectionId ?? 'missing'
+          : 'project'
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return counts
+  }, [sessions])
+
+  if (loading) {
+    return (
+      <div className="capability-empty latex-loading">
+        <LoaderCircle className="spin" size={30} />
+        <h3>Mapping the manuscript</h3>
+        <p>Reading the main file and resolving its section sources.</p>
+      </div>
+    )
+  }
+
+  if (!workspace || error) {
+    return (
+      <div className="capability-empty error-empty">
+        <FileText size={35} />
+        <h3>LaTeX workspace unavailable</h3>
+        <p>{error || 'The project settings could not be loaded.'}</p>
+        <button className="primary-button" onClick={() => void loadWorkspace()}>
+          Try again
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="project-workspace latex-project-workspace">
+      <nav className="workspace-tabs" aria-label="LaTeX project tools">
+        <button
+          className={tab === 'manuscript' ? 'active' : ''}
+          onClick={() => setTab('manuscript')}
+        >
+          <FileText size={15} /> Manuscript
+        </button>
+        <button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>
+          <Files size={15} /> Files
+        </button>
+        <button className={tab === 'chats' ? 'active' : ''} onClick={() => setTab('chats')}>
+          <MessageSquareText size={15} /> Chat history
+        </button>
+        <button
+          className={tab === 'activity' ? 'active' : ''}
+          onClick={() => setTab('activity')}
+        >
+          <Activity size={15} /> Activity
+        </button>
+        <div className="latex-tab-meta">
+          <FileClock size={13} />
+          <span>{workspace.details.mainFile}</span>
+          <button onClick={() => setShowLauncher(true)}>
+            <Plus size={12} /> Chat
+          </button>
+        </div>
+      </nav>
+
+      {tab === 'manuscript' && (
+        <div className="latex-workbench">
+          <LatexManuscript
+            project={project}
+            workspace={workspace}
+            selectedSectionId={selectedSectionId}
+            chatCounts={chatCounts}
+            changes={changes}
+            onSelectSection={setSelectedSectionId}
+            onOpenContext={openContext}
+            onClearChanges={clearChanges}
+            onWorkspaceRefresh={loadWorkspace}
+          />
+          <LatexAgentPane
+            sessions={sessions}
+            archivedSessions={archivedSessions}
+            sections={workspace.sections}
+            activeSessionId={activeSession?.id ?? null}
+            onSelectSession={(id) => {
+              onSelectSession(id)
+              void window.projectConsole.terminals.acknowledge(id).then(onChanged)
+            }}
+            onNewChat={() => setShowLauncher(true)}
+            onChanged={onChanged}
+            onPromptSent={() => {
+              window.setTimeout(() => void refreshChanges(), 700)
+            }}
+          />
+        </div>
+      )}
+      {tab === 'files' && (
+        <FilesPanel
+          key={`${project.id}:${filesInitialPath}`}
+          project={project}
+          initialPath={filesInitialPath}
+        />
+      )}
+      {tab === 'chats' && <ChatHistoryPanel project={project} />}
+      {tab === 'activity' && <HistoryPanel project={project} />}
+
+      {showLauncher && (
+        <LatexChatLauncher
+          projectId={project.id}
+          sections={workspace.sections}
+          initialSectionId={selectedSectionId}
+          onClose={() => setShowLauncher(false)}
+          onStart={startChat}
+        />
+      )}
+    </div>
+  )
+}

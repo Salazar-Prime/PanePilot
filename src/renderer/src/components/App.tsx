@@ -7,10 +7,13 @@ import {
   ChevronDown,
   ChevronRight,
   Clipboard,
+  ExternalLink,
+  FileText,
   FolderOpen,
   Github,
   Laptop,
   Menu,
+  MessageSquareText,
   Network,
   PanelLeftClose,
   Pencil,
@@ -29,6 +32,7 @@ import type {
   Connection,
   CreateProjectInput,
   Project,
+  ProjectType,
   TerminalSession
 } from '@shared/types'
 import { isAttentionState } from '../lib/status'
@@ -65,6 +69,8 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showNewProject, setShowNewProject] = useState(false)
   const [newProjectConnectionId, setNewProjectConnectionId] = useState<string>()
+  const [newProjectType, setNewProjectType] = useState<ProjectType>('terminal')
+  const [showTypeMenu, setShowTypeMenu] = useState(false)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [showArchivedProjects, setShowArchivedProjects] = useState(false)
   const [portForwardConnection, setPortForwardConnection] = useState<Connection | null>(null)
@@ -193,7 +199,7 @@ export function App() {
   async function archiveProject(target: Project) {
     if (
       !window.confirm(
-        `Archive “${target.name}”? All of its terminals must already be stopped.`
+        `Archive “${target.name}”? All of its ${target.type === 'latex' ? 'writing chats' : 'terminals'} must already be stopped.`
       )
     )
       return
@@ -250,7 +256,7 @@ export function App() {
     await refresh()
   }
 
-  async function resumeCodexSession(owner: Project, session: TerminalSession) {
+  async function resumeAgentSession(owner: Project, session: TerminalSession) {
     await window.projectConsole.terminals.resumeAgent(session.id)
     await selectSession(owner.id, session.id)
   }
@@ -266,12 +272,13 @@ export function App() {
     await refresh()
   }
 
-  function openNewProject(connectionId?: string) {
+  function openNewProject(connectionId?: string, type: ProjectType = 'terminal') {
     setNewProjectConnectionId(connectionId)
+    setNewProjectType(type)
     setShowNewProject(true)
   }
 
-  function openNewTerminal(target: Project) {
+  function openProjectLauncher(target: Project) {
     selectProject(target.id)
     setLaunchTerminalRequest((current) => current + 1)
   }
@@ -354,7 +361,12 @@ export function App() {
         {
           id: 'open',
           label: 'Open project',
-          icon: <TerminalSquare size={14} />,
+          icon:
+            target.type === 'latex' ? (
+              <FileText size={14} />
+            ) : (
+              <TerminalSquare size={14} />
+            ),
           action: () => selectProject(target.id)
         },
         {
@@ -365,9 +377,14 @@ export function App() {
         },
         {
           id: 'new-terminal',
-          label: 'New terminal',
-          icon: <Plus size={14} />,
-          action: () => openNewTerminal(target)
+          label: target.type === 'latex' ? 'New writing chat' : 'New terminal',
+          icon:
+            target.type === 'latex' ? (
+              <MessageSquareText size={14} />
+            ) : (
+              <Plus size={14} />
+            ),
+          action: () => openProjectLauncher(target)
         },
         ...(targetConnection?.kind === 'local'
           ? [
@@ -390,6 +407,19 @@ export function App() {
                 action: () =>
                   window.projectConsole.projects.openRepository(
                     target.repositoryUrl!
+                  )
+              }
+            ]
+          : []),
+        ...(target.latex?.overleafUrl
+          ? [
+              {
+                id: 'overleaf',
+                label: 'Open in Overleaf',
+                icon: <ExternalLink size={14} />,
+                action: () =>
+                  window.projectConsole.system.openExternal(
+                    target.latex!.overleafUrl!
                   )
               }
             ]
@@ -462,7 +492,7 @@ export function App() {
             {
               id: 'copy-provider-session',
               label: session.providerSessionId
-                ? 'Copy Codex session ID'
+                ? `Copy ${session.profile === 'claude' ? 'Claude' : 'Codex'} session ID`
                 : 'Copy Codex session name',
               icon: <Clipboard size={14} />,
               action: () =>
@@ -472,14 +502,14 @@ export function App() {
         : []),
       ...(stopped
         ? [
-            ...(session.profile === 'codex' && providerSessionReference
+            ...(['codex', 'claude'].includes(session.profile) && providerSessionReference
               ? [
                   {
-                    id: 'resume-codex',
-                    label: 'Resume Codex chat',
+                    id: 'resume-agent',
+                    label: `Resume ${session.profile === 'claude' ? 'Claude' : 'Codex'} chat`,
                     icon: <ArchiveRestore size={14} />,
                     separatorBefore: true,
-                    action: () => resumeCodexSession(owner, session)
+                    action: () => resumeAgentSession(owner, session)
                   }
                 ]
               : []),
@@ -487,7 +517,10 @@ export function App() {
               id: 'archive',
               label: 'Archive terminal',
               icon: <Archive size={14} />,
-              separatorBefore: !(session.profile === 'codex' && providerSessionReference),
+              separatorBefore: !(
+                ['codex', 'claude'].includes(session.profile) &&
+                providerSessionReference
+              ),
               action: () => archiveSession(session)
             },
             {
@@ -533,10 +566,59 @@ export function App() {
         >
           {sidebarOpen ? <PanelLeftClose size={17} /> : <Menu size={17} />}
         </button>
-        <div className="type-switcher">
-          {showArchivedProjects ? <Archive size={15} /> : <TerminalSquare size={15} />}
-          <span>{showArchivedProjects ? 'Archive' : typeDefinition.label}</span>
-          <ChevronDown size={13} />
+        <div className="type-switcher-wrap">
+          <button
+            className="type-switcher"
+            onClick={() => setShowTypeMenu((current) => !current)}
+            aria-expanded={showTypeMenu}
+          >
+            {showArchivedProjects ? (
+              <Archive size={15} />
+            ) : project?.type === 'latex' ? (
+              <FileText size={15} />
+            ) : (
+              <TerminalSquare size={15} />
+            )}
+            <span>{showArchivedProjects ? 'Archive' : typeDefinition.label}</span>
+            <ChevronDown size={13} />
+          </button>
+          {showTypeMenu && (
+            <div className="type-menu">
+              {Object.values(projectTypeRegistry).map((definition) => {
+                const first = activeProjects.find(
+                  (candidate) => candidate.type === definition.id
+                )
+                return (
+                  <button
+                    key={definition.id}
+                    className={project?.type === definition.id ? 'active' : ''}
+                    onClick={() => {
+                      setShowTypeMenu(false)
+                      if (first) {
+                        selectProject(first.id)
+                      } else {
+                        openNewProject(undefined, definition.id)
+                      }
+                    }}
+                  >
+                    {definition.id === 'latex' ? (
+                      <FileText size={15} />
+                    ) : (
+                      <TerminalSquare size={15} />
+                    )}
+                    <span>
+                      <strong>{definition.label}</strong>
+                      <small>
+                        {first
+                          ? `${activeProjects.filter((candidate) => candidate.type === definition.id).length} projects`
+                          : 'Create the first project'}
+                      </small>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
         <div className="top-divider" />
         <div className="project-identity">
@@ -556,6 +638,18 @@ export function App() {
           )}
         </div>
         <div className="top-actions">
+          {project?.latex?.overleafUrl && (
+            <button
+              className="secondary-button header-button overleaf-button"
+              onClick={() =>
+                void window.projectConsole.system.openExternal(
+                  project.latex!.overleafUrl!
+                )
+              }
+            >
+              <ExternalLink size={15} /> Overleaf
+            </button>
+          )}
           {project?.repositoryUrl && (
             <button
               className="secondary-button header-button"
@@ -647,10 +741,19 @@ export function App() {
                           onClick={() => selectProject(candidate.id)}
                         >
                           <ChevronRight size={13} />
-                          <span className="project-glyph">
-                            {candidate.name.slice(0, 1).toUpperCase()}
+                          <span className={`project-glyph ${candidate.type}`}>
+                            {candidate.type === 'latex' ? (
+                              <FileText size={12} />
+                            ) : (
+                              candidate.name.slice(0, 1).toUpperCase()
+                            )}
                           </span>
                           <span className="row-label">{candidate.name}</span>
+                          {candidate.type === 'latex' && visibleSessions.length > 0 && (
+                            <small className="project-chat-count">
+                              {visibleSessions.length}
+                            </small>
+                          )}
                           <StatusDot state={candidate.state} compact />
                         </button>
                         <button
@@ -822,9 +925,11 @@ export function App() {
         <NewProjectDialog
           connections={connections}
           initialConnectionId={newProjectConnectionId}
+          initialProjectType={newProjectType}
           onClose={() => {
             setShowNewProject(false)
             setNewProjectConnectionId(undefined)
+            setNewProjectType('terminal')
           }}
           onCreate={createProject}
         />
@@ -835,6 +940,7 @@ export function App() {
           connection={connection}
           onClose={() => setShowProjectSettings(false)}
           onRename={renameCurrentProject}
+          onChanged={refresh}
         />
       )}
       {renameTarget && (

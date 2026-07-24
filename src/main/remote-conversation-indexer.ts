@@ -437,6 +437,43 @@ export class RemoteConversationIndexer {
     )
   }
 
+  async findProviderSessionId(
+    provider: ConversationProvider,
+    alias: string,
+    projectFolder: string,
+    terminalCreatedAt: string,
+    excludedIds: Set<string>
+  ): Promise<string | null> {
+    if (provider === 'codex') {
+      return this.findCodexSessionId(
+        alias,
+        projectFolder,
+        terminalCreatedAt,
+        excludedIds
+      )
+    }
+    const terminalTime = Date.parse(terminalCreatedAt)
+    const earliest = Number.isFinite(terminalTime) ? terminalTime - 10_000 : 0
+    const scan = await this.scan(alias, projectFolder, true)
+    return (
+      scan.conversations
+        .filter((conversation) => {
+          const timestamp = Date.parse(conversation.updatedAt)
+          return (
+            conversation.provider === provider &&
+            Boolean(conversation.providerSessionId) &&
+            !excludedIds.has(conversation.providerSessionId!) &&
+            (!Number.isFinite(timestamp) || timestamp >= earliest)
+          )
+        })
+        .sort((a, b) => {
+          const aTime = Date.parse(a.updatedAt)
+          const bTime = Date.parse(b.updatedAt)
+          return Math.abs(aTime - terminalTime) - Math.abs(bTime - terminalTime)
+        })[0]?.providerSessionId ?? null
+    )
+  }
+
   private async listCodexSessions(
     alias: string,
     projectFolder: string

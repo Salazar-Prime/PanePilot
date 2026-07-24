@@ -134,7 +134,7 @@ export function TerminalProjectWorkspace({
     await onChanged()
   }
 
-  async function resumeCodex(session: TerminalSession) {
+  async function resumeAgent(session: TerminalSession) {
     setMenu(null)
     await window.projectConsole.terminals.resumeAgent(session.id)
     setTab('terminal')
@@ -356,9 +356,11 @@ export function TerminalProjectWorkspace({
                     </button>
                   ) : (
                     <>
-                      {session.profile === 'codex' && providerSessionReference && (
-                        <button onClick={() => run(resumeCodex(session))}>
-                          <RotateCcw size={14} /> Resume Codex chat
+                      {['codex', 'claude'].includes(session.profile) &&
+                        providerSessionReference && (
+                        <button onClick={() => run(resumeAgent(session))}>
+                          <RotateCcw size={14} /> Resume{' '}
+                          {session.profile === 'claude' ? 'Claude' : 'Codex'} chat
                         </button>
                       )}
                       <button onClick={() => run(archive(session))}>

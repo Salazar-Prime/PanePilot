@@ -2415,3 +2415,1027 @@ select:focus-visible {
   cursor: not-allowed;
   opacity: 0.4;
 }
+
+/* Project types */
+
+.type-switcher-wrap {
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+button.type-switcher {
+  cursor: default;
+}
+
+.type-menu {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  z-index: 80;
+  width: 258px;
+  padding: 5px;
+  border: 1px solid #343a46;
+  border-radius: 9px;
+  background: #171a22;
+  box-shadow: 0 18px 45px #00000099;
+}
+
+.type-menu button,
+.project-type-grid button,
+.latex-mode-grid button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  color: #8c94a1;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+}
+
+.type-menu button {
+  min-height: 46px;
+  padding: 7px 9px;
+}
+
+.type-menu button:hover,
+.type-menu button.active {
+  color: #e0e3ea;
+  border-color: #2e3441;
+  background: #20242e;
+}
+
+.type-menu button > span,
+.project-type-grid button > span,
+.latex-mode-grid button > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.type-menu strong,
+.project-type-grid strong,
+.latex-mode-grid strong {
+  color: inherit;
+  font-size: 10px;
+}
+
+.type-menu small,
+.project-type-grid small,
+.latex-mode-grid small {
+  color: #606876;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.project-type-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 17px;
+}
+
+.project-type-grid button {
+  min-height: 66px;
+  padding: 10px;
+  border-color: #2a303b;
+  background: #0d1016;
+}
+
+.project-type-grid button:hover {
+  color: #cbd0da;
+  border-color: #3a4250;
+}
+
+.project-type-grid button.selected {
+  color: #cbd3ff;
+  border-color: #5566ad;
+  background: #181d31;
+  box-shadow: inset 0 0 0 1px #5869b333;
+}
+
+.field > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.field > span small {
+  margin-left: 2px;
+  color: #555d69;
+  font-size: 8px;
+  font-weight: 500;
+}
+
+.field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.field-pair .field {
+  min-width: 0;
+}
+
+.latex-create-fields,
+.latex-settings-fields {
+  margin: 17px 0 3px;
+  padding: 3px 12px 7px;
+  border: 1px solid #293040;
+  border-radius: 9px;
+  background: #0e1119;
+}
+
+.project-glyph.latex {
+  color: #8ad4bd;
+  background: #24433c;
+}
+
+.project-chat-count {
+  display: grid;
+  min-width: 17px;
+  height: 17px;
+  place-items: center;
+  padding: 0 4px;
+  color: #8894c9;
+  border: 1px solid #343d64;
+  border-radius: 8px;
+  background: #1a2036;
+  font-size: 8px;
+}
+
+.overleaf-button {
+  color: #9ed5c5;
+  border-color: #315248;
+  background: #14251f;
+}
+
+/* LaTeX project */
+
+.latex-project-workspace {
+  --latex-ink: #a6b1ff;
+  --latex-mint: #73cdb0;
+  --latex-paper: #0a0c11;
+}
+
+.latex-tab-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding-bottom: 7px;
+  color: #596270;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 8px;
+}
+
+.latex-tab-meta > span {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-tab-meta > button {
+  height: 25px !important;
+  margin-left: 5px;
+  padding: 0 8px !important;
+  color: #b9c2ff !important;
+  border: 1px solid #3b456e !important;
+  border-radius: 5px;
+  background: #1c2340 !important;
+}
+
+.latex-workbench {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) 352px;
+  background: #090b10;
+}
+
+.latex-manuscript {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: 204px minmax(0, 1fr);
+  border-right: 1px solid #272c36;
+}
+
+.latex-outline {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid #222731;
+  background: #0c0f15;
+}
+
+.latex-outline > header,
+.latex-agent-heading {
+  display: flex;
+  height: 56px;
+  flex: 0 0 56px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px 0 13px;
+  border-bottom: 1px solid #232832;
+}
+
+.latex-outline > header {
+  flex-wrap: wrap;
+  align-content: center;
+}
+
+.latex-outline > header .eyebrow {
+  width: calc(100% - 28px);
+}
+
+.latex-outline > header strong {
+  color: #d4d8e1;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.latex-outline > header .icon-button {
+  width: 25px;
+  height: 25px;
+  margin-left: auto;
+}
+
+.latex-outline-main,
+.latex-section-list button,
+.latex-context-link {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: #79818f;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.latex-outline-main {
+  min-height: 48px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #1e232c;
+}
+
+.latex-outline-main:hover,
+.latex-outline-main.active,
+.latex-section-list button:hover,
+.latex-section-list button.active {
+  color: #d8dce5;
+  background: #171b23;
+}
+
+.latex-outline-main.active,
+.latex-section-list button.active {
+  box-shadow: inset 2px 0 0 var(--latex-mint);
+}
+
+.latex-outline-main > span,
+.latex-section-list button > span,
+.latex-context-link > span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.latex-outline-main strong,
+.latex-section-list strong,
+.latex-context-link strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-outline-main small,
+.latex-section-list small,
+.latex-context-link small {
+  overflow: hidden;
+  color: #505865;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-outline-main em,
+.latex-section-list em {
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  padding: 0 4px;
+  color: #9eaae8;
+  border: 1px solid #39446c;
+  border-radius: 8px;
+  background: #1c233d;
+  font-size: 7px;
+  font-style: normal;
+}
+
+.latex-section-list {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.latex-section-list button {
+  min-height: 37px;
+  padding: 5px 8px;
+  border-radius: 5px;
+}
+
+.latex-section-list button > svg {
+  flex: 0 0 auto;
+  color: #4d5663;
+}
+
+.latex-section-list p {
+  margin: 17px 9px;
+  color: #5e6673;
+  font-size: 8px;
+  line-height: 1.55;
+}
+
+.latex-section-list code {
+  color: #8e99d4;
+  font-size: 8px;
+}
+
+.latex-context-link {
+  min-height: 50px;
+  padding: 8px 11px;
+  border-top: 1px solid #232832;
+  color: #75bca5;
+}
+
+.latex-context-link.missing {
+  cursor: not-allowed;
+  color: #555d68;
+  opacity: 0.65;
+}
+
+.latex-source-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--latex-paper);
+}
+
+.latex-source-toolbar {
+  display: flex;
+  height: 48px;
+  flex: 0 0 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 13px;
+  border-bottom: 1px solid #242933;
+  background: #0e1117;
+}
+
+.latex-source-toolbar > svg {
+  color: #7fc9b1;
+}
+
+.latex-source-toolbar > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.latex-source-toolbar strong {
+  overflow: hidden;
+  color: #cbd0d9;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-source-toolbar span {
+  overflow: hidden;
+  color: #5e6673;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-source-toolbar .primary-button {
+  height: 27px;
+  padding: 0 9px;
+  font-size: 8px;
+}
+
+.latex-unsaved,
+.latex-file-change-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 8px;
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.latex-unsaved {
+  color: #ddb16d;
+  background: #33271a;
+}
+
+.latex-file-change-count {
+  color: #9bacef;
+  background: #1d2541;
+}
+
+.latex-change-ribbon {
+  display: flex;
+  min-height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px 4px 11px;
+  overflow: hidden;
+  color: #9aabef;
+  border-bottom: 1px solid #2a3150;
+  background: #12182a;
+  font-size: 8px;
+}
+
+.latex-change-ribbon > span {
+  white-space: nowrap;
+}
+
+.latex-change-ribbon > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.latex-change-ribbon button {
+  height: 23px;
+  padding: 0 7px;
+  color: #7f8bb9;
+  border: 1px solid #303958;
+  border-radius: 4px;
+  background: #171e33;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.latex-change-ribbon button:hover,
+.latex-change-ribbon button.active {
+  color: #d0d8ff;
+  border-color: #53639b;
+}
+
+.latex-change-ribbon .latex-clear-changes {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  color: #8bc9b5;
+  border-color: #315b4e;
+  background: #14261f;
+  font-family: inherit;
+}
+
+.latex-editor-shell {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+}
+
+.latex-editor-shell.loading {
+  opacity: 0.55;
+}
+
+.latex-editor-error {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: #65707d;
+}
+
+.latex-editor-error strong {
+  margin-top: 10px;
+  color: #adb4bf;
+  font-size: 11px;
+}
+
+.latex-editor-error p {
+  max-width: 360px;
+  margin: 5px 0 0;
+  color: #b26773;
+  font-size: 9px;
+  text-align: center;
+}
+
+.latex-change-added {
+  border-radius: 2px;
+  background: #3ca77a26;
+  animation: latex-change-flash 1.4s ease-out 2;
+}
+
+.latex-change-modified {
+  border-bottom: 1px solid #a898ff;
+  border-radius: 2px;
+  background: #806fff30;
+  animation: latex-change-flash 1.4s ease-out 2;
+}
+
+.latex-change-gutter-added {
+  border-left: 3px solid #55c899;
+  margin-left: 3px;
+}
+
+.latex-change-gutter-modified {
+  border-left: 3px solid #9a8cf3;
+  margin-left: 3px;
+}
+
+.latex-deleted-zone {
+  overflow: hidden;
+  padding: 0 8px 0 52px;
+  color: #e19aa4;
+  border-left: 3px solid #d96979;
+  background: #5b222b45;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 12px;
+  line-height: 20px;
+  text-decoration: line-through;
+  white-space: pre;
+  animation: latex-deletion-flash 1.4s ease-out 2;
+}
+
+@keyframes latex-change-flash {
+  0% {
+    box-shadow: inset 0 0 0 999px #8da1ff44;
+  }
+  100% {
+    box-shadow: inset 0 0 0 999px transparent;
+  }
+}
+
+@keyframes latex-deletion-flash {
+  0% {
+    background: #b13f545e;
+  }
+  100% {
+    background: #5b222b45;
+  }
+}
+
+/* LaTeX agent margin */
+
+.latex-agent-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  background: #0d1016;
+}
+
+.latex-agent-heading {
+  justify-content: space-between;
+  padding-right: 9px;
+}
+
+.latex-agent-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.latex-agent-heading strong {
+  color: #d8dce5;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.latex-agent-heading .secondary-button {
+  height: 27px;
+  padding: 0 8px;
+  font-size: 8px;
+}
+
+.latex-agent-heading-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.latex-archived-chats {
+  flex: 0 0 auto;
+  padding: 7px;
+  border-bottom: 1px solid #2a303a;
+  background: #11151c;
+}
+
+.latex-archived-chats > strong {
+  display: block;
+  margin: 2px 3px 6px;
+  color: #7c8491;
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.latex-archived-chats > div {
+  display: flex;
+  min-height: 27px;
+  align-items: center;
+  gap: 6px;
+  color: #808895;
+  font-size: 8px;
+}
+
+.latex-archived-chats > div > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-archived-chats button {
+  display: flex;
+  height: 22px;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  color: #929aa7;
+  border: 1px solid #303743;
+  border-radius: 4px;
+  background: #171b22;
+  font-size: 7px;
+}
+
+.latex-chat-switcher {
+  display: flex;
+  max-height: 94px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 5px;
+  border-bottom: 1px solid #222731;
+  background: #0a0c11;
+}
+
+.latex-chat-switcher button {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 7px;
+  color: #6f7785;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 8px;
+  text-align: left;
+}
+
+.latex-chat-switcher button:hover,
+.latex-chat-switcher button.active {
+  color: #d7dbe4;
+  background: #171b23;
+}
+
+.latex-chat-switcher button > span:not(.status-chip) {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-chat-switcher small {
+  padding: 2px 4px;
+  color: #8b96c8;
+  border-radius: 4px;
+  background: #202743;
+  font-size: 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.latex-chat-switcher small.edit {
+  color: #8bcbb6;
+  background: #183329;
+}
+
+.latex-chat-toolbar {
+  display: flex;
+  min-height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 7px 5px 10px;
+  border-bottom: 1px solid #222731;
+}
+
+.latex-chat-scope {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.latex-chat-scope span {
+  overflow: hidden;
+  color: #b8bec9;
+  font-size: 8px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-chat-scope small {
+  color: #565f6c;
+  font-size: 7px;
+}
+
+.latex-mode-toggle {
+  display: flex;
+  padding: 2px;
+  border: 1px solid #2a303b;
+  border-radius: 6px;
+  background: #090b10;
+}
+
+.latex-mode-toggle button {
+  display: flex;
+  height: 23px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  color: #626b78;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 7px;
+}
+
+.latex-mode-toggle button.active {
+  color: #b9c4ff;
+  background: #242d50;
+}
+
+.latex-mode-toggle button.active.edit {
+  color: #9ad5c1;
+  background: #1d3b31;
+}
+
+.latex-agent-terminal {
+  min-height: 0;
+  flex: 1;
+  padding: 7px 2px 2px 7px;
+  background: #090b10;
+}
+
+.latex-agent-terminal .xterm {
+  font-size: 10px;
+}
+
+.latex-composer {
+  flex: 0 0 auto;
+  padding: 7px;
+  border-top: 1px solid #252a34;
+  background: #0f1218;
+}
+
+.latex-composer textarea {
+  width: 100%;
+  min-height: 62px;
+  resize: none;
+  padding: 8px 9px;
+  color: #d5d9e1;
+  border: 1px solid #303744;
+  border-radius: 7px;
+  outline: 0;
+  background: #090b10;
+  font: 9px/1.5 Inter, ui-sans-serif, sans-serif;
+}
+
+.latex-composer textarea:focus {
+  border-color: #5263a5;
+  box-shadow: 0 0 0 2px #5263a522;
+}
+
+.latex-composer textarea::placeholder {
+  color: #4e5662;
+}
+
+.latex-composer > div {
+  display: flex;
+  height: 31px;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+.latex-composer > div > span {
+  flex: 1;
+  color: #4d5561;
+  font-size: 7px;
+}
+
+.latex-composer .primary-button {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 8px;
+}
+
+.latex-stop-button {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  color: #a86770;
+  border: 1px solid #493039;
+  border-radius: 5px;
+  background: #1b1115;
+}
+
+.latex-chat-ended {
+  flex: 0 0 auto;
+  padding: 8px;
+  color: #646c78;
+  border-top: 1px solid #252a34;
+  font-size: 8px;
+}
+
+.latex-chat-ended > div {
+  display: flex;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.latex-chat-ended button {
+  display: flex;
+  height: 24px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  color: #929aa7;
+  border: 1px solid #2d333e;
+  border-radius: 5px;
+  background: #14171e;
+  font-size: 7px;
+}
+
+.latex-agent-error {
+  margin: 0;
+  padding: 6px 8px;
+  color: #e18b98;
+  border-top: 1px solid #512a33;
+  background: #28151a;
+  font-size: 8px;
+}
+
+.latex-agent-empty {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 25px;
+  flex-direction: column;
+  text-align: center;
+}
+
+.latex-agent-empty > div {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  color: #a6b4ff;
+  border: 1px solid #3d4872;
+  border-radius: 16px;
+  background: #1c2340;
+  box-shadow: 0 12px 35px #00000044;
+}
+
+.latex-agent-empty strong {
+  margin-top: 13px;
+  color: #cdd2db;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.latex-agent-empty p {
+  max-width: 250px;
+  margin: 7px 0 14px;
+  color: #68717e;
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.latex-agent-empty .primary-button {
+  height: 29px;
+  font-size: 8px;
+}
+
+/* LaTeX chat launcher */
+
+.latex-chat-launcher {
+  width: min(590px, 100%);
+}
+
+.latex-mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0 16px;
+}
+
+.latex-mode-grid button {
+  min-height: 61px;
+  padding: 9px;
+  border-color: #2b313c;
+  background: #0d1016;
+}
+
+.latex-mode-grid button.selected {
+  color: #bec7ff;
+  border-color: #4f609c;
+  background: #19213b;
+}
+
+.latex-mode-grid button.selected.edit {
+  color: #9ed9c5;
+  border-color: #3f7664;
+  background: #172d26;
+}
+
+.latex-scope-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -5px 0 14px;
+  padding: 8px 9px;
+  color: #75808e;
+  border: 1px solid #262c36;
+  border-radius: 6px;
+  background: #0d1016;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.latex-scope-note svg {
+  flex: 0 0 auto;
+  color: #74bba4;
+}
+
+.latex-loading {
+  height: 100%;
+}
+
+@media (max-width: 1190px) {
+  .latex-manuscript {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .latex-outline {
+    display: none;
+  }
+
+  .latex-workbench {
+    grid-template-columns: minmax(0, 1fr) 318px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .latex-change-added,
+  .latex-change-modified,
+  .latex-deleted-zone {
+    animation: none;
+  }
+}
