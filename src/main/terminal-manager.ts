@@ -50,6 +50,16 @@ function remoteHasTmux(alias: string): boolean {
   return result.status === 0 && Boolean(result.stdout.trim())
 }
 
+function validatedTerminalName(value: string): string {
+  const name = value.trim()
+  if (!name) throw new Error('Terminal name cannot be empty.')
+  if (name.length > 80) throw new Error('Terminal names must be 80 characters or fewer.')
+  if (/[:\u0000-\u001f\u007f]/.test(name)) {
+    throw new Error('Terminal names cannot contain colons or control characters.')
+  }
+  return name
+}
+
 function launchCommand(profile: LaunchProfile, customCommand: string | null, dangerous: boolean): string {
   if (profile === 'shell') return 'exec "${SHELL:-/bin/sh}" -l'
   if (profile === 'custom') {
@@ -61,6 +71,10 @@ function launchCommand(profile: LaunchProfile, customCommand: string | null, dan
   }
   const flag = dangerous ? ' --dangerously-skip-permissions' : ''
   return `exec claude${flag}`
+}
+
+function interactiveLoginCommand(command: string): string {
+  return `exec "\${SHELL:-/bin/sh}" -lic ${quote(command)}`
 }
 
 export class TerminalManager {
@@ -85,9 +99,6 @@ export class TerminalManager {
       connection.kind === 'local'
         ? Boolean(this.tmuxPath)
         : remoteHasTmux(connection.sshAlias ?? connection.name)
-    const tmuxName = tmuxAvailable
-      ? `panepilot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-      : null
     const profileLabel =
       input.profile === 'shell'
         ? basename(process.env.SHELL || 'Shell')
@@ -99,9 +110,21 @@ export class TerminalManager {
     const sameProfileCount = project.sessions.filter(
       (session) => session.profile === input.profile
     ).length
+    const requestedName = input.name ? validatedTerminalName(input.name) : null
+    let sessionName = requestedName || `${profileLabel} ${sameProfileCount + 1}`
+    if (tmuxAvailable) {
+      const baseName = sessionName
+      let suffix = 2
+      while (this.tmuxSessionExists(connection, sessionName)) {
+        const suffixText = ` ${suffix}`
+        sessionName = `${baseName.slice(0, 80 - suffixText.length).trimEnd()}${suffixText}`
+        suffix += 1
+      }
+    }
+    const tmuxName = tmuxAvailable ? sessionName : null
     const session = this.store.createSession({
       projectId: input.projectId,
-      name: input.name?.trim() || `${profileLabel} ${sameProfileCount + 1}`,
+      name: sessionName,
       profile: input.profile,
       customCommand: input.customCommand?.trim() || null,
       backend: tmuxAvailable ? 'tmux' : 'pty',
@@ -113,7 +136,11 @@ export class TerminalManager {
   }
 
   attach(sessionId: string, cols: number, rows: number): { output: string } {
-    const session = this.requireSession(sessionId)
+    let session = this.requireSession(sessionId)
+    if (session.backend === 'tmux' && session.tmuxName !== session.name) {
+      this.rename(sessionId, session.name)
+      session = this.requireSession(sessionId)
+    }
     if (!this.runtimes.has(sessionId) && !['completed', 'error'].includes(session.state)) {
       const project = this.store.getProject(session.projectId)
       const connection = project ? this.store.getConnection(project.connectionId) : null
@@ -160,9 +187,65 @@ export class TerminalManager {
   }
 
   rename(sessionId: string, name: string): void {
-    const cleaned = name.trim()
-    if (!cleaned) throw new Error('Terminal name cannot be empty.')
-    this.store.renameSession(sessionId, cleaned)
+    const cleaned = validatedTerminalName(name)
+    const session = this.requireSession(sessionId)
+    let tmuxName = session.tmuxName
+    if (session.backend === 'tmux' && session.tmuxName) {
+      if (cleaned === session.name && cleaned === session.tmuxName) return
+      const project = this.store.getProject(session.projectId)
+      const connection = project ? this.store.getConnection(project.connectionId) : null
+      if (!connection) throw new Error('Project connection not found.')
+      const persistentSessionExists = this.tmuxSessionExists(
+        connection,
+        session.tmuxName
+      )
+      if (cleaned !== session.tmuxName && persistentSessionExists) {
+        if (this.tmuxSessionExists(connection, cleaned)) {
+          throw new Error(
+            `A tmux session named “${cleaned}” already exists on ${connection.name}.`
+          )
+        }
+      }
+      const renamedTmux = cleaned
+      if (persistentSessionExists) {
+        const result =
+          connection.kind === 'local'
+            ? this.tmuxPath
+              ? spawnSync(
+                  this.tmuxPath,
+                  ['rename-session', '-t', `=${session.tmuxName}`, renamedTmux],
+                  { encoding: 'utf8', timeout: 3_000 }
+                )
+              : null
+            : spawnSync(
+                'ssh',
+                [
+                  '-T',
+                  '-o',
+                  'BatchMode=yes',
+                  '-o',
+                  'ConnectTimeout=5',
+                  connection.sshAlias ?? connection.name,
+                  `tmux rename-session -t ${quote(`=${session.tmuxName}`)} ${quote(renamedTmux)}`
+                ],
+                { encoding: 'utf8', timeout: 7_000 }
+              )
+        if (!result || result.error || result.status !== 0) {
+          const detail = result?.error?.message || result?.stderr?.trim()
+          throw new Error(detail || 'Could not rename the persistent tmux session.')
+        }
+      }
+      tmuxName = renamedTmux
+    }
+    if (cleaned === session.name && tmuxName === session.tmuxName) return
+    this.store.renameSession(sessionId, cleaned, tmuxName)
+    const runtime = this.runtimes.get(sessionId)
+    const latest = this.store.getSession(sessionId)
+    if (runtime && latest) runtime.session = latest
+  }
+
+  setPinned(sessionId: string, pinned: boolean): void {
+    this.store.setSessionPinned(sessionId, pinned)
   }
 
   stop(sessionId: string): void {
@@ -268,13 +351,16 @@ export class TerminalManager {
 
     if (connection.kind === 'ssh') {
       const alias = connection.sshAlias ?? connection.name
+      const remoteLaunchCommand =
+        session.profile === 'shell' ? command : interactiveLoginCommand(command)
       let remoteCommand: string
       if (session.backend === 'tmux' && session.tmuxName) {
-        const tmuxAction = create ? 'new-session -A -s' : 'attach-session -t'
-        const commandSuffix = create ? ` ${quote(command)}` : ''
-        remoteCommand = `cd ${quote(folder)} && exec tmux ${tmuxAction} ${quote(session.tmuxName)}${commandSuffix}`
+        const tmuxAction = create ? 'new-session -s' : 'attach-session -t'
+        const tmuxTarget = create ? session.tmuxName : `=${session.tmuxName}`
+        const commandSuffix = create ? ` ${quote(remoteLaunchCommand)}` : ''
+        remoteCommand = `cd ${quote(folder)} && exec tmux ${tmuxAction} ${quote(tmuxTarget)}${commandSuffix}`
       } else {
-        remoteCommand = `cd ${quote(folder)} && ${command}`
+        remoteCommand = `cd ${quote(folder)} && ${remoteLaunchCommand}`
       }
       return pty.spawn('ssh', ['-tt', alias, remoteCommand], {
         name: 'xterm-256color',
@@ -287,8 +373,8 @@ export class TerminalManager {
 
     if (session.backend === 'tmux' && session.tmuxName && this.tmuxPath) {
       const args = create
-        ? ['new-session', '-A', '-s', session.tmuxName, '-c', folder, command]
-        : ['attach-session', '-t', session.tmuxName]
+        ? ['new-session', '-s', session.tmuxName, '-c', folder, command]
+        : ['attach-session', '-t', `=${session.tmuxName}`]
       return pty.spawn(this.tmuxPath, args, {
         name: 'xterm-256color',
         cols,
@@ -313,7 +399,7 @@ export class TerminalManager {
 
   private scheduleScreenScan(runtime: Runtime): void {
     if (!runtime.detector) return
-    if (runtime.scanTimer) clearTimeout(runtime.scanTimer)
+    if (runtime.scanTimer) return
     runtime.scanTimer = setTimeout(() => {
       runtime.scanTimer = null
       const buffer = runtime.screen.buffer.active
@@ -333,8 +419,41 @@ export class TerminalManager {
             : `${latest.name} finished and needs your attention.`
         this.changeState(latest, nextState, message)
       }
-    }, 450)
+    }, 120)
     runtime.scanTimer.unref()
+  }
+
+  private tmuxSessionExists(connection: Connection, name: string): boolean {
+    if (connection.kind === 'local') {
+      if (!this.tmuxPath) return false
+      return (
+        spawnSync(this.tmuxPath, ['has-session', '-t', `=${name}`], {
+          encoding: 'utf8',
+          timeout: 2_000,
+          stdio: ['ignore', 'ignore', 'ignore']
+        }).status === 0
+      )
+    }
+    const alias = connection.sshAlias ?? connection.name
+    return (
+      spawnSync(
+        'ssh',
+        [
+          '-T',
+          '-o',
+          'BatchMode=yes',
+          '-o',
+          'ConnectTimeout=3',
+          alias,
+          `tmux has-session -t ${quote(`=${name}`)}`
+        ],
+        {
+          encoding: 'utf8',
+          timeout: 5_000,
+          stdio: ['ignore', 'ignore', 'ignore']
+        }
+      ).status === 0
+    )
   }
 
   private changeState(session: TerminalSession, state: AgentState, message?: string): void {

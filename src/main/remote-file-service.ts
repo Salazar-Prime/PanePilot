@@ -123,13 +123,13 @@ function runRemotePython<T>(
     )
   }
   if (result.status !== 0) {
-    const detail = result.stderr.trim().split(/\r?\n/).at(-1)
+    const detail = (result.stderr ?? '').trim().split(/\r?\n/).at(-1)
     throw new Error(
       detail || `Could not browse ${sshAlias}. Make sure SSH key authentication is available.`
     )
   }
   try {
-    return JSON.parse(result.stdout) as T
+    return JSON.parse(result.stdout ?? '') as T
   } catch {
     throw new Error(`The response from ${sshAlias} was not valid JSON.`)
   }

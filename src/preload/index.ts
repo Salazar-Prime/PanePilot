@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  CreatePortForwardInput,
   CreateProjectInput,
   ProjectConsoleApi,
   StartTerminalInput,
@@ -9,11 +10,16 @@ import type {
 
 const api: ProjectConsoleApi = {
   connections: {
-    list: () => ipcRenderer.invoke('connections:list')
+    list: () => ipcRenderer.invoke('connections:list'),
+    test: (connectionId: string) => ipcRenderer.invoke('connections:test', connectionId)
   },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),
     create: (input: CreateProjectInput) => ipcRenderer.invoke('projects:create', input),
+    rename: (projectId: string, name: string) =>
+      ipcRenderer.invoke('projects:rename', projectId, name),
+    archive: (projectId: string) => ipcRenderer.invoke('projects:archive', projectId),
+    restore: (projectId: string) => ipcRenderer.invoke('projects:restore', projectId),
     chooseFolder: () => ipcRenderer.invoke('projects:choose-folder'),
     openRepository: (url: string) => ipcRenderer.invoke('projects:open-repository', url)
   },
@@ -28,6 +34,8 @@ const api: ProjectConsoleApi = {
     acknowledge: (sessionId: string) => ipcRenderer.invoke('terminals:acknowledge', sessionId),
     rename: (sessionId: string, name: string) =>
       ipcRenderer.invoke('terminals:rename', sessionId, name),
+    setPinned: (sessionId: string, pinned: boolean) =>
+      ipcRenderer.invoke('terminals:set-pinned', sessionId, pinned),
     stop: (sessionId: string) => ipcRenderer.invoke('terminals:stop', sessionId),
     archive: (sessionId: string) => ipcRenderer.invoke('terminals:archive', sessionId),
     restore: (sessionId: string) => ipcRenderer.invoke('terminals:restore', sessionId),
@@ -49,7 +57,40 @@ const api: ProjectConsoleApi = {
     list: (projectId: string, relativePath = '.') =>
       ipcRenderer.invoke('files:list', projectId, relativePath),
     preview: (projectId: string, relativePath: string) =>
-      ipcRenderer.invoke('files:preview', projectId, relativePath)
+      ipcRenderer.invoke('files:preview', projectId, relativePath),
+    save: (projectId: string, relativePath: string, content: string) =>
+      ipcRenderer.invoke('files:save', projectId, relativePath, content)
+  },
+  remoteFolders: {
+    list: (connectionId: string, path?: string) =>
+      ipcRenderer.invoke('remote-folders:list', connectionId, path)
+  },
+  conversations: {
+    list: (projectId: string, query = '') =>
+      ipcRenderer.invoke('conversations:list', projectId, query),
+    get: (projectId: string, conversationId: string, query = '') =>
+      ipcRenderer.invoke('conversations:get', projectId, conversationId, query)
+  },
+  portForwards: {
+    list: (connectionId: string) => ipcRenderer.invoke('port-forwards:list', connectionId),
+    create: (input: CreatePortForwardInput) =>
+      ipcRenderer.invoke('port-forwards:create', input),
+    start: (portForwardId: string) =>
+      ipcRenderer.invoke('port-forwards:start', portForwardId),
+    stop: (portForwardId: string) =>
+      ipcRenderer.invoke('port-forwards:stop', portForwardId),
+    delete: (portForwardId: string) =>
+      ipcRenderer.invoke('port-forwards:delete', portForwardId),
+    onChanged: (listener: () => void) => {
+      const handler = (): void => listener()
+      ipcRenderer.on('port-forward:changed', handler)
+      return () => ipcRenderer.removeListener('port-forward:changed', handler)
+    }
+  },
+  system: {
+    copyText: (text: string) => ipcRenderer.invoke('system:copy-text', text),
+    openProjectFolder: (projectId: string) =>
+      ipcRenderer.invoke('system:open-project-folder', projectId)
   }
 }
 

@@ -22,6 +22,7 @@ interface Props {
 
 export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
   const [profile, setProfile] = useState<LaunchProfile>('codex')
+  const [name, setName] = useState('')
   const [customCommand, setCustomCommand] = useState('')
   const [dangerousMode, setDangerousMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -43,6 +44,7 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
     try {
       await onStart({
         projectId,
+        name: name.trim() || undefined,
         profile,
         customCommand: profile === 'custom' ? customCommand : undefined,
         dangerousMode: isAgent && dangerousMode
@@ -74,6 +76,14 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
           </button>
         </div>
         <form onSubmit={submit}>
+          <label className="field">
+            <span>Terminal / tmux name</span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Optional — PanePilot will choose a unique name"
+            />
+          </label>
           <div className="profile-grid">
             {profiles.map((item) => {
               const Icon = item.icon

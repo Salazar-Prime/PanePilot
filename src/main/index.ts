@@ -1,9 +1,21 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import type { CreateProjectInput, StartTerminalInput } from '../shared/types'
-import { listLocalFiles, previewLocalFile } from './file-service'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
+import type {
+  CreatePortForwardInput,
+  CreateProjectInput,
+  StartTerminalInput
+} from '../shared/types'
+import { ConversationIndexer } from './conversation-indexer'
+import { listLocalFiles, previewLocalFile, writeLocalFile } from './file-service'
 import { discoverRepository } from './git'
+import { PortForwardManager, testSshConnection } from './port-forward-manager'
 import { projectTypeServices } from './project-type-services'
+import {
+  listRemoteFiles,
+  listRemoteFolders,
+  previewRemoteFile,
+  writeRemoteFile
+} from './remote-file-service'
 import { discoverSshAliases } from './ssh-config'
 import { Store } from './store'
 import { TerminalManager } from './terminal-manager'
@@ -11,6 +23,8 @@ import { TerminalManager } from './terminal-manager'
 let mainWindow: BrowserWindow | null = null
 let store: Store
 let terminals: TerminalManager
+let conversations: ConversationIndexer
+let portForwards: PortForwardManager
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -43,6 +57,13 @@ function createWindow(): void {
 
 function registerIpc(): void {
   ipcMain.handle('connections:list', () => store.listConnections())
+  ipcMain.handle('connections:test', (_event, connectionId: string) => {
+    const connection = store.getConnection(connectionId)
+    if (!connection || connection.kind !== 'ssh' || !connection.sshAlias) {
+      throw new Error('Choose a valid SSH connection.')
+    }
+    return testSshConnection(connection.sshAlias)
+  })
   ipcMain.handle('projects:list', () => store.listProjects())
   ipcMain.handle('projects:choose-folder', async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
@@ -62,6 +83,15 @@ function registerIpc(): void {
       folder: input.folder.trim(),
       repositoryUrl
     })
+  })
+  ipcMain.handle('projects:rename', (_event, projectId: string, name: string) => {
+    store.renameProject(projectId, name)
+  })
+  ipcMain.handle('projects:archive', (_event, projectId: string) => {
+    store.archiveProject(projectId, true)
+  })
+  ipcMain.handle('projects:restore', (_event, projectId: string) => {
+    store.archiveProject(projectId, false)
   })
   ipcMain.handle('projects:open-repository', async (_event, url: string) => {
     if (!/^https?:\/\//i.test(url)) throw new Error('Only web repository URLs can be opened.')
@@ -89,6 +119,9 @@ function registerIpc(): void {
   ipcMain.handle('terminals:rename', (_event, sessionId: string, name: string) => {
     terminals.rename(sessionId, name)
   })
+  ipcMain.handle('terminals:set-pinned', (_event, sessionId: string, pinned: boolean) => {
+    terminals.setPinned(sessionId, pinned)
+  })
   ipcMain.handle('terminals:stop', (_event, sessionId: string) => terminals.stop(sessionId))
   ipcMain.handle('terminals:archive', (_event, sessionId: string) =>
     terminals.archive(sessionId)
@@ -104,20 +137,98 @@ function registerIpc(): void {
     const project = store.getProject(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
-    if (connection?.kind !== 'local') {
-      throw new Error('Remote file browsing is not available in this first build.')
-    }
-    return listLocalFiles(project.folder, relativePath)
+    if (!connection) throw new Error('Project connection not found.')
+    return connection.kind === 'local'
+      ? listLocalFiles(project.folder, relativePath)
+      : listRemoteFiles(connection.sshAlias!, project.folder, relativePath)
   })
   ipcMain.handle('files:preview', (_event, projectId: string, relativePath: string) => {
     const project = store.getProject(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
-    if (connection?.kind !== 'local') {
-      throw new Error('Remote file previews are not available in this first build.')
-    }
-    return previewLocalFile(project.folder, relativePath)
+    if (!connection) throw new Error('Project connection not found.')
+    return connection.kind === 'local'
+      ? previewLocalFile(project.folder, relativePath)
+      : previewRemoteFile(connection.sshAlias!, project.folder, relativePath)
   })
+  ipcMain.handle(
+    'files:save',
+    (_event, projectId: string, relativePath: string, content: string) => {
+      const project = store.getProject(projectId)
+      if (!project) throw new Error('Project not found.')
+      const connection = store.getConnection(project.connectionId)
+      if (!connection) throw new Error('Project connection not found.')
+      if (connection.kind === 'local') {
+        writeLocalFile(project.folder, relativePath, content)
+      } else {
+        writeRemoteFile(connection.sshAlias!, project.folder, relativePath, content)
+      }
+    }
+  )
+
+  ipcMain.handle('port-forwards:list', (_event, connectionId: string) => {
+    const connection = store.getConnection(connectionId)
+    if (!connection || connection.kind !== 'ssh') {
+      throw new Error('Choose a valid SSH connection.')
+    }
+    return portForwards.list(connectionId)
+  })
+  ipcMain.handle(
+    'port-forwards:create',
+    (_event, input: CreatePortForwardInput) => portForwards.create(input)
+  )
+  ipcMain.handle('port-forwards:start', (_event, id: string) => portForwards.start(id))
+  ipcMain.handle('port-forwards:stop', (_event, id: string) => {
+    portForwards.stop(id)
+  })
+  ipcMain.handle('port-forwards:delete', (_event, id: string) => {
+    portForwards.delete(id)
+  })
+
+  ipcMain.handle('system:copy-text', (_event, text: string) => {
+    clipboard.writeText(text)
+  })
+  ipcMain.handle('system:open-project-folder', async (_event, projectId: string) => {
+    const project = store.getProject(projectId)
+    if (!project) throw new Error('Project not found.')
+    const connection = store.getConnection(project.connectionId)
+    if (connection?.kind !== 'local') {
+      throw new Error('Remote projects do not have a local Finder folder.')
+    }
+    const error = await shell.openPath(project.folder)
+    if (error) throw new Error(error)
+  })
+
+  ipcMain.handle(
+    'remote-folders:list',
+    (_event, connectionId: string, path?: string) => {
+      const connection = store.getConnection(connectionId)
+      if (!connection || connection.kind !== 'ssh' || !connection.sshAlias) {
+        throw new Error('Choose a valid SSH connection.')
+      }
+      return listRemoteFolders(connection.sshAlias, path)
+    }
+  )
+
+  ipcMain.handle('conversations:list', (_event, projectId: string, query = '') => {
+    const project = store.getProject(projectId)
+    if (!project) throw new Error('Project not found.')
+    const connection = store.getConnection(project.connectionId)
+    if (connection?.kind !== 'local') return []
+    return conversations.list(project.folder, query)
+  })
+  ipcMain.handle(
+    'conversations:get',
+    (_event, projectId: string, conversationId: string, query = '') => {
+      const project = store.getProject(projectId)
+      if (!project) throw new Error('Project not found.')
+      const connection = store.getConnection(project.connectionId)
+      if (connection?.kind !== 'local') {
+        throw new Error('Remote conversation archives are not available yet.')
+      }
+      return conversations.get(project.folder, conversationId, query)
+    }
+  )
 }
 
 app
@@ -126,6 +237,10 @@ app
     store = new Store(app.getPath('userData'))
     store.syncConnections(discoverSshAliases())
     terminals = new TerminalManager(store, () => mainWindow)
+    conversations = new ConversationIndexer()
+    portForwards = new PortForwardManager(store, () => {
+      mainWindow?.webContents.send('port-forward:changed')
+    })
     registerIpc()
     createWindow()
 
@@ -142,6 +257,7 @@ app
 
 app.on('before-quit', () => {
   terminals?.shutdown()
+  portForwards?.shutdown()
   store?.close()
 })
 

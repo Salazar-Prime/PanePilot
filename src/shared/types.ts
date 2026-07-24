@@ -29,6 +29,7 @@ export interface TerminalSession {
   state: AgentState
   dangerousMode: boolean
   archived: boolean
+  pinned: boolean
   output: string
   createdAt: string
   updatedAt: string
@@ -51,6 +52,7 @@ export interface Project {
   folder: string
   repositoryUrl: string | null
   state: AgentState
+  archived: boolean
   createdAt: string
   updatedAt: string
   sessions: TerminalSession[]
@@ -128,14 +130,46 @@ export interface RemoteFolderListing {
   entries: FileEntry[]
 }
 
+export interface ConnectionTestResult {
+  ok: boolean
+  message: string
+  latencyMs: number
+}
+
+export type PortForwardState = 'starting' | 'running' | 'stopped' | 'error'
+
+export interface PortForward {
+  id: string
+  connectionId: string
+  name: string
+  bindAddress: '127.0.0.1'
+  localPort: number
+  remoteHost: string
+  remotePort: number
+  state: PortForwardState
+  error: string | null
+  createdAt: string
+}
+
+export interface CreatePortForwardInput {
+  connectionId: string
+  name: string
+  localPort: number
+  remoteHost: string
+  remotePort: number
+}
+
 export interface ProjectConsoleApi {
   connections: {
     list(): Promise<Connection[]>
+    test(connectionId: string): Promise<ConnectionTestResult>
   }
   projects: {
     list(): Promise<Project[]>
     create(input: CreateProjectInput): Promise<Project>
     rename(projectId: string, name: string): Promise<void>
+    archive(projectId: string): Promise<void>
+    restore(projectId: string): Promise<void>
     chooseFolder(): Promise<string | null>
     openRepository(url: string): Promise<void>
   }
@@ -146,6 +180,7 @@ export interface ProjectConsoleApi {
     resize(sessionId: string, cols: number, rows: number): Promise<void>
     acknowledge(sessionId: string): Promise<void>
     rename(sessionId: string, name: string): Promise<void>
+    setPinned(sessionId: string, pinned: boolean): Promise<void>
     stop(sessionId: string): Promise<void>
     archive(sessionId: string): Promise<void>
     restore(sessionId: string): Promise<void>
@@ -164,5 +199,17 @@ export interface ProjectConsoleApi {
   conversations: {
     list(projectId: string, query?: string): Promise<ConversationSummary[]>
     get(projectId: string, conversationId: string, query?: string): Promise<ConversationDetail>
+  }
+  portForwards: {
+    list(connectionId: string): Promise<PortForward[]>
+    create(input: CreatePortForwardInput): Promise<PortForward>
+    start(portForwardId: string): Promise<void>
+    stop(portForwardId: string): Promise<void>
+    delete(portForwardId: string): Promise<void>
+    onChanged(listener: () => void): () => void
+  }
+  system: {
+    copyText(text: string): Promise<void>
+    openProjectFolder(projectId: string): Promise<void>
   }
 }

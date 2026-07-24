@@ -17,6 +17,9 @@ describe('ScreenActivityDetector', () => {
 
     expect(detector.inspect('Working…  esc to interrupt')).toBe('running')
     expect(detector.inspect('ESC   TO   INTERRUPT')).toBe('running')
+    expect(
+      detector.inspect('• Working (0s • esc to interrupt)\\n› Implement the requested feature')
+    ).toBe('running')
   })
 
   it('requests attention once the marker disappears', () => {

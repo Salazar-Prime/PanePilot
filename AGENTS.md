@@ -41,6 +41,10 @@ These are owner-approved decisions and should be treated as product invariants u
 14. File-looking terminal output should be clickable. Files can also be browsed and previewed in the UI.
 15. A GitHub repository action is available when a Git remote can be discovered.
 16. Agent lifecycle state should come from provider hooks when available, not from fragile terminal-screen parsing.
+17. A persistent terminal's PanePilot name and tmux session name are identical. Names must be tmux-safe and unique on that connection.
+18. Terminal pinning is persisted. Pinned terminals remain first while the remaining terminals follow the user's selected sort order.
+19. Projects can be archived only after all of their terminals stop. Archived projects have a separate library view and do not contribute to live status counts.
+20. SSH port forwards are explicit, bind to `127.0.0.1`, use `ExitOnForwardFailure`, and stop when PanePilot exits.
 
 ## Agent lifecycle semantics
 
@@ -124,6 +128,7 @@ Core tables:
 - `terminal_sessions`: terminal profile, command, backend, tmux identity, lifecycle state, dangerous-mode flag, archive flag, and saved output.
 - `activities`: project timeline entries.
 - `agent_events`: idempotently ingested provider lifecycle payloads.
+- `port_forwards`: saved loopback-only SSH forwarding configurations. Running processes are intentionally not persisted across app exits.
 
 The old `projects.parent_id` column remains for migration compatibility but is unused and cleared on startup.
 
@@ -133,6 +138,7 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 
 - Local and remote sessions use tmux when it is available.
 - Each PanePilot terminal has its own tmux session name.
+- The tmux session name must exactly match the PanePilot terminal name. Rename both as one operation.
 - Closing/detaching the renderer does not kill a persistent tmux session.
 - A PTY fallback is used when tmux cannot be found or created.
 - Local tmux resolution checks PATH plus common Homebrew/system locations.
@@ -147,6 +153,8 @@ Archive and deletion rules:
 - Archived terminals are hidden from normal tabs/sidebar lists but can be restored.
 - Permanent deletion removes saved terminal output and associated ingested hook events.
 - Provider-owned conversation JSONL is never removed by terminal deletion.
+- Projects can be archived only when every terminal is `completed` or `error`.
+- Project archiving is reversible and does not delete terminals, activity, files, or provider archives.
 
 ## Codex and Claude lifecycle hooks
 
@@ -223,7 +231,7 @@ Known scaling limitation: search currently scans the in-memory parsed conversati
 - Remote file operations execute through SSH.
 - Choosing a folder for a new SSH project browses that host's filesystem, starts at the remote home directory, and stores the canonical remote path. It must never open the local native folder dialog.
 - File previews are truncated at 1 MB.
-- File previews use a locally bundled Monaco editor in read-only mode with language detection. Writing and saving files is not implemented.
+- File previews use a locally bundled Monaco editor with language detection. Editing requires an explicit Edit action and saving is bounded to existing files no larger than 1 MB.
 - Terminal links recognize path-like text and optional line/column suffixes.
 - Relative terminal links resolve against the project folder.
 - Repository URLs are currently auto-discovered only for local projects.

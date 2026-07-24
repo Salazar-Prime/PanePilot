@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Archive,
   Files,
   History,
+  MessageSquareText,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   Plus,
   RotateCcw,
   Square,
@@ -13,26 +17,43 @@ import {
 } from 'lucide-react'
 import type { TerminalSession } from '@shared/types'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
+import {
+  sessionSortOptions,
+  sortSessions,
+  useSessionSort
+} from '../lib/sessionSort'
+import { ChatHistoryPanel } from './ChatHistoryPanel'
 import { FilesPanel } from './FilesPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { ManagedTerminal } from './ManagedTerminal'
+import { RenameDialog } from './RenameDialog'
 import { StatusDot } from './StatusDot'
 import { TerminalLauncher } from './TerminalLauncher'
 
-type WorkspaceTab = 'terminal' | 'files' | 'history'
+type WorkspaceTab = 'terminal' | 'files' | 'chats' | 'history'
 
 export function TerminalProjectWorkspace({
   project,
   selectedSessionId,
+  launchTerminalRequest,
   onSelectSession,
   onChanged
 }: ProjectWorkspaceProps) {
   const [tab, setTab] = useState<WorkspaceTab>('terminal')
   const [showLauncher, setShowLauncher] = useState(false)
-  const [menuSessionId, setMenuSessionId] = useState<string | null>(null)
+  const [showArchivedSessions, setShowArchivedSessions] = useState(false)
+  const [sessionSort, setSessionSort] = useSessionSort()
+  const [renameTarget, setRenameTarget] = useState<TerminalSession | null>(null)
+  const [menu, setMenu] = useState<{ sessionId: string; top: number; left: number } | null>(
+    null
+  )
   const visibleSessions = useMemo(
-    () => project.sessions.filter((session) => !session.archived),
-    [project.sessions]
+    () =>
+      sortSessions(
+        project.sessions.filter((session) => !session.archived),
+        sessionSort
+      ),
+    [project.sessions, sessionSort]
   )
   const archivedSessions = useMemo(
     () => project.sessions.filter((session) => session.archived),
@@ -47,6 +68,27 @@ export function TerminalProjectWorkspace({
     void window.projectConsole.terminals.acknowledge(activeSession.id).then(onChanged)
   }, [activeSession?.id])
 
+  useEffect(() => {
+    if (launchTerminalRequest > 0) setShowLauncher(true)
+  }, [launchTerminalRequest])
+
+  useEffect(() => {
+    if (!menu) return
+    function closeMenu(event: MouseEvent) {
+      const target = event.target as HTMLElement
+      if (!target.closest('.terminal-menu-portal, .tab-menu-button')) setMenu(null)
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMenu(null)
+    }
+    document.addEventListener('mousedown', closeMenu)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('mousedown', closeMenu)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [menu])
+
   async function selectSession(id: string) {
     setTab('terminal')
     onSelectSession(id)
@@ -56,33 +98,44 @@ export function TerminalProjectWorkspace({
 
   async function startTerminal(input: Parameters<typeof window.projectConsole.terminals.start>[0]) {
     const session = await window.projectConsole.terminals.start(input)
+    setTab('terminal')
     onSelectSession(session.id)
     await onChanged()
   }
 
   async function rename(session: TerminalSession) {
-    setMenuSessionId(null)
-    const name = window.prompt('Terminal name', session.name)
-    if (!name || name.trim() === session.name) return
-    await window.projectConsole.terminals.rename(session.id, name)
+    setMenu(null)
+    setRenameTarget(session)
+  }
+
+  async function applyRename(name: string) {
+    if (!renameTarget) return
+    await window.projectConsole.terminals.rename(renameTarget.id, name)
+    await onChanged()
+  }
+
+  async function togglePin(session: TerminalSession) {
+    setMenu(null)
+    await window.projectConsole.terminals.setPinned(session.id, !session.pinned)
     await onChanged()
   }
 
   async function stop(session: TerminalSession) {
-    setMenuSessionId(null)
+    setMenu(null)
     if (!window.confirm(`Stop “${session.name}”? Its saved output will be kept.`)) return
     await window.projectConsole.terminals.stop(session.id)
     await onChanged()
   }
 
   async function archive(session: TerminalSession) {
-    setMenuSessionId(null)
+    setMenu(null)
     await window.projectConsole.terminals.archive(session.id)
     await onChanged()
   }
 
   async function restore(session: TerminalSession) {
     await window.projectConsole.terminals.restore(session.id)
+    if (archivedSessions.length === 1) setShowArchivedSessions(false)
     onSelectSession(session.id)
     await onChanged()
   }
@@ -98,6 +151,12 @@ export function TerminalProjectWorkspace({
     await onChanged()
   }
 
+  function run(action: Promise<void>) {
+    void action.catch((caught: unknown) => {
+      window.alert(caught instanceof Error ? caught.message : String(caught))
+    })
+  }
+
   return (
     <div className="project-workspace">
       <nav className="workspace-tabs" aria-label="Project tools">
@@ -108,6 +167,10 @@ export function TerminalProjectWorkspace({
         <button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>
           <Files size={15} />
           Files
+        </button>
+        <button className={tab === 'chats' ? 'active' : ''} onClick={() => setTab('chats')}>
+          <MessageSquareText size={15} />
+          LLM Chats
         </button>
         <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
           <History size={15} />
@@ -120,52 +183,75 @@ export function TerminalProjectWorkspace({
           <div className="terminal-tabs">
             <div className="terminal-tabs-scroll">
               {visibleSessions.map((session) => (
-                <button
+                <div
                   key={session.id}
                   className={`terminal-tab ${activeSession?.id === session.id ? 'active' : ''}`}
-                  onClick={() => void selectSession(session.id)}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    setMenu({
+                      sessionId: session.id,
+                      top: event.clientY,
+                      left: event.clientX
+                    })
+                  }}
                 >
-                  <StatusDot state={session.state} compact />
-                  <span>{session.name}</span>
-                  {session.dangerousMode && <small className="unsafe-badge">unsafe</small>}
-                  <span
-                    className="tab-menu"
-                    role="button"
-                    tabIndex={0}
+                  <button
+                    className="terminal-tab-select"
+                    onClick={() => void selectSession(session.id)}
+                  >
+                    <StatusDot state={session.state} compact />
+                    {session.pinned && <Pin className="pinned-indicator" size={10} />}
+                    <span>{session.name}</span>
+                    {session.dangerousMode && <small className="unsafe-badge">unsafe</small>}
+                  </button>
+                  <button
+                    className="tab-menu-button"
+                    aria-label={`Actions for ${session.name}`}
                     onClick={(event) => {
-                      event.stopPropagation()
-                      setMenuSessionId(menuSessionId === session.id ? null : session.id)
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') setMenuSessionId(session.id)
+                      const bounds = event.currentTarget.getBoundingClientRect()
+                      setMenu((current) =>
+                        current?.sessionId === session.id
+                          ? null
+                          : {
+                              sessionId: session.id,
+                              top: bounds.bottom + 5,
+                              left: Math.max(8, bounds.right - 150)
+                            }
+                      )
                     }}
                   >
                     <MoreHorizontal size={14} />
-                  </span>
-                  {menuSessionId === session.id && (
-                    <span className="popover-menu" onClick={(event) => event.stopPropagation()}>
-                      <button onClick={() => void rename(session)}>
-                        <Pencil size={14} /> Rename
-                      </button>
-                      {!['completed', 'error'].includes(session.state) ? (
-                        <button className="danger-text" onClick={() => void stop(session)}>
-                          <Square size={13} /> Stop
-                        </button>
-                      ) : (
-                        <>
-                          <button onClick={() => void archive(session)}>
-                            <Archive size={14} /> Archive
-                          </button>
-                          <button className="danger-text" onClick={() => void permanentlyDelete(session)}>
-                            <Trash2 size={14} /> Delete
-                          </button>
-                        </>
-                      )}
-                    </span>
-                  )}
-                </button>
+                  </button>
+                </div>
               ))}
             </div>
+            <label className="session-sort-control" title="Sort terminal sessions">
+              <span>Sort</span>
+              <select
+                value={sessionSort}
+                onChange={(event) =>
+                  setSessionSort(
+                    event.target.value as Parameters<typeof setSessionSort>[0]
+                  )
+                }
+              >
+                {sessionSortOptions.map((option) => (
+                  <option value={option.value} key={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {archivedSessions.length > 0 && (
+              <button
+                className="session-archive-button"
+                onClick={() => setShowArchivedSessions(true)}
+                title="Archived terminals"
+              >
+                <Archive size={14} />
+                <span>{archivedSessions.length}</span>
+              </button>
+            )}
             <button
               className="new-terminal-button"
               onClick={() => setShowLauncher(true)}
@@ -199,10 +285,13 @@ export function TerminalProjectWorkspace({
                   {archivedSessions.map((session) => (
                     <div key={session.id}>
                       <span>{session.name}</span>
-                      <button onClick={() => void restore(session)}>
+                      <button onClick={() => run(restore(session))}>
                         <RotateCcw size={13} /> Restore
                       </button>
-                      <button className="danger-text" onClick={() => void permanentlyDelete(session)}>
+                      <button
+                        className="danger-text"
+                        onClick={() => run(permanentlyDelete(session))}
+                      >
                         <Trash2 size={13} /> Delete
                       </button>
                     </div>
@@ -214,13 +303,118 @@ export function TerminalProjectWorkspace({
         </section>
       )}
       {tab === 'files' && <FilesPanel project={project} />}
+      {tab === 'chats' && <ChatHistoryPanel project={project} />}
       {tab === 'history' && <HistoryPanel project={project} />}
+      {menu &&
+        createPortal(
+          <div
+            className="popover-menu terminal-menu-portal"
+            style={{ top: menu.top, left: menu.left }}
+          >
+            {(() => {
+              const session = visibleSessions.find((item) => item.id === menu.sessionId)
+              if (!session) return null
+              return (
+                <>
+                  <button onClick={() => run(rename(session))}>
+                    <Pencil size={14} /> Rename
+                  </button>
+                  <button onClick={() => run(togglePin(session))}>
+                    {session.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+                    {session.pinned ? 'Unpin' : 'Pin'}
+                  </button>
+                  {!['completed', 'error'].includes(session.state) ? (
+                    <button className="danger-text" onClick={() => run(stop(session))}>
+                      <Square size={13} /> Stop
+                    </button>
+                  ) : (
+                    <>
+                      <button onClick={() => run(archive(session))}>
+                        <Archive size={14} /> Archive
+                      </button>
+                      <button
+                        className="danger-text"
+                        onClick={() => run(permanentlyDelete(session))}
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    </>
+                  )}
+                </>
+              )
+            })()}
+          </div>,
+          document.body
+        )}
       {showLauncher && (
         <TerminalLauncher
           projectId={project.id}
           onClose={() => setShowLauncher(false)}
           onStart={startTerminal}
         />
+      )}
+      {renameTarget && (
+        <RenameDialog
+          title={`Rename ${renameTarget.name}`}
+          eyebrow="TERMINAL NAME"
+          label="Terminal and tmux session name"
+          initialValue={renameTarget.name}
+          description="PanePilot will rename the terminal and its tmux session together."
+          maxLength={80}
+          onClose={() => setRenameTarget(null)}
+          onRename={applyRename}
+        />
+      )}
+      {showArchivedSessions && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={() => setShowArchivedSessions(false)}
+        >
+          <section
+            className="modal archived-sessions-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="archived-sessions-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="modal-heading">
+              <div>
+                <span className="eyebrow">SAVED TERMINALS</span>
+                <h2 id="archived-sessions-title">Archived terminals</h2>
+              </div>
+              <button
+                className="secondary-button"
+                onClick={() => setShowArchivedSessions(false)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="archived-session-rows">
+              {archivedSessions.map((session) => (
+                <div key={session.id}>
+                  <StatusDot state={session.state} compact />
+                  <div>
+                    <strong>{session.name}</strong>
+                    <span>{session.profile} · {session.backend}</span>
+                  </div>
+                  <button onClick={() => run(rename(session))}>
+                    <Pencil size={13} /> Rename
+                  </button>
+                  <button onClick={() => run(restore(session))}>
+                    <RotateCcw size={13} /> Restore
+                  </button>
+                  <button
+                    className="danger-text"
+                    onClick={() => run(permanentlyDelete(session))}
+                  >
+                    <Trash2 size={13} /> Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
       )}
     </div>
   )

@@ -37,6 +37,7 @@ type ProjectRow = {
   folder: string
   repository_url: string | null
   state: AgentState
+  archived: number
   created_at: string
   updated_at: string
 }
@@ -52,6 +53,7 @@ type SessionRow = {
   state: AgentState
   dangerous_mode: number
   archived: number
+  pinned: number
   output: string
   created_at: string
   updated_at: string
@@ -64,6 +66,28 @@ type ActivityRow = {
   kind: string
   message: string
   created_at: string
+}
+
+type PortForwardRow = {
+  id: string
+  connection_id: string
+  name: string
+  bind_address: '127.0.0.1'
+  local_port: number
+  remote_host: string
+  remote_port: number
+  created_at: string
+}
+
+export interface StoredPortForward {
+  id: string
+  connectionId: string
+  name: string
+  bindAddress: '127.0.0.1'
+  localPort: number
+  remoteHost: string
+  remotePort: number
+  createdAt: string
 }
 
 function now(): string {
@@ -91,9 +115,23 @@ function mapSession(row: SessionRow): TerminalSession {
     state: row.state,
     dangerousMode: Boolean(row.dangerous_mode),
     archived: Boolean(row.archived),
+    pinned: Boolean(row.pinned),
     output: row.output,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  }
+}
+
+function mapPortForward(row: PortForwardRow): StoredPortForward {
+  return {
+    id: row.id,
+    connectionId: row.connection_id,
+    name: row.name,
+    bindAddress: row.bind_address,
+    localPort: row.local_port,
+    remoteHost: row.remote_host,
+    remotePort: row.remote_port,
+    createdAt: row.created_at
   }
 }
 
@@ -135,6 +173,7 @@ export class Store {
         folder TEXT NOT NULL,
         repository_url TEXT,
         state TEXT NOT NULL DEFAULT 'idle',
+        archived INTEGER NOT NULL DEFAULT 0,
         parent_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -151,6 +190,7 @@ export class Store {
         state TEXT NOT NULL DEFAULT 'idle',
         dangerous_mode INTEGER NOT NULL DEFAULT 0,
         archived INTEGER NOT NULL DEFAULT 0,
+        pinned INTEGER NOT NULL DEFAULT 0,
         output TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -172,14 +212,27 @@ export class Store {
         payload TEXT NOT NULL,
         received_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS port_forwards (
+        id TEXT PRIMARY KEY,
+        connection_id TEXT NOT NULL REFERENCES connections(id),
+        name TEXT NOT NULL,
+        bind_address TEXT NOT NULL DEFAULT '127.0.0.1',
+        local_port INTEGER NOT NULL,
+        remote_host TEXT NOT NULL,
+        remote_port INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `)
 
     this.ensureColumn('connections', 'ssh_alias', 'TEXT')
     this.ensureColumn('projects', 'created_at', `TEXT NOT NULL DEFAULT ''`)
+    this.ensureColumn('projects', 'archived', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('terminal_sessions', 'name', `TEXT NOT NULL DEFAULT ''`)
     this.ensureColumn('terminal_sessions', 'custom_command', 'TEXT')
     this.ensureColumn('terminal_sessions', 'tmux_name', 'TEXT')
     this.ensureColumn('terminal_sessions', 'dangerous_mode', 'INTEGER NOT NULL DEFAULT 0')
+    this.ensureColumn('terminal_sessions', 'pinned', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('activities', 'session_id', 'TEXT')
     this.ensureColumn('activities', 'message', `TEXT NOT NULL DEFAULT ''`)
 
@@ -215,9 +268,11 @@ export class Store {
         ON terminal_sessions(project_id, archived);
       CREATE INDEX IF NOT EXISTS activities_project_idx
         ON activities(project_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS port_forwards_connection_idx
+        ON port_forwards(connection_id, created_at);
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 1;
+      PRAGMA user_version = 2;
     `)
   }
 
@@ -302,10 +357,32 @@ export class Store {
     this.addActivity(id, null, 'project-renamed', `Renamed project to ${cleaned}`)
   }
 
+  archiveProject(id: string, archived: boolean): void {
+    const project = this.getProject(id)
+    if (!project) throw new Error('Project not found.')
+    if (project.archived === archived) return
+    if (
+      archived &&
+      project.sessions.some((session) => !['completed', 'error'].includes(session.state))
+    ) {
+      throw new Error('Stop every running terminal before archiving this project.')
+    }
+    this.db
+      .prepare('UPDATE projects SET archived = ?, updated_at = ? WHERE id = ?')
+      .run(archived ? 1 : 0, now(), id)
+    this.addActivity(
+      id,
+      null,
+      archived ? 'project-archived' : 'project-restored',
+      `${archived ? 'Archived' : 'Restored'} project ${project.name}`
+    )
+  }
+
   getProject(id: string): Project | null {
     const row = this.db
       .prepare(
-        `SELECT id, type, name, connection_id, folder, repository_url, state, created_at, updated_at
+        `SELECT id, type, name, connection_id, folder, repository_url, state, archived,
+                created_at, updated_at
          FROM projects WHERE id = ?`
       )
       .get(id) as ProjectRow | undefined
@@ -316,7 +393,8 @@ export class Store {
   listProjects(): Project[] {
     const rows = this.db
       .prepare(
-        `SELECT id, type, name, connection_id, folder, repository_url, state, created_at, updated_at
+        `SELECT id, type, name, connection_id, folder, repository_url, state, archived,
+                created_at, updated_at
          FROM projects ORDER BY updated_at DESC`
       )
       .all() as ProjectRow[]
@@ -328,7 +406,7 @@ export class Store {
       this.db
         .prepare(
           `SELECT id, project_id, name, profile, custom_command, backend, tmux_name, state,
-                  dangerous_mode, archived, output, created_at, updated_at
+                  dangerous_mode, archived, pinned, output, created_at, updated_at
            FROM terminal_sessions WHERE project_id = ? ORDER BY created_at`
         )
         .all(row.id) as SessionRow[]
@@ -350,6 +428,7 @@ export class Store {
       folder: row.folder,
       repositoryUrl: row.repository_url,
       state: row.state,
+      archived: Boolean(row.archived),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       sessions,
@@ -373,8 +452,9 @@ export class Store {
         .prepare(
           `INSERT INTO terminal_sessions
            (id, project_id, name, label, profile, custom_command, command, backend, tmux_name,
-            backend_name, state, dangerous_mode, dangerous, archived, output, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, '', ?, ?)`
+            backend_name, state, dangerous_mode, dangerous, archived, pinned, output,
+            created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, 0, '', ?, ?)`
         )
         .run(
           id,
@@ -397,8 +477,8 @@ export class Store {
         .prepare(
           `INSERT INTO terminal_sessions
            (id, project_id, name, profile, custom_command, backend, tmux_name, state,
-            dangerous_mode, archived, output, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, 0, '', ?, ?)`
+            dangerous_mode, archived, pinned, output, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, 0, 0, '', ?, ?)`
         )
         .run(
           id,
@@ -426,7 +506,7 @@ export class Store {
     const row = this.db
       .prepare(
         `SELECT id, project_id, name, profile, custom_command, backend, tmux_name, state,
-                dangerous_mode, archived, output, created_at, updated_at
+                dangerous_mode, archived, pinned, output, created_at, updated_at
          FROM terminal_sessions WHERE id = ?`
       )
       .get(id) as SessionRow | undefined
@@ -479,6 +559,20 @@ export class Store {
     this.addActivity(session.projectId, id, 'terminal-renamed', `Renamed terminal to ${name}`)
   }
 
+  setSessionPinned(id: string, pinned: boolean): void {
+    const session = this.requireSession(id)
+    if (session.pinned === pinned) return
+    this.db
+      .prepare('UPDATE terminal_sessions SET pinned = ?, updated_at = ? WHERE id = ?')
+      .run(pinned ? 1 : 0, now(), id)
+    this.addActivity(
+      session.projectId,
+      id,
+      pinned ? 'terminal-pinned' : 'terminal-unpinned',
+      `${pinned ? 'Pinned' : 'Unpinned'} ${session.name}`
+    )
+  }
+
   archiveSession(id: string, archived: boolean): void {
     const session = this.requireSession(id)
     if (!['completed', 'error'].includes(session.state)) {
@@ -507,6 +601,62 @@ export class Store {
     })
     this.addActivity(session.projectId, null, 'terminal-deleted', `Permanently deleted ${session.name}`)
     this.updateProjectState(session.projectId)
+  }
+
+  listPortForwards(connectionId: string): StoredPortForward[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, connection_id, name, bind_address, local_port, remote_host, remote_port,
+                created_at
+         FROM port_forwards WHERE connection_id = ? ORDER BY created_at`
+      )
+      .all(connectionId) as PortForwardRow[]
+    return rows.map(mapPortForward)
+  }
+
+  getPortForward(id: string): StoredPortForward | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, connection_id, name, bind_address, local_port, remote_host, remote_port,
+                created_at
+         FROM port_forwards WHERE id = ?`
+      )
+      .get(id) as PortForwardRow | undefined
+    return row ? mapPortForward(row) : null
+  }
+
+  createPortForward(input: {
+    connectionId: string
+    name: string
+    localPort: number
+    remoteHost: string
+    remotePort: number
+  }): StoredPortForward {
+    const connection = this.getConnection(input.connectionId)
+    if (!connection || connection.kind !== 'ssh') {
+      throw new Error('Port forwarding requires an SSH connection.')
+    }
+    const id = randomUUID()
+    this.db
+      .prepare(
+        `INSERT INTO port_forwards
+         (id, connection_id, name, bind_address, local_port, remote_host, remote_port, created_at)
+         VALUES (?, ?, ?, '127.0.0.1', ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.connectionId,
+        input.name,
+        input.localPort,
+        input.remoteHost,
+        input.remotePort,
+        now()
+      )
+    return this.getPortForward(id)!
+  }
+
+  deletePortForward(id: string): void {
+    this.db.prepare('DELETE FROM port_forwards WHERE id = ?').run(id)
   }
 
   private requireSession(id: string): TerminalSession {

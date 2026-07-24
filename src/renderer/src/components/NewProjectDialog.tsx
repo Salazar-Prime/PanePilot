@@ -1,31 +1,68 @@
 import { useEffect, useState } from 'react'
-import { FolderOpen, Laptop, Server, X } from 'lucide-react'
-import type { Connection, CreateProjectInput } from '@shared/types'
+import { ChevronUp, Folder, FolderOpen, Laptop, LoaderCircle, Server, X } from 'lucide-react'
+import type {
+  Connection,
+  CreateProjectInput,
+  RemoteFolderListing
+} from '@shared/types'
 
 interface Props {
   connections: Connection[]
+  initialConnectionId?: string
   onClose(): void
   onCreate(input: CreateProjectInput): Promise<void>
 }
 
-export function NewProjectDialog({ connections, onClose, onCreate }: Props) {
+export function NewProjectDialog({
+  connections,
+  initialConnectionId,
+  onClose,
+  onCreate
+}: Props) {
   const [name, setName] = useState('')
-  const [connectionId, setConnectionId] = useState(connections[0]?.id ?? 'local')
+  const [nameEdited, setNameEdited] = useState(false)
+  const [connectionId, setConnectionId] = useState(
+    initialConnectionId ?? connections[0]?.id ?? 'local'
+  )
   const [folder, setFolder] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [remoteListing, setRemoteListing] = useState<RemoteFolderListing | null>(null)
+  const [remoteLoading, setRemoteLoading] = useState(false)
   const connection = connections.find((item) => item.id === connectionId)
 
   useEffect(() => {
-    if (!name && folder) {
+    if (!nameEdited && folder) {
       const parts = folder.replace(/\/+$/, '').split('/')
       setName(parts.at(-1) ?? '')
     }
-  }, [folder, name])
+  }, [folder, nameEdited])
+
+  useEffect(() => {
+    if (connection?.kind !== 'ssh') {
+      setRemoteListing(null)
+      return
+    }
+    void browseRemote()
+  }, [connectionId])
 
   async function chooseFolder() {
     const selected = await window.projectConsole.projects.chooseFolder()
     if (selected) setFolder(selected)
+  }
+
+  async function browseRemote(path?: string) {
+    setRemoteLoading(true)
+    setError('')
+    try {
+      const listing = await window.projectConsole.remoteFolders.list(connectionId, path)
+      setRemoteListing(listing)
+      setFolder(listing.currentPath)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setRemoteLoading(false)
+    }
   }
 
   async function submit(event: React.FormEvent) {
@@ -63,7 +100,17 @@ export function NewProjectDialog({ connections, onClose, onCreate }: Props) {
         <form onSubmit={submit}>
           <label className="field">
             <span>Connection</span>
-            <select value={connectionId} onChange={(event) => setConnectionId(event.target.value)}>
+            <select
+              value={connectionId}
+              onChange={(event) => {
+                setConnectionId(event.target.value)
+                setFolder('')
+                setName('')
+                setNameEdited(false)
+                setRemoteListing(null)
+                setError('')
+              }}
+            >
               {connections.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.kind === 'local' ? 'This Mac' : item.name}
@@ -91,6 +138,7 @@ export function NewProjectDialog({ connections, onClose, onCreate }: Props) {
                 value={folder}
                 onChange={(event) => setFolder(event.target.value)}
                 placeholder={connection?.kind === 'ssh' ? '/home/you/project' : 'Choose a folder'}
+                readOnly={connection?.kind === 'ssh'}
                 autoFocus
               />
               {connection?.kind === 'local' && (
@@ -100,11 +148,48 @@ export function NewProjectDialog({ connections, onClose, onCreate }: Props) {
               )}
             </div>
           </label>
+          {connection?.kind === 'ssh' && (
+            <div className="remote-folder-browser">
+              <div className="remote-folder-heading">
+                <Server size={13} />
+                <span>{remoteListing?.currentPath || 'Connecting…'}</span>
+                {remoteLoading && <LoaderCircle className="spin" size={14} />}
+              </div>
+              <div className="remote-folder-list">
+                {remoteListing?.parentPath && (
+                  <button
+                    type="button"
+                    onClick={() => void browseRemote(remoteListing.parentPath!)}
+                  >
+                    <ChevronUp size={15} />
+                    <span>..</span>
+                  </button>
+                )}
+                {remoteListing?.entries.map((entry) => (
+                  <button
+                    type="button"
+                    key={entry.path}
+                    onClick={() => void browseRemote(entry.path)}
+                  >
+                    <Folder size={15} />
+                    <span>{entry.name}</span>
+                  </button>
+                ))}
+                {!remoteLoading && remoteListing?.entries.length === 0 && (
+                  <p>This folder has no subfolders.</p>
+                )}
+              </div>
+              <small>Open folders to browse. The path above is the folder that will be used.</small>
+            </div>
+          )}
           <label className="field">
             <span>Project name</span>
             <input
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setName(event.target.value)
+                setNameEdited(true)
+              }}
               placeholder="My project"
             />
           </label>
