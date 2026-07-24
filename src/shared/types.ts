@@ -2,6 +2,11 @@ export type ProjectType = 'terminal' | 'latex'
 export type ConnectionKind = 'local' | 'ssh'
 export type LaunchProfile = 'shell' | 'codex' | 'claude' | 'custom'
 export type TerminalBackend = 'tmux' | 'pty'
+export type TerminalTransportState =
+  | 'attached'
+  | 'reconnecting'
+  | 'offline'
+  | 'detached'
 export type TerminalSessionKind =
   | 'terminal'
   | 'action'
@@ -216,6 +221,13 @@ export interface TerminalMetadataEvent {
   projectId: string
 }
 
+export interface TerminalTransportEvent {
+  sessionId: string
+  state: TerminalTransportState
+  attempt: number
+  message: string | null
+}
+
 export interface FileEntry {
   name: string
   path: string
@@ -309,6 +321,7 @@ export interface ProjectConsoleApi {
     start(input: StartTerminalInput): Promise<TerminalSession>
     discover(connectionId?: string): Promise<number>
     attach(sessionId: string, cols: number, rows: number): Promise<{ output: string }>
+    retryAttach(sessionId: string, cols: number, rows: number): Promise<void>
     write(sessionId: string, data: string): Promise<void>
     resize(sessionId: string, cols: number, rows: number): Promise<void>
     acknowledge(sessionId: string): Promise<void>
@@ -322,6 +335,7 @@ export interface ProjectConsoleApi {
     onData(listener: (event: TerminalDataEvent) => void): () => void
     onState(listener: (event: TerminalStateEvent) => void): () => void
     onMetadata(listener: (event: TerminalMetadataEvent) => void): () => void
+    onTransport(listener: (event: TerminalTransportEvent) => void): () => void
   }
   actions: {
     create(input: CreateProjectActionInput): Promise<ProjectAction>

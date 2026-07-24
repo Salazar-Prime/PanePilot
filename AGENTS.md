@@ -40,7 +40,7 @@ These are owner-approved decisions and should be treated as product invariants u
 13. Local Codex and Claude archives are indexed read-only and are searchable across full message text.
 14. File-looking terminal output should be clickable. Files can also be browsed and previewed in the UI.
 15. A GitHub repository action is available when a Git remote can be discovered.
-16. Agent lifecycle state should come from provider hooks when available, not from fragile terminal-screen parsing.
+16. Remote Codex lifecycle recovery uses the tmux pane title configured with `activity`, `run-state`, and `task-progress`. Tmux is the shared current-state snapshot across laptops; PanePilot does not maintain a remote lifecycle spool.
 17. A persistent terminal's PanePilot name and tmux session name are identical. Names must be tmux-safe and unique on that connection.
 18. Terminal pinning is persisted. Pinned terminals remain first while the remaining terminals follow the user's selected sort order.
 19. Projects can be archived only after all of their terminals stop. Archived projects have a separate library view and do not contribute to live status counts.
@@ -49,6 +49,8 @@ These are owner-approved decisions and should be treated as product invariants u
 22. PanePilot-owned tmux sessions carry versioned session-scoped `@panepilot_*` metadata. On an SSH connection, live tagged sessions are discovered with one-shot tmux commands and reconciled into the local database by stable terminal UUID and canonical project folder. This enables another PanePilot machine to attach without a remote daemon. Tmux is authoritative for live-session presence; SQLite remains authoritative for durable local workspace state.
 23. A project Action is an editable name and shell command. Each invocation replaces the prior saved run with a fresh ephemeral tmux session; the latest output remains visible, and xterm input remains available while the command is running.
 24. Every project has at most one project Q&A Codex session. It is a persistent tmux-backed agent session rendered as a top-level project capability, not as an ordinary terminal tab or sidebar terminal.
+25. SSH transport state is separate from terminal and agent lifecycle state. A dropped SSH client becomes reconnecting/offline; only a successful remote scan proving the exact tmux session is gone may complete the terminal.
+26. Files workspace navigation, preview, editor, and unsaved draft state survive switching project tabs in the current renderer lifetime. They are not persisted across application restarts.
 
 ## Agent lifecycle semantics
 
@@ -108,11 +110,8 @@ Every new capability that crosses the Electron boundary must be updated in all o
 - `src/renderer/src/components/ActionsPanel.tsx`: editable project Actions, latest-run output, rerun, stop, and deletion UI.
 - `src/renderer/src/components/ProjectQnaPane.tsx`: the single project-scoped Codex Q&A terminal and question composer.
 - `src/main/terminal-manager.ts`: PTY/tmux lifecycle, persistence, SSH attachment, state transitions, and terminal operations.
-- `src/main/remote-agent-hooks.ts`: additive SSH-host hook bootstrap and remote event bridge.
-- `src/main/remote-agent-event-follower.ts`: reconnecting SSH follower for remote lifecycle event spools.
-- `src/main/ssh-connection.ts`: app-owned SSH multiplexing options and short, protected control-socket location.
+- `src/main/codex-pane-status.ts`: maps Codex terminal-title snapshots into PanePilot lifecycle states.
 - `src/main/store.ts`: SQLite schema, migrations, project/session/activity persistence, and aggregate state.
-- `src/main/agent-event-monitor.ts`: consumes provider hook JSONL and maps lifecycle events into terminal states.
 - `src/main/conversation-indexer.ts`: read-only Codex/Claude JSONL discovery, parsing, caching, and full-text search.
 - `src/main/remote-conversation-indexer.ts`: read-only, server-side normalization of Codex/Claude archives over SSH plus remote Codex session discovery.
 - `src/main/file-service.ts`: bounded local file listing and previews.
@@ -162,6 +161,8 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - Remote discovery lists only the selected SSH user's default tmux server. Tagged sessions whose canonical project folder matches exactly are imported or refreshed in local SQLite; untagged sessions are ignored unless they match a legacy local terminal record, in which case PanePilot adopts them by adding metadata.
 - Another local PanePilot installation may attach to the same discovered session. Normal attachment does not detach an existing tmux client.
 - Discovery uses bounded `BatchMode` SSH calls and no remote daemon, registry, or background service. Offline hosts leave the locally cached workspace untouched.
+- Remote terminal SSH clients use server keepalives. Electron resume forces attached remote clients through exact-ID tmux verification and bounded reconnect backoff.
+- PanePilot-managed Codex launches mirror `activity`, `run-state`, and `task-progress` into the tmux pane title. Discovery reads that shared snapshot so another laptop can recover current Codex state without consuming events.
 - A provider session ID discovered after launch is mirrored into the live tmux metadata. The PanePilot terminal UUID remains the primary identity because provider IDs are not available at tmux creation time.
 - Closing/detaching the renderer does not kill a persistent tmux session.
 - Action tmux sessions are intentionally ephemeral: they end when the command exits. PanePilot deletes the prior run row before rerunning so only the latest output is retained.
@@ -174,7 +175,7 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - Custom hook environment variables must be passed through the pane's initial `env` command. A pre-existing tmux server does not automatically import arbitrary client variables.
 - Saved terminal output is capped in SQLite.
 - xterm replay must suppress `onData`; otherwise xterm protocol replies can be echoed into the PTY as numeric garbage.
-- Raw PTY output must remain byte-for-byte intact. Remote lifecycle data travels over a separate SSH follower and must never be mixed into terminal output.
+- Raw PTY output must remain byte-for-byte intact. Codex remote-state recovery reads the tmux pane title separately and must never inject metadata into terminal output.
 
 Archive and deletion rules:
 
@@ -185,38 +186,23 @@ Archive and deletion rules:
 - Projects can be archived only when every terminal is `completed` or `error`.
 - Project archiving is reversible and does not delete terminals, activity, files, or provider archives.
 
-## Codex and Claude lifecycle hooks
+## Remote Codex lifecycle snapshot
 
-The hook installer adds lifecycle handlers to:
+PanePilot does not install a remote agent daemon or maintain a per-client event spool.
+Managed Codex launches receive a session-local terminal-title override for:
 
-- `~/.codex/hooks.json`
-- `~/.claude/settings.json`
+- `activity`
+- `run-state`
+- `task-progress`
 
-It preserves existing configuration and creates `.project-console-backup` files. The bridge is inert unless all PanePilot session variables exist:
+Codex keeps these values current in the tmux pane. Remote discovery reads the pane
+title beside the versioned PanePilot tmux options. `Working` or `Thinking` maps to
+`running`, an action-required title maps to `needs-input`, and `Ready` after a
+previously running state maps to `response-ready`.
 
-- `PROJECT_CONSOLE_SESSION_ID`
-- `PROJECT_CONSOLE_PROVIDER`
-- `PROJECT_CONSOLE_EVENT_FILE`
-
-Events are appended to:
-
-`~/Library/Application Support/project-console/agent-events/<terminal-session-id>.jsonl`
-
-The monitor deduplicates them through `agent_events`.
-
-Codex may require the user to review the hook once with `/hooks`, both locally and on an SSH host. Do not silently add `--dangerously-bypass-hook-trust`; that would bypass trust for every enabled hook, not only PanePilot's hook.
-
-For remote Codex and Claude sessions:
-
-- The renderer asks once per SSH connection before allowing PanePilot to modify that host's user-level hook settings.
-- The first approved agent launch additively installs `~/.panepilot/agent-event-hook.sh` and updates `~/.codex/hooks.json` and `~/.claude/settings.json`.
-- Existing settings are preserved and one-time `.project-console-backup` files are created.
-- The remote bootstrap requires Python 3 for safe JSON merging. If setup fails, the terminal still opens and prints a warning, but only terminal-output fallback tracking is available.
-- Remote tmux and PTY shells receive PanePilot lifecycle environment variables explicitly.
-- The hook spools base64 events under `~/.panepilot/events/`.
-- Remote terminals use an app-owned OpenSSH control socket in a short, per-user, mode-0700 directory under `/tmp` (the macOS socket path limit makes the longer app-data path unsafe). A separate BatchMode follower reuses that authenticated connection to tail the spool, then writes normalized local event records for `AgentEventMonitor`.
-- The follower retries while interactive SSH authentication is still in progress and replays the spool after reconnection. Event IDs are stable hashes, so replay is idempotent.
-- Only sessions created after remote tracking was installed and environment injection was added can emit structured lifecycle events.
+`task-progress` is the latest progress emitted by Codex `update_plan`; it is useful
+context but is not by itself proof that a turn is running. Local and legacy sessions
+continue to use the narrow rendered-screen fallback.
 
 Remote provider session IDs and conversation archives remain on their SSH host. PanePilot queries them read-only with Python 3, filters by the remote project working directory on that host, and transfers only normalized conversation data. Remote archives must never be mistaken for local `~/.codex` or `~/.claude` data.
 

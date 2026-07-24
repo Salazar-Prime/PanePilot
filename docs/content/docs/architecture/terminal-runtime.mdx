@@ -65,6 +65,11 @@ applied.
 Remote tmux discovery, existence checks, and rename operations run separately with
 batch-mode SSH and short timeouts.
 
+Interactive SSH clients use server keepalives. If a client exits unexpectedly,
+PanePilot preserves terminal lifecycle state, verifies the exact managed tmux UUID,
+and reconnects with bounded backoff. Electron resume proactively replaces possibly
+stale SSH clients.
+
 ## Remote discovery and reconciliation
 
 PanePilot periodically asks the selected SSH user's default tmux server for all
@@ -82,6 +87,8 @@ SQLite row:
 - A metadata-managed local row is marked completed when a successful remote scan
   proves that its tmux session no longer exists.
 - An unreachable host leaves cached local state unchanged.
+- Codex pane-title fields refresh current `run-state` and `task-progress` without
+  consuming a per-device event stream.
 
 LaTeX chat scope, mode, and portable section source/title information are included so
 an imported chat can be reconciled with the receiving laptop's section identities.
@@ -149,19 +156,26 @@ numeric garbage into the live PTY.
 
 ## Reattachment
 
-If a tmux session has no current runtime, PanePilot launches an attach PTY. For an agent
-profile whose state was neither Ready nor Needs input, reattachment normalizes the state
-to Ready because the rendered-screen detector has no reliable continuity across the
-detached interval.
+If a tmux session has no current runtime, PanePilot launches an attach PTY. A remote
+SSH client exit changes only transport state to Reconnecting or Offline. PanePilot
+marks the terminal completed only after a successful scan proves that the exact
+metadata-tagged tmux session no longer exists.
+
+PanePilot-managed Codex launches mirror `activity`, `run-state`, and `task-progress`
+into the tmux pane title. Because tmux owns that snapshot, every laptop reads the same
+current value without a remote spool. Working/Thinking restores `running`,
+action-required restores `needs-input`, and Ready after Working becomes
+`response-ready`.
 
 A detached PTY backend cannot be recovered. PanePilot marks it completed with an
 activity explaining why.
 
 ## Exit and shutdown
 
-An unexpected process exit maps code zero to `completed` and any non-zero code to
-`error`. A user-requested stop marks the session completed immediately and then tears
-down its backend.
+An unexpected local process exit maps code zero to `completed` and any non-zero code
+to `error`. A remote tmux attachment exit begins reconnection instead. A
+user-requested stop marks the session completed immediately and then tears down its
+backend.
 
 During application exit, attached PTYs and screen instances are disposed without
 changing stored terminal state. tmux sessions continue to run; plain PTY processes end.
@@ -173,5 +187,5 @@ The headless xterm exposes the rendered viewport, not the raw output stream. Aft
 arms the turn and sets Working; seeing it disappear after being armed sets Needs
 attention.
 
-Raw terminal output is never modified to carry lifecycle metadata. If structured
-provider events are added later, they should travel through a separate channel.
+Raw terminal output is never modified to carry lifecycle metadata. The remote Codex
+snapshot is queried from the tmux pane title separately.

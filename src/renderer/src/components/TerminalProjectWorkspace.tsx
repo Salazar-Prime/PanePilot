@@ -354,7 +354,12 @@ export function TerminalProjectWorkspace({
       )}
       {tab === 'actions' && <ActionsPanel project={project} onChanged={onChanged} />}
       {tab === 'qna' && <ProjectQnaPane project={project} onChanged={onChanged} />}
-      {tab === 'files' && <FilesPanel project={project} />}
+      <div
+        className={`workspace-panel-cache ${tab === 'files' ? 'active' : ''}`}
+        aria-hidden={tab !== 'files'}
+      >
+        <FilesPanel project={project} />
+      </div>
       {tab === 'chats' && <ChatHistoryPanel project={project} />}
       {tab === 'history' && <HistoryPanel project={project} />}
       {menu &&

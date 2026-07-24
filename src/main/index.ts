@@ -1,5 +1,13 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  powerMonitor,
+  shell
+} from 'electron'
 import type {
   CreatePortForwardInput,
   CreateProjectInput,
@@ -147,6 +155,12 @@ function registerIpc(): void {
     'terminals:attach',
     (_event, sessionId: string, cols: number, rows: number) =>
       terminals.attach(sessionId, cols, rows)
+  )
+  ipcMain.handle(
+    'terminals:retry-attach',
+    (_event, sessionId: string, cols: number, rows: number) => {
+      terminals.retryAttach(sessionId, cols, rows)
+    }
   )
 
   ipcMain.handle('latex:get-workspace', (_event, projectId: string) =>
@@ -341,6 +355,9 @@ app
     })
     registerIpc()
     createWindow()
+    powerMonitor.on('resume', () => {
+      terminals.reconnectAfterWake()
+    })
     void terminals
       .reconcileRemoteSessions()
       .catch(() => 0)

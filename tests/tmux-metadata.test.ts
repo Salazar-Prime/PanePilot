@@ -50,6 +50,9 @@ function tmuxListLine(
     '$7',
     name,
     '1',
+    'Working · 2/4 tasks',
+    'codex',
+    '0',
     ...PANEPILOT_TMUX_OPTION_KEYS.map((key) => encoded[key] ?? '')
   ].join(TMUX_FIELD_SEPARATOR)
 }
@@ -73,13 +76,24 @@ describe('PanePilot tmux metadata', () => {
         tmuxId: '$7',
         name: 'Codex 1',
         attachedClients: 1,
+        paneTitle: 'Working · 2/4 tasks',
+        paneCurrentCommand: 'codex',
+        paneDead: false,
         metadata: value
       }
     ])
   })
 
   it('lists untagged tmux sessions without treating them as PanePilot sessions', () => {
-    const line = ['$2', 'existing shell', '0', ...PANEPILOT_TMUX_OPTION_KEYS.map(() => '')]
+    const line = [
+      '$2',
+      'existing shell',
+      '0',
+      'shell',
+      'zsh',
+      '0',
+      ...PANEPILOT_TMUX_OPTION_KEYS.map(() => '')
+    ]
       .join(TMUX_FIELD_SEPARATOR)
 
     expect(parseTmuxSessionList(line)[0]).toMatchObject({

@@ -251,13 +251,16 @@ export function LatexProjectWorkspace({
           />
         </div>
       )}
-      {tab === 'files' && (
+      <div
+        className={`workspace-panel-cache ${tab === 'files' ? 'active' : ''}`}
+        aria-hidden={tab !== 'files'}
+      >
         <FilesPanel
           key={`${project.id}:${filesInitialPath}`}
           project={project}
           initialPath={filesInitialPath}
         />
-      )}
+      </div>
       {tab === 'actions' && <ActionsPanel project={project} onChanged={onChanged} />}
       {tab === 'qna' && <ProjectQnaPane project={project} onChanged={onChanged} />}
       {tab === 'chats' && <ChatHistoryPanel project={project} />}

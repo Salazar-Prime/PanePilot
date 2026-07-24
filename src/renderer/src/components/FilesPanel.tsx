@@ -215,6 +215,7 @@ export function FilesPanel({
                   value={editing ? draft : preview.content}
                   onChange={(value) => setDraft(value ?? '')}
                   options={{
+                    automaticLayout: true,
                     readOnly: !editing,
                     domReadOnly: !editing,
                     minimap: { enabled: false },

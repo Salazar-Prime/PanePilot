@@ -80,6 +80,9 @@ export interface ListedTmuxSession {
   tmuxId: string
   name: string
   attachedClients: number
+  paneTitle: string
+  paneCurrentCommand: string
+  paneDead: boolean
   metadata: PanePilotTmuxMetadata | null
 }
 
@@ -248,6 +251,9 @@ export function tmuxSessionListFormat(): string {
     '#{session_id}',
     '#{session_name}',
     '#{session_attached}',
+    '#{pane_title}',
+    '#{pane_current_command}',
+    '#{pane_dead}',
     ...PANEPILOT_TMUX_OPTION_KEYS.map((key) => `#{${key}}`)
   ].join(TMUX_FORMAT_FIELD_SEPARATOR)
 }
@@ -386,7 +392,7 @@ function parseMetadata(values: Map<string, string>): PanePilotTmuxMetadata | nul
 }
 
 export function parseTmuxSessionList(output: string): ListedTmuxSession[] {
-  const expectedFields = 3 + PANEPILOT_TMUX_OPTION_KEYS.length
+  const expectedFields = 6 + PANEPILOT_TMUX_OPTION_KEYS.length
   return output
     .split(/\r?\n/)
     .filter(Boolean)
@@ -394,12 +400,25 @@ export function parseTmuxSessionList(output: string): ListedTmuxSession[] {
     .flatMap((line): ListedTmuxSession[] => {
       const fields = line.split(TMUX_FIELD_SEPARATOR)
       if (fields.length !== expectedFields) return []
-      const [tmuxId, name, attachedValue, ...optionValues] = fields
+      const [
+        tmuxId,
+        name,
+        attachedValue,
+        paneTitle,
+        paneCurrentCommand,
+        paneDeadValue,
+        ...optionValues
+      ] = fields
       if (
         !/^\$\d+$/.test(tmuxId) ||
         !name ||
         name.length > 80 ||
-        /[:\u0000-\u001f\u007f]/.test(name)
+        /[:\u0000-\u001f\u007f]/.test(name) ||
+        paneTitle.length > 1_024 ||
+        paneCurrentCommand.length > 256 ||
+        /[\u0000-\u001f\u007f]/.test(paneTitle) ||
+        /[\u0000-\u001f\u007f]/.test(paneCurrentCommand) ||
+        (paneDeadValue !== '0' && paneDeadValue !== '1')
       ) {
         return []
       }
@@ -416,6 +435,9 @@ export function parseTmuxSessionList(output: string): ListedTmuxSession[] {
           tmuxId,
           name,
           attachedClients,
+          paneTitle,
+          paneCurrentCommand,
+          paneDead: paneDeadValue === '1',
           metadata: parseMetadata(values)
         }
       ]

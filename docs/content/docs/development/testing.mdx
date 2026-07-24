@@ -52,6 +52,9 @@ formal Electron integration tests yet.
 - Rename PanePilot and tmux identities atomically.
 - Mark detached PTY sessions completed.
 - Keep application shutdown from falsely completing persistent sessions.
+- Preserve remote tmux lifecycle state across SSH disconnects and verify the exact
+  metadata UUID before reconnecting.
+- Keep Codex pane-title parsing tolerant of missing or unknown status text.
 - Link one unclaimed provider session per Codex terminal and resume by the exact ID on
   both local and SSH connections.
 
@@ -70,6 +73,7 @@ actual tmux server.
 - Create local and remote projects.
 - Switch projects and sessions.
 - Preserve active-session fallback when a terminal is archived.
+- Preserve Files panel state while switching workspace tabs.
 - Require confirmation for dangerous mode and permanent deletion.
 - Exclude archived projects and sessions from live counts.
 

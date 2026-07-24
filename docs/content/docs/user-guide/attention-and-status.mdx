@@ -11,15 +11,15 @@ model includes seven states:
 | --- | --- | --- |
 | `idle` | Ready | The session is open and not currently detected as working |
 | `running` | Working | A Codex or Claude working marker is visible |
-| `needs-input` | Needs input | Reserved in the shared model; not produced by current screen tracking |
-| `response-ready` | Response ready | Reserved in the shared model; not produced by current screen tracking |
+| `needs-input` | Needs input | Codex reports an action-required title or PanePilot detects a prompt |
+| `response-ready` | Response ready | A remote Codex pane returns to Ready after Working |
 | `needs-attention` | Needs attention | A previously visible working marker disappeared |
 | `completed` | Stopped | The terminal process or tmux session ended normally or was stopped |
 | `error` | Error | The terminal exited with a non-zero code |
 
 ## Detection today
 
-Only Codex and Claude profiles receive a screen detector. The detector examines the
+Local and legacy agent sessions receive a screen detector. The detector examines the
 current rendered terminal viewport after output settles:
 
 ```text
@@ -41,9 +41,10 @@ Shell terminals and Action runs are excluded, so ordinary command output cannot 
 an agent Working state. The project Q&A session is a Codex agent and participates in
 normal lifecycle and attention counts.
 
-> Screen tracking is deliberately narrow but inherently provider-UI-dependent. It
-> cannot reliably distinguish a completed answer from a direct question or permission
-> prompt. Structured provider lifecycle events are the intended long-term replacement.
+Remote PanePilot-managed Codex sessions additionally mirror `activity`, `run-state`,
+and `task-progress` into their tmux pane title. Every laptop reads the same current
+snapshot, so no remote event spool is required. `task-progress` describes the latest
+Codex plan update; `run-state` remains the liveness signal.
 
 ## Where status appears
 
@@ -72,8 +73,6 @@ terminals do not participate in the project aggregate.
 
 ## Important limitation
 
-The shared state names express the target product semantics, but the current detector
-only transitions agent sessions through `idle`, `running`, and `needs-attention`, plus
-process-derived `completed` or `error`. Do not interpret a Ready state as proof that a
-provider is at a prompt, and do not interpret Needs attention as proof that the last
-message was a direct question.
+The pane-title snapshot is intentionally current-state-only and does not retain
+intermediate transitions while every PanePilot client is offline. Do not interpret
+task progress alone as proof that Codex is actively generating.

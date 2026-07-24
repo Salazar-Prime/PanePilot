@@ -18,8 +18,10 @@ import type {
   StartTerminalInput,
   TerminalSession,
   TerminalSessionKind,
+  TerminalTransportState,
   UpdateProjectActionInput
 } from '../shared/types'
+import { codexStateFromPaneTitle } from './codex-pane-status'
 import {
   codexComposerIsReady,
   codexRenameInput,
@@ -45,6 +47,9 @@ const TMUX_CANDIDATES = ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux', '/usr/
 const AGENT_PROFILES = new Set<LaunchProfile>(['codex', 'claude'])
 const DISCOVERY_GRACE_MS = 15_000
 const MAX_TMUX_LIST_OUTPUT = 1024 * 1024
+const RECONNECT_DELAYS_MS = [0, 1_000, 2_000, 5_000, 10_000, 30_000]
+const CODEX_TMUX_TITLE_CONFIG =
+  'tui.terminal_title=["activity","run-state","task-progress"]'
 
 interface Runtime {
   pty: pty.IPty
@@ -55,7 +60,22 @@ interface Runtime {
   providerAttempts: number
   pendingProviderSessionName: string | null
   closingForAppExit: boolean
+  intentionalStop: boolean
+  cols: number
+  rows: number
+  folder: string
+  connection: Connection
   session: TerminalSession
+}
+
+interface ReconnectRuntime {
+  sessionId: string
+  cols: number
+  rows: number
+  attempt: number
+  lastExitCode: number
+  timer: NodeJS.Timeout | null
+  transportState: 'reconnecting' | 'offline'
 }
 
 function quote(value: string): string {
@@ -111,10 +131,11 @@ function launchCommand(
   }
   if (profile === 'codex') {
     const flag = dangerous ? ' --dangerously-bypass-approvals-and-sandbox' : ''
+    const titleConfig = ` -c ${quote(CODEX_TMUX_TITLE_CONFIG)}`
     if (providerSessionReference) {
-      return `exec codex resume${flag} ${quote(providerSessionReference)}`
+      return `exec codex${titleConfig} resume${flag} ${quote(providerSessionReference)}`
     }
-    return `exec codex${flag}`
+    return `exec codex${flag}${titleConfig}`
   }
   const flag = dangerous ? ' --dangerously-skip-permissions' : ''
   if (providerSessionReference) {
@@ -129,6 +150,7 @@ function interactiveLoginCommand(command: string): string {
 
 export class TerminalManager {
   private readonly runtimes = new Map<string, Runtime>()
+  private readonly reconnects = new Map<string, ReconnectRuntime>()
   private readonly remoteReconciliations = new Map<string, Promise<number>>()
   private readonly tmuxPath = resolveTmux()
 
@@ -459,7 +481,22 @@ export class TerminalManager {
       this.rename(sessionId, session.name)
       session = this.requireSession(sessionId)
     }
-    if (!this.runtimes.has(sessionId) && !['completed', 'error'].includes(session.state)) {
+    const reconnect = this.reconnects.get(sessionId)
+    if (reconnect) {
+      reconnect.cols = cols
+      reconnect.rows = rows
+      this.emitTransport(
+        sessionId,
+        reconnect.transportState,
+        reconnect.attempt,
+        reconnect.transportState === 'offline'
+          ? 'The remote host is offline. PanePilot will keep retrying.'
+          : 'Reconnecting to the existing tmux session…'
+      )
+    } else if (
+      !this.runtimes.has(sessionId) &&
+      !['completed', 'error'].includes(session.state)
+    ) {
       const project = this.store.getProject(session.projectId)
       const connection = project ? this.store.getConnection(project.connectionId) : null
       if (!project || !connection) throw new Error('The terminal project is unavailable.')
@@ -471,6 +508,7 @@ export class TerminalManager {
         )
       } else {
         if (
+          connection.kind === 'local' &&
           AGENT_PROFILES.has(session.profile) &&
           session.state !== 'idle' &&
           session.state !== 'needs-input'
@@ -481,6 +519,52 @@ export class TerminalManager {
       }
     }
     return { output: this.store.getSession(sessionId)?.output ?? '' }
+  }
+
+  retryAttach(sessionId: string, cols: number, rows: number): void {
+    const session = this.requireSession(sessionId)
+    if (this.runtimes.has(sessionId)) {
+      this.emitTransport(sessionId, 'attached')
+      return
+    }
+    if (['completed', 'error'].includes(session.state)) {
+      throw new Error('This terminal is no longer running.')
+    }
+    const project = this.store.getProject(session.projectId)
+    const connection = project ? this.store.getConnection(project.connectionId) : null
+    if (!project || !connection) throw new Error('The terminal project is unavailable.')
+    if (connection.kind !== 'ssh' || session.backend !== 'tmux') {
+      this.launch(session, project.folder, connection, cols, rows, false)
+      return
+    }
+    this.beginRemoteReconnect(session.id, cols, rows, 0, true)
+  }
+
+  reconnectAfterWake(): void {
+    for (const runtime of this.runtimes.values()) {
+      if (
+        runtime.connection.kind !== 'ssh' ||
+        runtime.session.backend !== 'tmux'
+      ) {
+        continue
+      }
+      this.emitTransport(
+        runtime.session.id,
+        'reconnecting',
+        1,
+        'Laptop resumed. Reconnecting to the existing tmux session…'
+      )
+      runtime.pty.kill()
+    }
+    for (const reconnect of [...this.reconnects.values()]) {
+      this.beginRemoteReconnect(
+        reconnect.sessionId,
+        reconnect.cols,
+        reconnect.rows,
+        reconnect.lastExitCode,
+        true
+      )
+    }
   }
 
   write(sessionId: string, data: string): void {
@@ -502,10 +586,17 @@ export class TerminalManager {
   }
 
   resize(sessionId: string, cols: number, rows: number): void {
+    const reconnect = this.reconnects.get(sessionId)
     const runtime = this.runtimes.get(sessionId)
-    if (!runtime) return
     const safeCols = Math.max(20, Math.floor(cols))
     const safeRows = Math.max(5, Math.floor(rows))
+    if (reconnect) {
+      reconnect.cols = safeCols
+      reconnect.rows = safeRows
+    }
+    if (!runtime) return
+    runtime.cols = safeCols
+    runtime.rows = safeRows
     runtime.pty.resize(safeCols, safeRows)
     runtime.screen.resize(safeCols, safeRows)
   }
@@ -635,6 +726,8 @@ export class TerminalManager {
   stop(sessionId: string): void {
     const session = this.requireSession(sessionId)
     const runtime = this.runtimes.get(sessionId)
+    this.cancelReconnect(sessionId)
+    if (runtime) runtime.intentionalStop = true
     if (session.backend === 'tmux' && session.tmuxName) {
       const project = this.store.getProject(session.projectId)
       const connection = project ? this.store.getConnection(project.connectionId) : null
@@ -643,6 +736,7 @@ export class TerminalManager {
     }
     runtime?.pty.kill()
     this.changeState(session, 'completed', `${session.name} was stopped.`)
+    this.emitTransport(sessionId, 'detached', 0, 'The terminal was stopped.')
   }
 
   archive(sessionId: string): void {
@@ -654,10 +748,15 @@ export class TerminalManager {
   }
 
   delete(sessionId: string): void {
+    this.cancelReconnect(sessionId)
     this.store.deleteSession(sessionId)
   }
 
   shutdown(): void {
+    for (const reconnect of this.reconnects.values()) {
+      if (reconnect.timer) clearTimeout(reconnect.timer)
+    }
+    this.reconnects.clear()
     for (const runtime of this.runtimes.values()) {
       runtime.closingForAppExit = true
       if (runtime.scanTimer) clearTimeout(runtime.scanTimer)
@@ -705,9 +804,16 @@ export class TerminalManager {
           ? session.providerSessionName
           : null,
       closingForAppExit: false,
+      intentionalStop: false,
+      cols,
+      rows,
+      folder,
+      connection,
       session
     }
     this.runtimes.set(session.id, runtime)
+    this.cancelReconnect(session.id)
+    this.emitTransport(session.id, 'attached')
     this.scheduleProviderDiscovery(runtime, folder, connection)
 
     child.onData((data) => {
@@ -719,15 +825,37 @@ export class TerminalManager {
       if (runtime.scanTimer) clearTimeout(runtime.scanTimer)
       if (runtime.providerTimer) clearTimeout(runtime.providerTimer)
       runtime.screen.dispose()
-      this.runtimes.delete(session.id)
+      if (this.runtimes.get(session.id) === runtime) {
+        this.runtimes.delete(session.id)
+      }
       if (runtime.closingForAppExit) return
       const latest = this.store.getSession(session.id)
       if (!latest) return
+      if (runtime.intentionalStop || latest.state === 'completed') return
+      if (
+        connection.kind === 'ssh' &&
+        latest.backend === 'tmux' &&
+        latest.tmuxName
+      ) {
+        this.beginRemoteReconnect(
+          latest.id,
+          runtime.cols,
+          runtime.rows,
+          exitCode,
+          true
+        )
+        return
+      }
       void this.discoverProviderSession(latest, folder, connection)
-      if (latest.state === 'completed') return
       this.changeState(
         latest,
         exitCode === 0 ? 'completed' : 'error',
+        `${latest.name} exited${exitCode === 0 ? '.' : ` with code ${exitCode}.`}`
+      )
+      this.emitTransport(
+        latest.id,
+        'detached',
+        0,
         `${latest.name} exited${exitCode === 0 ? '.' : ` with code ${exitCode}.`}`
       )
     })
@@ -837,13 +965,29 @@ export class TerminalManager {
       } else {
         remoteCommand = `cd ${quote(folder)} && ${remoteLaunchCommand}`
       }
-      return pty.spawn('ssh', ['-tt', alias, remoteCommand], {
-        name: 'xterm-256color',
-        cols,
-        rows,
-        cwd: homedir(),
-        env
-      })
+      return pty.spawn(
+        'ssh',
+        [
+          '-tt',
+          '-o',
+          'ConnectTimeout=8',
+          '-o',
+          'ServerAliveInterval=15',
+          '-o',
+          'ServerAliveCountMax=2',
+          '-o',
+          'TCPKeepAlive=yes',
+          alias,
+          remoteCommand
+        ],
+        {
+          name: 'xterm-256color',
+          cols,
+          rows,
+          cwd: homedir(),
+          env
+        }
+      )
     }
 
     if (session.backend === 'tmux' && session.tmuxName && this.tmuxPath) {
@@ -968,6 +1112,173 @@ export class TerminalManager {
     }
   }
 
+  private beginRemoteReconnect(
+    sessionId: string,
+    cols: number,
+    rows: number,
+    lastExitCode: number,
+    immediate = false
+  ): void {
+    const existing = this.reconnects.get(sessionId)
+    if (existing?.timer) clearTimeout(existing.timer)
+    const reconnect: ReconnectRuntime = existing ?? {
+      sessionId,
+      cols,
+      rows,
+      attempt: 0,
+      lastExitCode,
+      timer: null,
+      transportState: 'reconnecting'
+    }
+    reconnect.cols = Math.max(20, Math.floor(cols))
+    reconnect.rows = Math.max(5, Math.floor(rows))
+    reconnect.lastExitCode = lastExitCode
+    reconnect.transportState = 'reconnecting'
+    if (immediate) reconnect.attempt = 0
+    this.reconnects.set(sessionId, reconnect)
+    this.scheduleRemoteReconnect(reconnect, immediate ? 0 : undefined)
+  }
+
+  private scheduleRemoteReconnect(
+    reconnect: ReconnectRuntime,
+    delayOverride?: number
+  ): void {
+    if (this.reconnects.get(reconnect.sessionId) !== reconnect) return
+    const delay =
+      delayOverride ??
+      RECONNECT_DELAYS_MS[
+        Math.min(reconnect.attempt, RECONNECT_DELAYS_MS.length - 1)
+      ]
+    reconnect.timer = setTimeout(() => {
+      reconnect.timer = null
+      reconnect.transportState = 'reconnecting'
+      this.emitTransport(
+        reconnect.sessionId,
+        'reconnecting',
+        reconnect.attempt + 1,
+        'Reconnecting to the existing tmux session…'
+      )
+      void this.runRemoteReconnect(reconnect)
+    }, delay)
+    reconnect.timer.unref()
+  }
+
+  private async runRemoteReconnect(
+    reconnect: ReconnectRuntime
+  ): Promise<void> {
+    const session = this.store.getSession(reconnect.sessionId)
+    const project = session ? this.store.getProject(session.projectId) : null
+    const connection = project ? this.store.getConnection(project.connectionId) : null
+    if (
+      !session ||
+      !project ||
+      !connection ||
+      connection.kind !== 'ssh' ||
+      session.backend !== 'tmux' ||
+      !session.tmuxName ||
+      ['completed', 'error'].includes(session.state)
+    ) {
+      this.cancelReconnect(reconnect.sessionId)
+      return
+    }
+
+    const listed = await this.listRemoteTmuxSessions(connection)
+    if (this.reconnects.get(reconnect.sessionId) !== reconnect) return
+    if (!listed) {
+      reconnect.attempt += 1
+      reconnect.transportState = 'offline'
+      this.emitTransport(
+        reconnect.sessionId,
+        'offline',
+        reconnect.attempt,
+        `Cannot reach ${connection.name}. PanePilot will keep retrying.`
+      )
+      this.scheduleRemoteReconnect(reconnect)
+      return
+    }
+
+    const remote = listed.find(
+      (candidate) =>
+        candidate.name === session.tmuxName &&
+        candidate.metadata?.terminalId === session.id
+    )
+    if (!remote) {
+      this.cancelReconnect(session.id)
+      const state = reconnect.lastExitCode === 0 ? 'completed' : 'error'
+      this.changeState(
+        session,
+        state,
+        `${session.name} is no longer running in tmux.`
+      )
+      this.emitTransport(
+        session.id,
+        'detached',
+        reconnect.attempt,
+        'The remote tmux session no longer exists.'
+      )
+      return
+    }
+
+    this.applyCodexPaneSnapshot(session, remote)
+    this.cancelReconnect(session.id)
+    try {
+      this.launch(
+        this.requireSession(session.id),
+        project.folder,
+        connection,
+        reconnect.cols,
+        reconnect.rows,
+        false
+      )
+    } catch {
+      this.beginRemoteReconnect(
+        session.id,
+        reconnect.cols,
+        reconnect.rows,
+        reconnect.lastExitCode
+      )
+    }
+  }
+
+  private cancelReconnect(sessionId: string): void {
+    const reconnect = this.reconnects.get(sessionId)
+    if (reconnect?.timer) clearTimeout(reconnect.timer)
+    this.reconnects.delete(sessionId)
+  }
+
+  private emitTransport(
+    sessionId: string,
+    state: TerminalTransportState,
+    attempt = 0,
+    message: string | null = null
+  ): void {
+    this.getWindow()?.webContents.send('terminal:transport', {
+      sessionId,
+      state,
+      attempt,
+      message
+    })
+  }
+
+  private applyCodexPaneSnapshot(
+    session: TerminalSession,
+    remote: ListedTmuxSession
+  ): boolean {
+    if (session.profile !== 'codex' || remote.paneDead) return false
+    const nextState = codexStateFromPaneTitle(remote.paneTitle, session.state)
+    if (!nextState || nextState === session.state) return false
+    const message =
+      nextState === 'running'
+        ? `${session.name} is working.`
+        : nextState === 'needs-input'
+          ? `${session.name} needs your input.`
+          : nextState === 'response-ready'
+            ? `${session.name} finished its latest turn.`
+            : undefined
+    this.changeState(session, nextState, message)
+    return true
+  }
+
   private projectForDiscoveredSession(
     projects: Project[],
     session: ListedTmuxSession
@@ -1031,6 +1342,8 @@ export class TerminalManager {
       )
       if (!result) continue
       let changed = result.changed
+      changed =
+        this.applyCodexPaneSnapshot(result.session, listedSession) || changed
       if (upgradeLegacyMetadata) {
         changed = (await this.syncSessionMetadata(result.session.id)) || changed
       }

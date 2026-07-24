@@ -65,7 +65,9 @@ that distinction in code and documentation.
 - A remote project uses a remote folder browser, never the local native folder dialog.
 - SSH port forwards bind to `127.0.0.1`, fail when forwarding cannot be established,
   and stop on app exit.
-- Terminal output and future remote lifecycle data use separate channels.
+- Terminal output and remote Codex pane-title snapshots use separate channels.
+- SSH attachment state is not agent lifecycle state. Offline transport must not
+  complete a tmux session without a successful exact-session check.
 
 ## Cross-process changes
 

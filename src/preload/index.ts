@@ -10,6 +10,7 @@ import type {
   TerminalDataEvent,
   TerminalMetadataEvent,
   TerminalStateEvent,
+  TerminalTransportEvent,
   UpdateLatexProjectInput,
   UpdateProjectActionInput
 } from '../shared/types'
@@ -37,6 +38,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('terminals:discover', connectionId),
     attach: (sessionId: string, cols: number, rows: number) =>
       ipcRenderer.invoke('terminals:attach', sessionId, cols, rows),
+    retryAttach: (sessionId: string, cols: number, rows: number) =>
+      ipcRenderer.invoke('terminals:retry-attach', sessionId, cols, rows),
     write: (sessionId: string, data: string) =>
       ipcRenderer.invoke('terminals:write', sessionId, data),
     resize: (sessionId: string, cols: number, rows: number) =>
@@ -75,6 +78,14 @@ const api: ProjectConsoleApi = {
       ): void => listener(payload)
       ipcRenderer.on('terminal:metadata', handler)
       return () => ipcRenderer.removeListener('terminal:metadata', handler)
+    },
+    onTransport: (listener: (event: TerminalTransportEvent) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: TerminalTransportEvent
+      ): void => listener(payload)
+      ipcRenderer.on('terminal:transport', handler)
+      return () => ipcRenderer.removeListener('terminal:transport', handler)
     }
   },
   actions: {

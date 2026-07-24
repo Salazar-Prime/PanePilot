@@ -20,6 +20,9 @@ File access is constrained to the project's canonical folder:
 Previews read at most 1 MB. A larger file is marked truncated and cannot be edited.
 Files containing a null byte are treated as binary and are not rendered as text.
 Explicitly choose **Edit** before changing a file, then **Save** to write it.
+Folder navigation, the selected preview, editor scroll position, and unsaved draft stay
+mounted while switching to another project tab. This state lasts only for the current
+PanePilot renderer lifetime.
 
 Remote file operations require Python 3 and batch-mode SSH. Their script and input are
 sent separately from terminal sessions.

@@ -41,6 +41,10 @@ When tmux is unavailable, PanePilot uses a plain PTY. PTY sessions cannot surviv
 restart; if PanePilot later tries to restore one, it marks the session completed and
 records that it was non-persistent.
 
+Remote clients reconnect automatically after SSH loss or laptop wake. PanePilot shows
+Reconnecting or Offline above the terminal, pauses input, and verifies the exact tmux
+identity before attaching again.
+
 ## Naming and rename
 
 Names must be non-empty, no longer than 80 characters, and contain neither colons nor

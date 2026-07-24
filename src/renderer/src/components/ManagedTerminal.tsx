@@ -1,14 +1,31 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { RefreshCw, WifiOff } from 'lucide-react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import type { TerminalSession } from '@shared/types'
+import type {
+  TerminalSession,
+  TerminalTransportEvent
+} from '@shared/types'
 
 export function ManagedTerminal({ session }: { session: TerminalSession }) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const dimensionsRef = useRef({ cols: 100, rows: 30 })
+  const [transport, setTransport] = useState<TerminalTransportEvent>({
+    sessionId: session.id,
+    state: 'attached',
+    attempt: 0,
+    message: null
+  })
 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+    setTransport({
+      sessionId: session.id,
+      state: 'attached',
+      attempt: 0,
+      message: null
+    })
 
     const terminal = new Terminal({
       cursorBlink: true,
@@ -47,14 +64,24 @@ export function ManagedTerminal({ session }: { session: TerminalSession }) {
     terminal.loadAddon(fit)
     terminal.open(host)
     fit.fit()
+    dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
 
     let replaying = true
+    let writable = true
     const dataDisposable = terminal.onData((data) => {
-      if (!replaying) void window.projectConsole.terminals.write(session.id, data)
+      if (!replaying && writable) {
+        void window.projectConsole.terminals.write(session.id, data)
+      }
     })
     const removeDataListener = window.projectConsole.terminals.onData((event) => {
       if (event.sessionId === session.id) terminal.write(event.data)
     })
+    const removeTransportListener =
+      window.projectConsole.terminals.onTransport((event) => {
+        if (event.sessionId !== session.id) return
+        writable = event.state === 'attached'
+        setTransport(event)
+      })
 
     void window.projectConsole.terminals
       .attach(session.id, terminal.cols, terminal.rows)
@@ -66,11 +93,19 @@ export function ManagedTerminal({ session }: { session: TerminalSession }) {
       })
       .catch((error) => {
         replaying = false
+        writable = false
+        setTransport({
+          sessionId: session.id,
+          state: 'offline',
+          attempt: 0,
+          message: String(error)
+        })
         terminal.writeln(`\r\n\x1b[31mPanePilot: ${String(error)}\x1b[0m`)
       })
 
     const resizeObserver = new ResizeObserver(() => {
       fit.fit()
+      dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
       void window.projectConsole.terminals.resize(session.id, terminal.cols, terminal.rows)
     })
     resizeObserver.observe(host)
@@ -78,10 +113,66 @@ export function ManagedTerminal({ session }: { session: TerminalSession }) {
     return () => {
       resizeObserver.disconnect()
       removeDataListener()
+      removeTransportListener()
       dataDisposable.dispose()
       terminal.dispose()
     }
   }, [session.id])
 
-  return <div className="terminal-host" ref={hostRef} />
+  async function retry() {
+    setTransport((current) => ({
+      ...current,
+      state: 'reconnecting',
+      message: 'Retrying the existing tmux session…'
+    }))
+    try {
+      await window.projectConsole.terminals.retryAttach(
+        session.id,
+        dimensionsRef.current.cols,
+        dimensionsRef.current.rows
+      )
+    } catch (error) {
+      setTransport({
+        sessionId: session.id,
+        state: 'offline',
+        attempt: transport.attempt,
+        message: String(error)
+      })
+    }
+  }
+
+  const interrupted = transport.state !== 'attached'
+
+  return (
+    <div className="managed-terminal">
+      <div className="terminal-host" ref={hostRef} />
+      {interrupted && (
+        <div className={`terminal-transport-banner ${transport.state}`}>
+          {transport.state === 'offline' ? (
+            <WifiOff size={14} />
+          ) : (
+            <RefreshCw
+              className={transport.state === 'reconnecting' ? 'spin' : ''}
+              size={14}
+            />
+          )}
+          <span>
+            <strong>
+              {transport.state === 'offline'
+                ? 'Remote host offline'
+                : transport.state === 'reconnecting'
+                  ? 'Reconnecting'
+                  : 'Terminal detached'}
+            </strong>
+            <small>{transport.message ?? 'Input is paused until tmux reconnects.'}</small>
+          </span>
+          {transport.state !== 'detached' && (
+            <button onClick={() => void retry()}>
+              <RefreshCw size={12} /> Retry now
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
