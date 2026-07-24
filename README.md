@@ -12,9 +12,9 @@ together.
 
 ## Install the preview release
 
-PanePilot v0.1.0 is available from
-[GitHub Releases](https://github.com/Salazar-Prime/PanePilot/releases). The first
-packaged preview supports Apple silicon Macs running macOS 12 or newer.
+PanePilot v0.2.0-rc.1 is available from
+[GitHub Releases](https://github.com/Salazar-Prime/PanePilot/releases). The packaged
+preview supports Apple silicon Macs running macOS 12 or newer.
 
 1. Download the `.dmg`, open it, and drag PanePilot into Applications.
 2. Because this preview is not yet Developer ID signed or notarized, Control-click
@@ -60,14 +60,12 @@ npm run build
 
 ## Current agent status tracking
 
-The current implementation watches the rendered terminal screen for Codex and Claude:
+Codex terminals expose `run-state` and `task-progress` through the tmux pane title so
+PanePilot can restore the latest status after an SSH reconnect without a remote daemon
+or event spool. Claude Code continues to use terminal-output fallback tracking.
 
-- `esc to interrupt` visible → **Working**
-- the marker disappears after being visible → **Needs attention**
-- the user opens or reselects the terminal → **Ready**
-
-Shell and custom-command terminals are excluded from this detection, so ordinary
-terminal output cannot create a false agent-working state.
+Shell and Action terminals are excluded from agent-state detection, so ordinary
+terminal output cannot create a false working state.
 
 Project and terminal metadata, saved output, and activity are stored in
 `~/Library/Application Support/project-console/project-console.sqlite` on macOS.
