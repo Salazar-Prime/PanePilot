@@ -1,0 +1,44 @@
+{
+  "name": "project-console",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PanePilot desktop control center for local and remote agent projects",
+  "type": "module",
+  "main": "./out/main/index.js",
+  "engines": {
+    "node": ">=20.18.0"
+  },
+  "scripts": {
+    "postinstall": "electron-rebuild -f -w node-pty && node scripts/prepare-node-pty.mjs",
+    "predev": "node scripts/prepare-electron.mjs && node scripts/prepare-node-pty.mjs",
+    "dev": "electron-vite dev",
+    "prestart": "node scripts/prepare-electron.mjs && node scripts/prepare-node-pty.mjs",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && electron-vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "4.7.0",
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/headless": "5.5.0",
+    "@xterm/xterm": "5.5.0",
+    "lucide-react": "0.468.0",
+    "monaco-editor": "0.56.0",
+    "node-pty": "1.1.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "3.7.1",
+    "@types/node": "20.17.10",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "electron": "39.8.3",
+    "electron-vite": "2.3.0",
+    "typescript": "5.7.2",
+    "vite": "5.4.11",
+    "vitest": "2.1.8"
+  }
+}
