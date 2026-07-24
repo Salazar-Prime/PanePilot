@@ -1,0 +1,39 @@
+appId: com.salazarprime.panepilot
+productName: PanePilot
+copyright: Copyright © 2026 Salazar-Prime
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.map"
+
+asar: true
+asarUnpack:
+  - node_modules/node-pty/**/*
+npmRebuild: false
+
+mac:
+  category: public.app-category.developer-tools
+  icon: icon.svg
+  identity: "-"
+  hardenedRuntime: false
+  minimumSystemVersion: "12.0"
+  artifactName: ${productName}-${version}-macOS-${arch}.${ext}
+
+dmg:
+  title: ${productName} ${version}
+  iconSize: 128
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 150
+      y: 190
+    - x: 390
+      y: 190
+      type: link
+      path: /Applications

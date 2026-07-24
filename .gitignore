@@ -1,6 +1,7 @@
 node_modules/
 out/
 dist/
+release/
 .next/
 .source/
 .DS_Store

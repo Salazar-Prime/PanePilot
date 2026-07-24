@@ -10,6 +10,19 @@ section, and review source changes highlighted directly in the editor. Optional
 repository, Overleaf, and `context/` links keep the paper and its research material
 together.
 
+## Install the preview release
+
+PanePilot v0.1.0 is available from
+[GitHub Releases](https://github.com/Salazar-Prime/PanePilot/releases). The first
+packaged preview supports Apple silicon Macs running macOS 12 or newer.
+
+1. Download the `.dmg`, open it, and drag PanePilot into Applications.
+2. Because this preview is not yet Developer ID signed or notarized, Control-click
+   PanePilot in Finder, choose **Open**, and confirm the first launch.
+
+The `.zip` contains the same application for users who prefer an archive. Verify either
+download against `SHA256SUMS.txt` attached to the release.
+
 ## Documentation
 
 The complete product, user, architecture, and development documentation lives in the

@@ -1,8 +1,14 @@
 {
   "name": "project-console",
+  "productName": "PanePilot",
   "version": "0.1.0",
   "private": true,
   "description": "PanePilot desktop control center for local and remote agent projects",
+  "author": "Salazar-Prime",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Salazar-Prime/PanePilot.git"
+  },
   "type": "module",
   "main": "./out/main/index.js",
   "engines": {
@@ -18,7 +24,9 @@
     "prestart": "node scripts/prepare-electron.mjs && node scripts/prepare-node-pty.mjs",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "build": "npm run typecheck && electron-vite build",
+    "build": "npm run typecheck && node --max-old-space-size=4096 node_modules/electron-vite/bin/electron-vite.js build",
+    "package:mac": "npm run build && node scripts/prepare-node-pty.mjs && electron-builder --mac --dir --arm64",
+    "dist:mac": "npm run build && node scripts/prepare-node-pty.mjs && electron-builder --mac dmg zip --arm64",
     "test": "vitest run"
   },
   "dependencies": {
@@ -32,16 +40,20 @@
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
+  "overrides": {
+    "dompurify": "3.4.12"
+  },
   "devDependencies": {
     "@electron/rebuild": "3.7.1",
     "@types/node": "20.17.10",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "4.3.4",
-    "electron": "39.8.3",
+    "electron": "39.8.10",
+    "electron-builder": "26.15.3",
     "electron-vite": "2.3.0",
     "typescript": "5.7.2",
-    "vite": "5.4.11",
-    "vitest": "2.1.8"
+    "vite": "5.4.21",
+    "vitest": "3.2.7"
   }
 }

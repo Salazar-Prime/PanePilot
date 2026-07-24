@@ -33,6 +33,10 @@ let remoteConversations: RemoteConversationIndexer
 let portForwards: PortForwardManager
 let latex: LatexProjectService
 
+// Keep the existing application-data identity when the packaged product name is PanePilot.
+app.setName('PanePilot')
+app.setPath('userData', join(app.getPath('appData'), 'project-console'))
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
