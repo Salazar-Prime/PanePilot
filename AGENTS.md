@@ -45,6 +45,7 @@ These are owner-approved decisions and should be treated as product invariants u
 18. Terminal pinning is persisted. Pinned terminals remain first while the remaining terminals follow the user's selected sort order.
 19. Projects can be archived only after all of their terminals stop. Archived projects have a separate library view and do not contribute to live status counts.
 20. SSH port forwards are explicit, bind to `127.0.0.1`, use `ExitOnForwardFailure`, and stop when PanePilot exits.
+21. A Codex terminal stores the provider's Codex session ID separately from PanePilot's terminal ID. Resuming a stopped Codex terminal must use that exact provider ID on the terminal's original local or SSH connection.
 
 ## Agent lifecycle semantics
 
@@ -108,6 +109,7 @@ Every new capability that crosses the Electron boundary must be updated in all o
 - `src/main/store.ts`: SQLite schema, migrations, project/session/activity persistence, and aggregate state.
 - `src/main/agent-event-monitor.ts`: consumes provider hook JSONL and maps lifecycle events into terminal states.
 - `src/main/conversation-indexer.ts`: read-only Codex/Claude JSONL discovery, parsing, caching, and full-text search.
+- `src/main/remote-conversation-indexer.ts`: read-only, server-side normalization of Codex/Claude archives over SSH plus remote Codex session discovery.
 - `src/main/file-service.ts`: bounded local file listing and previews.
 - `src/main/remote-file-service.ts`: SSH-backed file listing and previews.
 - `src/main/ssh-config.ts`: SSH alias discovery.
@@ -125,7 +127,7 @@ Core tables:
 
 - `connections`: local or SSH connection identities.
 - `projects`: base project identity, type, connection, folder, repository URL, aggregate state, and timestamps.
-- `terminal_sessions`: terminal profile, command, backend, tmux identity, lifecycle state, dangerous-mode flag, archive flag, and saved output.
+- `terminal_sessions`: terminal profile, command, backend, tmux identity, provider session identity, lifecycle state, dangerous-mode flag, archive flag, and saved output.
 - `activities`: project timeline entries.
 - `agent_events`: idempotently ingested provider lifecycle payloads.
 - `port_forwards`: saved loopback-only SSH forwarding configurations. Running processes are intentionally not persisted across app exits.
@@ -141,6 +143,8 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - The tmux session name must exactly match the PanePilot terminal name. Rename both as one operation.
 - Closing/detaching the renderer does not kill a persistent tmux session.
 - A PTY fallback is used when tmux cannot be found or created.
+- Tmux preserves a still-running Codex process. Separately, `provider_session_id` allows a stopped Codex terminal to restart with `codex resume <exact-id>`.
+- Provider session discovery reads Codex `session_meta` archive records and does not depend on lifecycle hooks. Existing unlinked Codex terminals are reconciled on startup when their archives are available.
 - Local tmux resolution checks PATH plus common Homebrew/system locations.
 - Custom hook environment variables must be passed through the pane's initial `env` command. A pre-existing tmux server does not automatically import arbitrary client variables.
 - Saved terminal output is capped in SQLite.
@@ -189,7 +193,7 @@ For remote Codex and Claude sessions:
 - The follower retries while interactive SSH authentication is still in progress and replays the spool after reconnection. Event IDs are stable hashes, so replay is idempotent.
 - Only sessions created after remote tracking was installed and environment injection was added can emit structured lifecycle events.
 
-Remote Codex and Claude conversation archive ingestion remains future work.
+Remote provider session IDs and conversation archives remain on their SSH host. PanePilot queries them read-only with Python 3, filters by the remote project working directory on that host, and transfers only normalized conversation data. Remote archives must never be mistaken for local `~/.codex` or `~/.claude` data.
 
 ## Dangerous agent mode
 
@@ -214,11 +218,14 @@ Local archive sources:
 - Codex: `~/.codex/sessions/**/*.jsonl`
 - Claude: `~/.claude/projects/**/*.jsonl`
 
+Remote projects use the same paths under the selected SSH user's home directory. Remote scanning runs server-side, is bounded by an SSH timeout/output cap, requires Python 3, and is cached separately from local indexing.
+
 Conversations are associated with a project by working directory. The indexer:
 
 - Reads provider archives without modifying them.
 - Caches parsed files by mtime and size.
 - Produces normalized user/assistant messages.
+- Preserves the provider's actual session ID so a stopped Codex terminal can resume the exact chat.
 - Searches title, working directory, and complete message content.
 - Returns snippets and match counts.
 - Highlights query matches in the selected conversation.
@@ -354,7 +361,6 @@ Do not implement the writing type until these decisions are answered.
 
 ## Known gaps and future work
 
-- Index Codex and Claude archives over SSH.
 - Refactor `App.tsx` and the single CSS file into project-type/capability modules.
 - Add formal unit and integration tests.
 - Add SQLite FTS when conversation volume warrants it.

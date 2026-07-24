@@ -88,7 +88,7 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
           {error ? (
             <p className="chat-list-message error-text">{error}</p>
           ) : loading && !conversations.length ? (
-            <p className="chat-list-message">Indexing local archives…</p>
+            <p className="chat-list-message">Indexing provider archives…</p>
           ) : conversations.length ? (
             conversations.map((conversation) => (
               <button
@@ -114,7 +114,7 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
             <p className="chat-list-message">
               {query
                 ? 'No archived chats match this search.'
-                : 'No local Codex or Claude chats match this project folder yet.'}
+                : 'No Codex or Claude chats match this project folder yet.'}
             </p>
           )}
         </div>
@@ -130,6 +130,8 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
                 <strong>{detail.title}</strong>
                 <span>
                   {detail.provider} · {detail.workingDirectory}
+                  {detail.providerSessionId &&
+                    ` · session ${detail.providerSessionId.slice(0, 8)}…`}
                 </span>
               </div>
             </header>

@@ -23,6 +23,7 @@ export interface TerminalSession {
   projectId: string
   name: string
   profile: LaunchProfile
+  providerSessionId: string | null
   customCommand: string | null
   backend: TerminalBackend
   tmuxName: string | null
@@ -86,6 +87,11 @@ export interface TerminalStateEvent {
   state: AgentState
 }
 
+export interface TerminalMetadataEvent {
+  sessionId: string
+  projectId: string
+}
+
 export interface FileEntry {
   name: string
   path: string
@@ -112,6 +118,7 @@ export interface ConversationMessage {
 export interface ConversationSummary {
   id: string
   provider: ConversationProvider
+  providerSessionId: string | null
   title: string
   workingDirectory: string
   updatedAt: string
@@ -179,6 +186,7 @@ export interface ProjectConsoleApi {
     write(sessionId: string, data: string): Promise<void>
     resize(sessionId: string, cols: number, rows: number): Promise<void>
     acknowledge(sessionId: string): Promise<void>
+    resumeAgent(sessionId: string): Promise<void>
     rename(sessionId: string, name: string): Promise<void>
     setPinned(sessionId: string, pinned: boolean): Promise<void>
     stop(sessionId: string): Promise<void>
@@ -187,6 +195,7 @@ export interface ProjectConsoleApi {
     delete(sessionId: string): Promise<void>
     onData(listener: (event: TerminalDataEvent) => void): () => void
     onState(listener: (event: TerminalStateEvent) => void): () => void
+    onMetadata(listener: (event: TerminalMetadataEvent) => void): () => void
   }
   files: {
     list(projectId: string, relativePath?: string): Promise<FileEntry[]>

@@ -5,6 +5,7 @@ import type {
   ProjectConsoleApi,
   StartTerminalInput,
   TerminalDataEvent,
+  TerminalMetadataEvent,
   TerminalStateEvent
 } from '../shared/types'
 
@@ -32,6 +33,8 @@ const api: ProjectConsoleApi = {
     resize: (sessionId: string, cols: number, rows: number) =>
       ipcRenderer.invoke('terminals:resize', sessionId, cols, rows),
     acknowledge: (sessionId: string) => ipcRenderer.invoke('terminals:acknowledge', sessionId),
+    resumeAgent: (sessionId: string) =>
+      ipcRenderer.invoke('terminals:resume-agent', sessionId),
     rename: (sessionId: string, name: string) =>
       ipcRenderer.invoke('terminals:rename', sessionId, name),
     setPinned: (sessionId: string, pinned: boolean) =>
@@ -51,6 +54,14 @@ const api: ProjectConsoleApi = {
         listener(payload)
       ipcRenderer.on('terminal:state', handler)
       return () => ipcRenderer.removeListener('terminal:state', handler)
+    },
+    onMetadata: (listener: (event: TerminalMetadataEvent) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: TerminalMetadataEvent
+      ): void => listener(payload)
+      ipcRenderer.on('terminal:metadata', handler)
+      return () => ipcRenderer.removeListener('terminal:metadata', handler)
     }
   },
   files: {

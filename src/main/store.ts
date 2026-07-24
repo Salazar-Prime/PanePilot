@@ -47,6 +47,7 @@ type SessionRow = {
   project_id: string
   name: string
   profile: LaunchProfile
+  provider_session_id: string | null
   custom_command: string | null
   backend: TerminalBackend
   tmux_name: string | null
@@ -109,6 +110,7 @@ function mapSession(row: SessionRow): TerminalSession {
     projectId: row.project_id,
     name: row.name,
     profile: row.profile,
+    providerSessionId: row.provider_session_id,
     customCommand: row.custom_command,
     backend: row.backend,
     tmuxName: row.tmux_name,
@@ -184,6 +186,7 @@ export class Store {
         project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         name TEXT NOT NULL,
         profile TEXT NOT NULL,
+        provider_session_id TEXT,
         custom_command TEXT,
         backend TEXT NOT NULL,
         tmux_name TEXT,
@@ -229,6 +232,7 @@ export class Store {
     this.ensureColumn('projects', 'created_at', `TEXT NOT NULL DEFAULT ''`)
     this.ensureColumn('projects', 'archived', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('terminal_sessions', 'name', `TEXT NOT NULL DEFAULT ''`)
+    this.ensureColumn('terminal_sessions', 'provider_session_id', 'TEXT')
     this.ensureColumn('terminal_sessions', 'custom_command', 'TEXT')
     this.ensureColumn('terminal_sessions', 'tmux_name', 'TEXT')
     this.ensureColumn('terminal_sessions', 'dangerous_mode', 'INTEGER NOT NULL DEFAULT 0')
@@ -266,13 +270,15 @@ export class Store {
       UPDATE projects SET created_at = updated_at WHERE created_at = '';
       CREATE INDEX IF NOT EXISTS terminal_sessions_project_idx
         ON terminal_sessions(project_id, archived);
+      CREATE INDEX IF NOT EXISTS terminal_sessions_provider_idx
+        ON terminal_sessions(provider_session_id);
       CREATE INDEX IF NOT EXISTS activities_project_idx
         ON activities(project_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS port_forwards_connection_idx
         ON port_forwards(connection_id, created_at);
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 2;
+      PRAGMA user_version = 3;
     `)
   }
 
@@ -405,7 +411,7 @@ export class Store {
     const sessions = (
       this.db
         .prepare(
-          `SELECT id, project_id, name, profile, custom_command, backend, tmux_name, state,
+          `SELECT id, project_id, name, profile, provider_session_id, custom_command, backend, tmux_name, state,
                   dangerous_mode, archived, pinned, output, created_at, updated_at
            FROM terminal_sessions WHERE project_id = ? ORDER BY created_at`
         )
@@ -505,7 +511,7 @@ export class Store {
   getSession(id: string): TerminalSession | null {
     const row = this.db
       .prepare(
-        `SELECT id, project_id, name, profile, custom_command, backend, tmux_name, state,
+        `SELECT id, project_id, name, profile, provider_session_id, custom_command, backend, tmux_name, state,
                 dangerous_mode, archived, pinned, output, created_at, updated_at
          FROM terminal_sessions WHERE id = ?`
       )
@@ -533,6 +539,56 @@ export class Store {
     if (message) this.addActivity(session.projectId, id, 'state-changed', message)
     this.updateProjectState(session.projectId)
     return true
+  }
+
+  setSessionProviderId(id: string, providerSessionId: string): boolean {
+    const session = this.requireSession(id)
+    const cleaned = providerSessionId.trim()
+    if (!cleaned || cleaned.length > 200) {
+      throw new Error('The provider session ID is invalid.')
+    }
+    if (session.providerSessionId === cleaned) return false
+    if (session.providerSessionId) {
+      throw new Error('This terminal is already linked to a provider session.')
+    }
+    const duplicate = this.db
+      .prepare(
+        `SELECT ts.id
+         FROM terminal_sessions ts
+         JOIN projects owner ON owner.id = ts.project_id
+         JOIN projects target ON target.id = ?
+         WHERE owner.connection_id = target.connection_id
+           AND ts.provider_session_id = ?
+           AND ts.id <> ?`
+      )
+      .get(session.projectId, cleaned, id) as { id: string } | undefined
+    if (duplicate) {
+      throw new Error('That provider session is already linked to another terminal.')
+    }
+    this.db
+      .prepare(
+        'UPDATE terminal_sessions SET provider_session_id = ?, updated_at = ? WHERE id = ?'
+      )
+      .run(cleaned, now(), id)
+    this.addActivity(
+      session.projectId,
+      id,
+      'provider-session-linked',
+      `Linked ${session.name} to Codex session ${cleaned}`
+    )
+    return true
+  }
+
+  listClaimedProviderSessionIds(connectionId: string): Set<string> {
+    const rows = this.db
+      .prepare(
+        `SELECT ts.provider_session_id AS id
+         FROM terminal_sessions ts
+         JOIN projects p ON p.id = ts.project_id
+         WHERE p.connection_id = ? AND ts.provider_session_id IS NOT NULL`
+      )
+      .all(connectionId) as Array<{ id: string }>
+    return new Set(rows.map((row) => row.id))
   }
 
   renameSession(id: string, name: string, tmuxName?: string | null): void {

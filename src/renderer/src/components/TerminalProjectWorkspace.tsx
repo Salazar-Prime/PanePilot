@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Archive,
+  Clipboard,
   Files,
   History,
   MessageSquareText,
@@ -130,6 +131,14 @@ export function TerminalProjectWorkspace({
   async function archive(session: TerminalSession) {
     setMenu(null)
     await window.projectConsole.terminals.archive(session.id)
+    await onChanged()
+  }
+
+  async function resumeCodex(session: TerminalSession) {
+    setMenu(null)
+    await window.projectConsole.terminals.resumeAgent(session.id)
+    setTab('terminal')
+    onSelectSession(session.id)
     await onChanged()
   }
 
@@ -323,12 +332,30 @@ export function TerminalProjectWorkspace({
                     {session.pinned ? <PinOff size={14} /> : <Pin size={14} />}
                     {session.pinned ? 'Unpin' : 'Pin'}
                   </button>
+                  {session.providerSessionId && (
+                    <button
+                      onClick={() =>
+                        run(
+                          window.projectConsole.system.copyText(
+                            session.providerSessionId!
+                          )
+                        )
+                      }
+                    >
+                      <Clipboard size={14} /> Copy Codex session ID
+                    </button>
+                  )}
                   {!['completed', 'error'].includes(session.state) ? (
                     <button className="danger-text" onClick={() => run(stop(session))}>
                       <Square size={13} /> Stop
                     </button>
                   ) : (
                     <>
+                      {session.profile === 'codex' && session.providerSessionId && (
+                        <button onClick={() => run(resumeCodex(session))}>
+                          <RotateCcw size={14} /> Resume Codex chat
+                        </button>
+                      )}
                       <button onClick={() => run(archive(session))}>
                         <Archive size={14} /> Archive
                       </button>
@@ -396,7 +423,11 @@ export function TerminalProjectWorkspace({
                   <StatusDot state={session.state} compact />
                   <div>
                     <strong>{session.name}</strong>
-                    <span>{session.profile} · {session.backend}</span>
+                    <span>
+                      {session.profile} · {session.backend}
+                      {session.providerSessionId &&
+                        ` · ${session.providerSessionId.slice(0, 8)}…`}
+                    </span>
                   </div>
                   <button onClick={() => run(rename(session))}>
                     <Pencil size={13} /> Rename

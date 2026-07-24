@@ -13,6 +13,7 @@ function session(
     projectId: 'project',
     name,
     profile: 'codex',
+    providerSessionId: null,
     customCommand: null,
     backend: 'tmux',
     tmuxName: name,

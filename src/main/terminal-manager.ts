@@ -12,6 +12,8 @@ import type {
   StartTerminalInput,
   TerminalSession
 } from '../shared/types'
+import { ConversationIndexer } from './conversation-indexer'
+import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import { acknowledgedAgentState, ScreenActivityDetector } from './screen-activity-detector'
 import { Store } from './store'
 
@@ -24,6 +26,8 @@ interface Runtime {
   screen: InstanceType<typeof HeadlessTerminal>
   detector: ScreenActivityDetector | null
   scanTimer: NodeJS.Timeout | null
+  providerTimer: NodeJS.Timeout | null
+  providerAttempts: number
   closingForAppExit: boolean
   session: TerminalSession
 }
@@ -60,13 +64,21 @@ function validatedTerminalName(value: string): string {
   return name
 }
 
-function launchCommand(profile: LaunchProfile, customCommand: string | null, dangerous: boolean): string {
+function launchCommand(
+  profile: LaunchProfile,
+  customCommand: string | null,
+  dangerous: boolean,
+  providerSessionId: string | null = null
+): string {
   if (profile === 'shell') return 'exec "${SHELL:-/bin/sh}" -l'
   if (profile === 'custom') {
     return `exec "\${SHELL:-/bin/sh}" -lc ${quote(customCommand ?? '')}`
   }
   if (profile === 'codex') {
     const flag = dangerous ? ' --dangerously-bypass-approvals-and-sandbox' : ''
+    if (providerSessionId) {
+      return `exec codex resume${flag} ${quote(providerSessionId)}`
+    }
     return `exec codex${flag}`
   }
   const flag = dangerous ? ' --dangerously-skip-permissions' : ''
@@ -83,7 +95,9 @@ export class TerminalManager {
 
   constructor(
     private readonly store: Store,
-    private readonly getWindow: () => BrowserWindow | null
+    private readonly getWindow: () => BrowserWindow | null,
+    private readonly conversations: ConversationIndexer,
+    private readonly remoteConversations: RemoteConversationIndexer
   ) {}
 
   start(input: StartTerminalInput): TerminalSession {
@@ -135,6 +149,22 @@ export class TerminalManager {
     return this.store.getSession(session.id)!
   }
 
+  async discoverSavedProviderSessions(): Promise<void> {
+    for (const project of this.store.listProjects()) {
+      const connection = this.store.getConnection(project.connectionId)
+      if (!connection) continue
+      for (const session of project.sessions) {
+        if (session.profile !== 'codex' || session.providerSessionId) continue
+        try {
+          await this.discoverProviderSession(session, project.folder, connection)
+        } catch {
+          // Archive discovery is best-effort. A later terminal launch or History
+          // refresh can retry after SSH or provider storage becomes available.
+        }
+      }
+    }
+  }
+
   attach(sessionId: string, cols: number, rows: number): { output: string } {
     let session = this.requireSession(sessionId)
     if (session.backend === 'tmux' && session.tmuxName !== session.name) {
@@ -184,6 +214,50 @@ export class TerminalManager {
     const session = this.requireSession(sessionId)
     const acknowledged = acknowledgedAgentState(session.state)
     if (acknowledged !== session.state) this.changeState(session, acknowledged)
+  }
+
+  resumeAgent(sessionId: string): void {
+    const session = this.requireSession(sessionId)
+    if (session.profile !== 'codex') {
+      throw new Error('Only Codex terminals can resume a linked Codex chat.')
+    }
+    if (!session.providerSessionId) {
+      throw new Error('This terminal is not linked to a Codex session yet.')
+    }
+    if (!['completed', 'error'].includes(session.state)) {
+      throw new Error('This Codex terminal is already running.')
+    }
+    if (session.archived) {
+      throw new Error('Restore the archived terminal before resuming its Codex chat.')
+    }
+    const project = this.store.getProject(session.projectId)
+    const connection = project ? this.store.getConnection(project.connectionId) : null
+    if (!project || !connection) throw new Error('The terminal project is unavailable.')
+
+    const persistentSessionExists =
+      session.backend === 'tmux' && session.tmuxName
+        ? this.tmuxSessionExists(connection, session.tmuxName)
+        : false
+    this.changeState(session, 'idle', `Resumed Codex session ${session.providerSessionId}.`)
+    const latest = this.requireSession(sessionId)
+    try {
+      this.launch(
+        latest,
+        project.folder,
+        connection,
+        100,
+        30,
+        !persistentSessionExists,
+        !persistentSessionExists
+      )
+    } catch (error) {
+      this.changeState(
+        this.requireSession(sessionId),
+        'error',
+        `Could not resume ${session.name}.`
+      )
+      throw error
+    }
   }
 
   rename(sessionId: string, name: string): void {
@@ -281,6 +355,7 @@ export class TerminalManager {
     for (const runtime of this.runtimes.values()) {
       runtime.closingForAppExit = true
       if (runtime.scanTimer) clearTimeout(runtime.scanTimer)
+      if (runtime.providerTimer) clearTimeout(runtime.providerTimer)
       runtime.pty.kill()
       runtime.screen.dispose()
     }
@@ -293,10 +368,16 @@ export class TerminalManager {
     connection: Connection,
     cols: number,
     rows: number,
-    create: boolean
+    create: boolean,
+    resumeProvider = false
   ): void {
     if (this.runtimes.has(session.id)) return
-    const command = launchCommand(session.profile, session.customCommand, session.dangerousMode)
+    const command = launchCommand(
+      session.profile,
+      session.customCommand,
+      session.dangerousMode,
+      resumeProvider ? session.providerSessionId : null
+    )
     const child = this.spawnTerminal(session, folder, connection, command, cols, rows, create)
     const screen = new HeadlessTerminal({
       cols,
@@ -309,10 +390,13 @@ export class TerminalManager {
       screen,
       detector: AGENT_PROFILES.has(session.profile) ? new ScreenActivityDetector() : null,
       scanTimer: null,
+      providerTimer: null,
+      providerAttempts: 0,
       closingForAppExit: false,
       session
     }
     this.runtimes.set(session.id, runtime)
+    this.scheduleProviderDiscovery(runtime, folder, connection)
 
     child.onData((data) => {
       this.store.appendOutput(session.id, data)
@@ -321,17 +405,75 @@ export class TerminalManager {
     })
     child.onExit(({ exitCode }) => {
       if (runtime.scanTimer) clearTimeout(runtime.scanTimer)
+      if (runtime.providerTimer) clearTimeout(runtime.providerTimer)
       runtime.screen.dispose()
       this.runtimes.delete(session.id)
       if (runtime.closingForAppExit) return
       const latest = this.store.getSession(session.id)
-      if (!latest || latest.state === 'completed') return
+      if (!latest) return
+      void this.discoverProviderSession(latest, folder, connection)
+      if (latest.state === 'completed') return
       this.changeState(
         latest,
         exitCode === 0 ? 'completed' : 'error',
         `${latest.name} exited${exitCode === 0 ? '.' : ` with code ${exitCode}.`}`
       )
     })
+  }
+
+  private scheduleProviderDiscovery(
+    runtime: Runtime,
+    folder: string,
+    connection: Connection
+  ): void {
+    if (runtime.session.profile !== 'codex' || runtime.session.providerSessionId) return
+    if (runtime.providerTimer || runtime.providerAttempts >= 45) return
+    runtime.providerTimer = setTimeout(() => {
+      runtime.providerTimer = null
+      runtime.providerAttempts += 1
+      void this.discoverProviderSession(runtime.session, folder, connection)
+        .then((linked) => {
+          const latest = this.store.getSession(runtime.session.id)
+          if (!latest) return
+          runtime.session = latest
+          if (!linked && this.runtimes.has(runtime.session.id)) {
+            this.scheduleProviderDiscovery(runtime, folder, connection)
+          }
+        })
+        .catch(() => {
+          if (this.runtimes.has(runtime.session.id)) {
+            this.scheduleProviderDiscovery(runtime, folder, connection)
+          }
+        })
+    }, runtime.providerAttempts === 0 ? 900 : 1_500)
+    runtime.providerTimer.unref()
+  }
+
+  private async discoverProviderSession(
+    session: TerminalSession,
+    folder: string,
+    connection: Connection
+  ): Promise<boolean> {
+    const latest = this.store.getSession(session.id)
+    if (!latest || latest.profile !== 'codex') return false
+    if (latest.providerSessionId) return true
+    const excludedIds = this.store.listClaimedProviderSessionIds(connection.id)
+    const providerSessionId =
+      connection.kind === 'local'
+        ? this.conversations.findCodexSessionId(folder, latest.createdAt, excludedIds)
+        : await this.remoteConversations.findCodexSessionId(
+            connection.sshAlias ?? connection.name,
+            folder,
+            latest.createdAt,
+            excludedIds
+          )
+    if (!providerSessionId) return false
+    if (!this.store.setSessionProviderId(latest.id, providerSessionId)) return true
+    this.getWindow()?.webContents.send('terminal:metadata', {
+      sessionId: latest.id,
+      projectId: latest.projectId
+    })
+    return true
   }
 
   private spawnTerminal(

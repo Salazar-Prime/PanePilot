@@ -1,5 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type {
@@ -12,6 +20,7 @@ import type {
 interface ParsedConversation {
   id: string
   provider: ConversationProvider
+  providerSessionId: string | null
   title: string
   workingDirectory: string
   updatedAt: string
@@ -57,6 +66,27 @@ function stableId(provider: ConversationProvider, path: string, archiveId?: stri
     .update(`${provider}:${archiveId || path}`)
     .digest('hex')
     .slice(0, 24)
+}
+
+function readFirstJsonlLine(path: string): string {
+  const descriptor = openSync(path, 'r')
+  const chunks: Buffer[] = []
+  let total = 0
+  try {
+    while (total < 1024 * 1024) {
+      const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, 1024 * 1024 - total))
+      const bytesRead = readSync(descriptor, buffer, 0, buffer.length, total)
+      if (!bytesRead) break
+      const chunk = buffer.subarray(0, bytesRead)
+      const newline = chunk.indexOf(10)
+      chunks.push(newline >= 0 ? chunk.subarray(0, newline) : chunk)
+      total += newline >= 0 ? newline : bytesRead
+      if (newline >= 0) break
+    }
+  } finally {
+    closeSync(descriptor)
+  }
+  return Buffer.concat(chunks).toString('utf8')
 }
 
 function pushMessage(
@@ -106,7 +136,7 @@ export function parseCodexConversation(
 
     if (type === 'session_meta') {
       workingDirectory = string(payload.cwd) ?? workingDirectory
-      archiveId = string(payload.id) ?? archiveId
+      archiveId = string(payload.id) ?? string(payload.session_id) ?? archiveId
       continue
     }
 
@@ -135,6 +165,7 @@ export function parseCodexConversation(
   return {
     id: stableId('codex', path, archiveId),
     provider: 'codex',
+    providerSessionId: archiveId,
     title: defaultTitle(messages),
     workingDirectory,
     updatedAt,
@@ -181,6 +212,7 @@ export function parseClaudeConversation(
   return {
     id: stableId('claude', path, archiveId),
     provider: 'claude',
+    providerSessionId: archiveId,
     title: summary || defaultTitle(messages),
     workingDirectory,
     updatedAt,
@@ -259,6 +291,7 @@ export class ConversationIndexer {
         return {
           id: conversation.id,
           provider: conversation.provider,
+          providerSessionId: conversation.providerSessionId,
           title: conversation.title,
           workingDirectory: conversation.workingDirectory,
           updatedAt: conversation.updatedAt,
@@ -288,6 +321,7 @@ export class ConversationIndexer {
     return {
       id: conversation.id,
       provider: conversation.provider,
+      providerSessionId: conversation.providerSessionId,
       title: conversation.title,
       workingDirectory: conversation.workingDirectory,
       updatedAt: conversation.updatedAt,
@@ -301,6 +335,50 @@ export class ConversationIndexer {
         : 0,
       messages: conversation.messages
     }
+  }
+
+  findCodexSessionId(
+    projectFolder: string,
+    terminalCreatedAt: string,
+    excludedIds: Set<string>
+  ): string | null {
+    const normalizedFolder = resolve(projectFolder)
+    const terminalTime = Date.parse(terminalCreatedAt)
+    const earliest = Number.isFinite(terminalTime) ? terminalTime - 10_000 : 0
+    const candidates: Array<{ id: string; timestamp: number }> = []
+
+    for (const path of collectJsonlFiles(join(homedir(), '.codex', 'sessions'))) {
+      let stat
+      try {
+        stat = statSync(path)
+      } catch {
+        continue
+      }
+      if (stat.mtimeMs < earliest) continue
+      try {
+        const firstLine = readFirstJsonlLine(path)
+        const record = object(JSON.parse(firstLine))
+        const payload = object(record?.payload)
+        if (string(record?.type) !== 'session_meta' || !payload) continue
+        const id = string(payload.id) ?? string(payload.session_id)
+        const cwd = string(payload.cwd)
+        if (!id || !cwd || excludedIds.has(id) || resolve(cwd) !== normalizedFolder) continue
+        const timestamp =
+          Date.parse(string(payload.timestamp) ?? string(record?.timestamp) ?? '') ||
+          stat.birthtimeMs ||
+          stat.mtimeMs
+        if (timestamp < earliest) continue
+        candidates.push({ id, timestamp })
+      } catch {
+        continue
+      }
+    }
+
+    candidates.sort(
+      (a, b) =>
+        Math.abs(a.timestamp - terminalTime) - Math.abs(b.timestamp - terminalTime)
+    )
+    return candidates[0]?.id ?? null
   }
 
   private indexAll(): ParsedConversation[] {

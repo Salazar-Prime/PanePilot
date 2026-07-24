@@ -10,6 +10,7 @@ import { listLocalFiles, previewLocalFile, writeLocalFile } from './file-service
 import { discoverRepository } from './git'
 import { PortForwardManager, testSshConnection } from './port-forward-manager'
 import { projectTypeServices } from './project-type-services'
+import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import {
   listRemoteFiles,
   listRemoteFolders,
@@ -24,6 +25,7 @@ let mainWindow: BrowserWindow | null = null
 let store: Store
 let terminals: TerminalManager
 let conversations: ConversationIndexer
+let remoteConversations: RemoteConversationIndexer
 let portForwards: PortForwardManager
 
 function createWindow(): void {
@@ -115,6 +117,9 @@ function registerIpc(): void {
   )
   ipcMain.handle('terminals:acknowledge', (_event, sessionId: string) => {
     terminals.acknowledge(sessionId)
+  })
+  ipcMain.handle('terminals:resume-agent', (_event, sessionId: string) => {
+    terminals.resumeAgent(sessionId)
   })
   ipcMain.handle('terminals:rename', (_event, sessionId: string, name: string) => {
     terminals.rename(sessionId, name)
@@ -210,23 +215,34 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('conversations:list', (_event, projectId: string, query = '') => {
+  ipcMain.handle('conversations:list', async (_event, projectId: string, query = '') => {
     const project = store.getProject(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
-    if (connection?.kind !== 'local') return []
-    return conversations.list(project.folder, query)
+    if (!connection) throw new Error('Project connection not found.')
+    return connection.kind === 'local'
+      ? conversations.list(project.folder, query)
+      : remoteConversations.list(
+          connection.sshAlias ?? connection.name,
+          project.folder,
+          query
+        )
   })
   ipcMain.handle(
     'conversations:get',
-    (_event, projectId: string, conversationId: string, query = '') => {
+    async (_event, projectId: string, conversationId: string, query = '') => {
       const project = store.getProject(projectId)
       if (!project) throw new Error('Project not found.')
       const connection = store.getConnection(project.connectionId)
-      if (connection?.kind !== 'local') {
-        throw new Error('Remote conversation archives are not available yet.')
-      }
-      return conversations.get(project.folder, conversationId, query)
+      if (!connection) throw new Error('Project connection not found.')
+      return connection.kind === 'local'
+        ? conversations.get(project.folder, conversationId, query)
+        : remoteConversations.get(
+            connection.sshAlias ?? connection.name,
+            project.folder,
+            conversationId,
+            query
+          )
     }
   )
 }
@@ -236,13 +252,20 @@ app
   .then(() => {
     store = new Store(app.getPath('userData'))
     store.syncConnections(discoverSshAliases())
-    terminals = new TerminalManager(store, () => mainWindow)
     conversations = new ConversationIndexer()
+    remoteConversations = new RemoteConversationIndexer()
+    terminals = new TerminalManager(
+      store,
+      () => mainWindow,
+      conversations,
+      remoteConversations
+    )
     portForwards = new PortForwardManager(store, () => {
       mainWindow?.webContents.send('port-forward:changed')
     })
     registerIpc()
     createWindow()
+    void terminals.discoverSavedProviderSessions()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

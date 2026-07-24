@@ -98,9 +98,13 @@ export function App() {
     const removeStateListener = window.projectConsole.terminals.onState(() => {
       void refresh()
     })
+    const removeMetadataListener = window.projectConsole.terminals.onMetadata(() => {
+      void refresh()
+    })
     return () => {
       active = false
       removeStateListener()
+      removeMetadataListener()
     }
   }, [refresh])
 
@@ -244,6 +248,11 @@ export function App() {
   async function archiveSession(session: TerminalSession) {
     await window.projectConsole.terminals.archive(session.id)
     await refresh()
+  }
+
+  async function resumeCodexSession(owner: Project, session: TerminalSession) {
+    await window.projectConsole.terminals.resumeAgent(session.id)
+    await selectSession(owner.id, session.id)
   }
 
   async function deleteSession(session: TerminalSession) {
@@ -446,12 +455,35 @@ export function App() {
             }
           ]
         : []),
+      ...(session.providerSessionId
+        ? [
+            {
+              id: 'copy-provider-session',
+              label: 'Copy Codex session ID',
+              icon: <Clipboard size={14} />,
+              action: () =>
+                window.projectConsole.system.copyText(session.providerSessionId!)
+            }
+          ]
+        : []),
       ...(stopped
         ? [
+            ...(session.profile === 'codex' && session.providerSessionId
+              ? [
+                  {
+                    id: 'resume-codex',
+                    label: 'Resume Codex chat',
+                    icon: <ArchiveRestore size={14} />,
+                    separatorBefore: true,
+                    action: () => resumeCodexSession(owner, session)
+                  }
+                ]
+              : []),
             {
               id: 'archive',
               label: 'Archive terminal',
               icon: <Archive size={14} />,
+              separatorBefore: !(session.profile === 'codex' && session.providerSessionId),
               action: () => archiveSession(session)
             },
             {

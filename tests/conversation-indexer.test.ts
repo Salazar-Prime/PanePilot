@@ -31,6 +31,7 @@ describe('conversation archive parsing', () => {
     )
 
     expect(conversation?.workingDirectory).toBe('/tmp/panepilot-project')
+    expect(conversation?.providerSessionId).toBe('codex-session')
     expect(conversation?.title).toBe('Fix the terminal menu')
     expect(conversation?.messages.map(({ role, content }) => ({ role, content }))).toEqual([
       { role: 'user', content: 'Fix the terminal menu' },
@@ -69,6 +70,7 @@ describe('conversation archive parsing', () => {
     )
 
     expect(conversation?.title).toBe('Remote file editing')
+    expect(conversation?.providerSessionId).toBe('claude-session')
     expect(conversation?.messages).toHaveLength(2)
     expect(conversation?.messages[1].content).toBe('The browser is ready.')
   })
