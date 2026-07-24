@@ -40,6 +40,17 @@ a remote PTY attached to the SSH process.
 tmux discovery and lifecycle management require non-interactive authentication. The
 initial interactive terminal can still expose normal OpenSSH prompts in its xterm view.
 
+PanePilot tags sessions it creates with tmux user options and refreshes the selected
+remote connection every 15 seconds. A second PanePilot laptop can discover a tagged
+session when it has a project pointing at the same canonical remote folder. Selecting
+that terminal performs a normal tmux attachment, so an existing client on another
+laptop is not detached.
+
+Discovery is implemented with bounded one-shot SSH and `tmux list-sessions` commands.
+There is no PanePilot daemon or persistent service on the remote host. If background
+SSH authentication fails, PanePilot keeps the last local SQLite view and the remote
+project remains usable when opened interactively.
+
 ## Port forwards
 
 Right-click an SSH connection and choose **Manage port forwards**. A saved definition

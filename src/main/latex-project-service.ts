@@ -541,6 +541,7 @@ export class LatexProjectService {
         sectionId: input.scope === 'section' ? input.sectionId ?? null : null,
         mode: input.mode
       })
+      void this.terminals.syncSessionMetadata(session.id, true)
     } catch (error) {
       this.terminals.stop(session.id)
       this.store.deleteSession(session.id)
@@ -551,6 +552,7 @@ export class LatexProjectService {
 
   setChatMode(sessionId: string, mode: 'ask' | 'edit'): void {
     this.store.setLatexChatMode(sessionId, mode)
+    void this.terminals.syncSessionMetadata(sessionId)
   }
 
   sendPrompt(sessionId: string, rawPrompt: string): void {

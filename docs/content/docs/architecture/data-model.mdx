@@ -61,6 +61,7 @@ Stores:
 - Optional immutable provider session identity, currently used for exact Codex resume.
 - Optional custom command.
 - `tmux` or `pty` backend and optional tmux name.
+- Tmux metadata schema version used for safe live-session reconciliation.
 - Current lifecycle state.
 - Dangerous-mode, archive, and pinned flags.
 - Capped raw terminal output.
@@ -68,6 +69,12 @@ Stores:
 
 The output column retains only the latest 512 KiB. `provider_session_id` is separate
 from both the PanePilot session ID and tmux name.
+
+For a live remote terminal, tmux is authoritative for whether the process still
+exists. SQLite is a durable local materialized view: it retains projects, stopped and
+archived terminals, output, type-specific attachments, activities, and provider links
+after tmux metadata disappears. A foreign tagged session can recreate its local row
+using the stable terminal UUID; no database file is synchronized between laptops.
 
 ### `activities`
 

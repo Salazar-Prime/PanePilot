@@ -47,6 +47,18 @@ Remote conversation scanning also executes a fixed Python script. It filters by 
 working directory before transfer, emits normalized message data instead of raw archive
 files, enforces time and output limits, and keeps its cache in memory.
 
+## Tmux discovery metadata
+
+Tmux user options are editable by any process running as the same remote Unix user.
+PanePilot therefore treats `@panepilot_*` values as bounded discovery metadata, not as
+authentication or authorization.
+
+Imported UUIDs, profiles, timestamps, names, encoded paths, provider IDs, and LaTeX
+scope fields are length- and shape-validated before SQLite writes. A project is matched
+only on the SSH connection being scanned and an exact normalized remote folder.
+Metadata can preserve an `unsafe` indicator for a running agent, but it cannot bypass
+the fresh confirmation required before PanePilot launches a dangerous resume.
+
 ## Port forwards
 
 Every forward:

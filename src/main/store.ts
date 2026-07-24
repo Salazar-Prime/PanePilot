@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
+import { join, posix } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type {
   Activity,
@@ -16,6 +16,10 @@ import type {
   TerminalBackend,
   TerminalSession
 } from '../shared/types'
+import type {
+  PanePilotTmuxLatexMetadata,
+  PanePilotTmuxMetadata
+} from './tmux-metadata'
 
 const OUTPUT_LIMIT = 512 * 1024
 const STATE_PRIORITY: AgentState[] = [
@@ -140,6 +144,11 @@ export interface StoredPortForward {
   remoteHost: string
   remotePort: number
   createdAt: string
+}
+
+export interface DiscoveredTmuxSessionUpsert {
+  session: TerminalSession
+  changed: boolean
 }
 
 function now(): string {
@@ -282,6 +291,7 @@ export class Store {
         tmux_name TEXT,
         state TEXT NOT NULL DEFAULT 'idle',
         dangerous_mode INTEGER NOT NULL DEFAULT 0,
+        tmux_metadata_version INTEGER NOT NULL DEFAULT 0,
         archived INTEGER NOT NULL DEFAULT 0,
         pinned INTEGER NOT NULL DEFAULT 0,
         output TEXT NOT NULL DEFAULT '',
@@ -364,6 +374,11 @@ export class Store {
     this.ensureColumn('terminal_sessions', 'custom_command', 'TEXT')
     this.ensureColumn('terminal_sessions', 'tmux_name', 'TEXT')
     this.ensureColumn('terminal_sessions', 'dangerous_mode', 'INTEGER NOT NULL DEFAULT 0')
+    this.ensureColumn(
+      'terminal_sessions',
+      'tmux_metadata_version',
+      'INTEGER NOT NULL DEFAULT 0'
+    )
     this.ensureColumn('terminal_sessions', 'pinned', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('activities', 'session_id', 'TEXT')
     this.ensureColumn('activities', 'message', `TEXT NOT NULL DEFAULT ''`)
@@ -412,7 +427,7 @@ export class Store {
         ON latex_chat_sessions(project_id, scope, section_id);
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 5;
+      PRAGMA user_version = 6;
     `)
   }
 
@@ -883,9 +898,10 @@ export class Store {
         .prepare(
           `INSERT INTO terminal_sessions
            (id, project_id, name, label, profile, provider_session_name, custom_command, command,
-            backend, tmux_name, backend_name, state, dangerous_mode, dangerous, archived, pinned, output,
+            backend, tmux_name, backend_name, state, dangerous_mode, dangerous,
+            tmux_metadata_version, archived, pinned, output,
             created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, 0, '', ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?, 0, 0, '', ?, ?)`
         )
         .run(
           id,
@@ -901,6 +917,7 @@ export class Store {
           input.tmuxName,
           input.dangerousMode ? 1 : 0,
           input.dangerousMode ? 1 : 0,
+          input.backend === 'tmux' ? 1 : 0,
           timestamp,
           timestamp
         )
@@ -909,8 +926,8 @@ export class Store {
         .prepare(
           `INSERT INTO terminal_sessions
            (id, project_id, name, profile, provider_session_name, custom_command, backend, tmux_name, state,
-            dangerous_mode, archived, pinned, output, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, 0, 0, '', ?, ?)`
+            dangerous_mode, tmux_metadata_version, archived, pinned, output, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, 0, '', ?, ?)`
         )
         .run(
           id,
@@ -922,6 +939,7 @@ export class Store {
           input.backend,
           input.tmuxName,
           input.dangerousMode ? 1 : 0,
+          input.backend === 'tmux' ? 1 : 0,
           timestamp,
           timestamp
         )
@@ -933,6 +951,339 @@ export class Store {
       `${input.name} started with the ${input.profile} profile${input.dangerousMode ? ' (permission checks disabled)' : ''}`
     )
     return this.getSession(id)!
+  }
+
+  upsertDiscoveredTmuxSession(
+    projectId: string,
+    name: string,
+    metadata: PanePilotTmuxMetadata
+  ): DiscoveredTmuxSessionUpsert | null {
+    const project = this.getProject(projectId)
+    if (
+      !project ||
+      !name.trim() ||
+      name.length > 80 ||
+      /[:\u0000-\u001f\u007f]/.test(name)
+    ) {
+      return null
+    }
+    const existing = this.getSession(metadata.terminalId)
+    if (existing && existing.projectId !== projectId) return null
+
+    let providerSessionId = metadata.providerSessionId
+    if (providerSessionId) {
+      const duplicate = this.db
+        .prepare(
+          `SELECT ts.id
+           FROM terminal_sessions ts
+           JOIN projects owner ON owner.id = ts.project_id
+           WHERE owner.connection_id = ?
+             AND ts.provider_session_id = ?
+             AND ts.id <> ?`
+        )
+        .get(project.connectionId, providerSessionId, metadata.terminalId) as
+        | { id: string }
+        | undefined
+      if (duplicate) providerSessionId = null
+    }
+
+    const timestamp = now()
+    if (existing) {
+      const nextProviderSessionId =
+        existing.providerSessionId ?? providerSessionId
+      const nextProviderSessionName =
+        existing.providerSessionName ?? metadata.providerSessionName
+      const shouldReactivate =
+        existing.state === 'completed' || existing.state === 'error'
+      const changed =
+        existing.name !== name ||
+        existing.profile !== metadata.profile ||
+        existing.tmuxName !== name ||
+        existing.dangerousMode !== metadata.dangerousMode ||
+        existing.providerSessionId !== nextProviderSessionId ||
+        existing.providerSessionName !== nextProviderSessionName ||
+        existing.archived ||
+        shouldReactivate ||
+        this.getSessionTmuxMetadataVersion(existing.id) !== 1
+      if (!changed) return { session: existing, changed: false }
+
+      if (this.tableColumns('terminal_sessions').has('label')) {
+        this.db
+          .prepare(
+            `UPDATE terminal_sessions
+             SET name = ?, label = ?, profile = ?, provider_session_id = ?,
+                 provider_session_name = ?, backend = 'tmux', tmux_name = ?,
+                 backend_name = ?, dangerous_mode = ?, dangerous = ?,
+                 tmux_metadata_version = 1, archived = 0,
+                 state = CASE WHEN state IN ('completed', 'error') THEN 'idle' ELSE state END,
+                 updated_at = ?
+             WHERE id = ?`
+          )
+          .run(
+            name,
+            name,
+            metadata.profile,
+            nextProviderSessionId,
+            nextProviderSessionName,
+            name,
+            name,
+            metadata.dangerousMode ? 1 : 0,
+            metadata.dangerousMode ? 1 : 0,
+            timestamp,
+            existing.id
+          )
+      } else {
+        this.db
+          .prepare(
+            `UPDATE terminal_sessions
+             SET name = ?, profile = ?, provider_session_id = ?,
+                 provider_session_name = ?, backend = 'tmux', tmux_name = ?,
+                 dangerous_mode = ?, tmux_metadata_version = 1, archived = 0,
+                 state = CASE WHEN state IN ('completed', 'error') THEN 'idle' ELSE state END,
+                 updated_at = ?
+             WHERE id = ?`
+          )
+          .run(
+            name,
+            metadata.profile,
+            nextProviderSessionId,
+            nextProviderSessionName,
+            name,
+            metadata.dangerousMode ? 1 : 0,
+            timestamp,
+            existing.id
+          )
+      }
+      if (shouldReactivate) {
+        this.addActivity(
+          projectId,
+          existing.id,
+          'remote-terminal-rediscovered',
+          `Rediscovered running tmux session ${name}`
+        )
+      }
+      this.updateProjectState(projectId)
+      return { session: this.getSession(existing.id)!, changed: true }
+    }
+
+    if (this.tableColumns('terminal_sessions').has('label')) {
+      this.db
+        .prepare(
+          `INSERT INTO terminal_sessions
+           (id, project_id, name, label, profile, provider_session_id,
+            provider_session_name, custom_command, command, backend, tmux_name,
+            backend_name, state, dangerous_mode, dangerous, tmux_metadata_version,
+            archived, pinned, output, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'tmux', ?, ?, 'idle', ?, ?, 1, 0, 0, '', ?, ?)`
+        )
+        .run(
+          metadata.terminalId,
+          projectId,
+          name,
+          name,
+          metadata.profile,
+          providerSessionId,
+          metadata.providerSessionName,
+          name,
+          name,
+          metadata.dangerousMode ? 1 : 0,
+          metadata.dangerousMode ? 1 : 0,
+          metadata.createdAt,
+          timestamp
+        )
+    } else {
+      this.db
+        .prepare(
+          `INSERT INTO terminal_sessions
+           (id, project_id, name, profile, provider_session_id,
+            provider_session_name, custom_command, backend, tmux_name, state,
+            dangerous_mode, tmux_metadata_version, archived, pinned, output,
+            created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, NULL, 'tmux', ?, 'idle', ?, 1, 0, 0, '', ?, ?)`
+        )
+        .run(
+          metadata.terminalId,
+          projectId,
+          name,
+          metadata.profile,
+          providerSessionId,
+          metadata.providerSessionName,
+          name,
+          metadata.dangerousMode ? 1 : 0,
+          metadata.createdAt,
+          timestamp
+        )
+    }
+    this.addActivity(
+      projectId,
+      metadata.terminalId,
+      'remote-terminal-discovered',
+      `Discovered running tmux session ${name}`
+    )
+    this.updateProjectState(projectId)
+    return { session: this.getSession(metadata.terminalId)!, changed: true }
+  }
+
+  upsertDiscoveredLatexChat(
+    terminalSessionId: string,
+    projectId: string,
+    metadata: PanePilotTmuxLatexMetadata
+  ): boolean {
+    const project = this.getProject(projectId)
+    const session = this.getSession(terminalSessionId)
+    if (
+      !project ||
+      project.type !== 'latex' ||
+      !session ||
+      session.projectId !== projectId
+    ) {
+      return false
+    }
+
+    let sectionId: string | null = null
+    if (metadata.scope === 'section') {
+      const rawSource = metadata.sectionSource?.trim() ?? ''
+      const sourceFile = posix.normalize(rawSource).replace(/^\.\//, '')
+      const title = metadata.sectionTitle?.trim() ?? ''
+      if (
+        !rawSource ||
+        !title ||
+        title.length > 1_024 ||
+        /[\u0000-\u001f\u007f]/.test(title) ||
+        sourceFile === '..' ||
+        sourceFile.startsWith('../') ||
+        sourceFile.startsWith('/') ||
+        metadata.sectionLevel == null ||
+        metadata.sectionLevel < 0 ||
+        metadata.sectionLevel > 6
+      ) {
+        return false
+      }
+      const matching = this.listLatexSections(projectId).find(
+        (section) =>
+          section.sourceFile === sourceFile && section.title === title
+      )
+      if (matching) {
+        sectionId = matching.id
+      } else {
+        const desiredId = metadata.sectionId ?? randomUUID()
+        const collision = this.db
+          .prepare(
+            `SELECT project_id, source_file, title
+             FROM latex_sections WHERE id = ?`
+          )
+          .get(desiredId) as
+          | { project_id: string; source_file: string; title: string }
+          | undefined
+        sectionId =
+          collision &&
+          (collision.project_id !== projectId ||
+            collision.source_file !== sourceFile ||
+            collision.title !== title)
+            ? randomUUID()
+            : desiredId
+        const ordinalRow = this.db
+          .prepare(
+            'SELECT COALESCE(MAX(ordinal), -1) + 1 AS ordinal FROM latex_sections WHERE project_id = ?'
+          )
+          .get(projectId) as { ordinal: number }
+        this.db
+          .prepare(
+            `INSERT INTO latex_sections
+             (id, project_id, title, level, source_file, start_line, end_line,
+              ordinal, missing, updated_at)
+             VALUES (?, ?, ?, ?, ?, 1, 1, ?, 0, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               title = excluded.title,
+               level = excluded.level,
+               source_file = excluded.source_file,
+               missing = 0,
+               updated_at = excluded.updated_at`
+          )
+          .run(
+            sectionId,
+            projectId,
+            title,
+            metadata.sectionLevel,
+            sourceFile,
+            ordinalRow.ordinal,
+            now()
+          )
+      }
+    }
+
+    const existing = this.getLatexChat(terminalSessionId)
+    if (
+      existing?.scope === metadata.scope &&
+      existing.mode === metadata.mode &&
+      existing.sectionId === sectionId
+    ) {
+      return false
+    }
+    const timestamp = now()
+    this.db
+      .prepare(
+        `INSERT INTO latex_chat_sessions
+         (terminal_session_id, project_id, scope, section_id, mode, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(terminal_session_id) DO UPDATE SET
+           scope = excluded.scope,
+           section_id = excluded.section_id,
+           mode = excluded.mode`
+      )
+      .run(
+        terminalSessionId,
+        projectId,
+        metadata.scope,
+        sectionId,
+        metadata.mode,
+        existing?.createdAt ?? timestamp
+      )
+    if (!existing) {
+      this.addActivity(
+        projectId,
+        terminalSessionId,
+        'latex-chat-discovered',
+        `Restored ${session.name} as a ${metadata.scope} chat in ${metadata.mode} mode`
+      )
+    }
+    return true
+  }
+
+  getSessionTmuxMetadataVersion(id: string): number {
+    const row = this.db
+      .prepare(
+        'SELECT tmux_metadata_version AS version FROM terminal_sessions WHERE id = ?'
+      )
+      .get(id) as { version: number } | undefined
+    return row?.version ?? 0
+  }
+
+  markSessionTmuxMetadataManaged(id: string): boolean {
+    if (this.getSessionTmuxMetadataVersion(id) === 1) return false
+    const result = this.db
+      .prepare(
+        'UPDATE terminal_sessions SET tmux_metadata_version = 1, updated_at = ? WHERE id = ?'
+      )
+      .run(now(), id)
+    return result.changes > 0
+  }
+
+  markMissingTmuxSession(id: string): boolean {
+    const session = this.getSession(id)
+    if (
+      !session ||
+      session.backend !== 'tmux' ||
+      session.state === 'completed' ||
+      session.state === 'error'
+    ) {
+      return false
+    }
+    return this.setSessionState(
+      id,
+      'completed',
+      `${session.name} is no longer running in tmux.`
+    )
   }
 
   getSession(id: string): TerminalSession | null {

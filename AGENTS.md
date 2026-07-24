@@ -46,6 +46,7 @@ These are owner-approved decisions and should be treated as product invariants u
 19. Projects can be archived only after all of their terminals stop. Archived projects have a separate library view and do not contribute to live status counts.
 20. SSH port forwards are explicit, bind to `127.0.0.1`, use `ExitOnForwardFailure`, and stop when PanePilot exits.
 21. A new Codex terminal receives a stable, unique provider session name before launch. PanePilot applies it with `/rename` when the Codex composer becomes ready, then attaches the provider's actual session ID when archive metadata appears. Resume uses the exact provider ID when known and the unique provider name only during the pre-ID window.
+22. PanePilot-owned tmux sessions carry versioned session-scoped `@panepilot_*` metadata. On an SSH connection, live tagged sessions are discovered with one-shot tmux commands and reconciled into the local database by stable terminal UUID and canonical project folder. This enables another PanePilot machine to attach without a remote daemon. Tmux is authoritative for live-session presence; SQLite remains authoritative for durable local workspace state.
 
 ## Agent lifecycle semantics
 
@@ -151,6 +152,11 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - Local and remote sessions use tmux when it is available.
 - Each PanePilot terminal has its own tmux session name.
 - The tmux session name must exactly match the PanePilot terminal name. Rename both as one operation.
+- New tmux sessions are tagged before the launch profile starts with the stable terminal ID, originating project ID, canonical project folder, profile, creation time, dangerous-mode indicator, and any known provider/LaTeX attachment identity.
+- Remote discovery lists only the selected SSH user's default tmux server. Tagged sessions whose canonical project folder matches exactly are imported or refreshed in local SQLite; untagged sessions are ignored unless they match a legacy local terminal record, in which case PanePilot adopts them by adding metadata.
+- Another local PanePilot installation may attach to the same discovered session. Normal attachment does not detach an existing tmux client.
+- Discovery uses bounded `BatchMode` SSH calls and no remote daemon, registry, or background service. Offline hosts leave the locally cached workspace untouched.
+- A provider session ID discovered after launch is mirrored into the live tmux metadata. The PanePilot terminal UUID remains the primary identity because provider IDs are not available at tmux creation time.
 - Closing/detaching the renderer does not kill a persistent tmux session.
 - A PTY fallback is used when tmux cannot be found or created.
 - Tmux preserves a still-running Codex process. A new Codex terminal persists `provider_session_name` before spawn and applies it through `/rename` once the TUI composer is ready; Codex has no create-time name flag. `provider_session_id` is linked from archive metadata after the first spawn.

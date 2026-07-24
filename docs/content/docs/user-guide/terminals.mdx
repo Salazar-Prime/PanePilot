@@ -28,6 +28,10 @@ When tmux is available:
 - The session persists after its renderer view detaches.
 - The PanePilot terminal name and tmux session name are identical.
 - Reopening the terminal attaches to the existing tmux session.
+- PanePilot-owned sessions carry a stable terminal UUID and project metadata in tmux
+  user options.
+- Another PanePilot laptop configured for the same SSH host and canonical remote
+  project folder can discover the session and attach to it.
 - The terminal context menu can copy an exact local or SSH tmux attach command.
 
 When tmux is unavailable, PanePilot uses a plain PTY. PTY sessions cannot survive an app
@@ -69,19 +73,23 @@ for an unclaimed session created at the same time in the same project folder. Di
 works against local archives or, for SSH projects, on the original remote host.
 
 Discovery is best-effort during launch, on terminal exit, and at application startup for
-older unlinked Codex terminals. Once linked, the provider ID cannot be silently replaced
-by a different one. The terminal menu can copy it.
+older unlinked Codex or Claude terminals. Once linked, the provider ID cannot be
+silently replaced by a different one. For a live tmux terminal, the link is also stored
+in session-scoped tmux metadata so another PanePilot laptop can import it. The terminal
+menu can copy the ID.
 
 A stopped or errored, non-archived Codex terminal with a provider ID offers **Resume
-Codex chat**. If no persistent tmux process remains, PanePilot starts:
+Codex chat** or **Resume Claude chat**. If no persistent tmux process remains,
+PanePilot starts the corresponding provider resume command:
 
 ```text
 codex resume <exact-provider-session-id>
+claude --resume <exact-provider-session-id>
 ```
 
 It does so in the terminal's original project folder and original local or SSH
-connection. Claude provider IDs are shown in conversation details, but Claude terminal
-resume is not implemented.
+connection. If dangerous mode was enabled for the terminal, PanePilot requires a fresh
+confirmation before launching the resumed provider.
 
 ## Saved output
 

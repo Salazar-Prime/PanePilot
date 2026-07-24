@@ -278,11 +278,12 @@ export interface ProjectConsoleApi {
   }
   terminals: {
     start(input: StartTerminalInput): Promise<TerminalSession>
+    discover(connectionId?: string): Promise<number>
     attach(sessionId: string, cols: number, rows: number): Promise<{ output: string }>
     write(sessionId: string, data: string): Promise<void>
     resize(sessionId: string, cols: number, rows: number): Promise<void>
     acknowledge(sessionId: string): Promise<void>
-    resumeAgent(sessionId: string): Promise<void>
+    resumeAgent(sessionId: string, dangerousModeConfirmed?: boolean): Promise<void>
     rename(sessionId: string, name: string): Promise<void>
     setPinned(sessionId: string, pinned: boolean): Promise<void>
     stop(sessionId: string): Promise<void>

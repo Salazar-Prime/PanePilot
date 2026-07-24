@@ -136,7 +136,17 @@ export function TerminalProjectWorkspace({
 
   async function resumeAgent(session: TerminalSession) {
     setMenu(null)
-    await window.projectConsole.terminals.resumeAgent(session.id)
+    const dangerousModeConfirmed =
+      !session.dangerousMode ||
+      window.confirm(
+        `Resume “${session.name}” with all provider permission checks disabled? ` +
+          'Use this only in an isolated or disposable environment.'
+      )
+    if (!dangerousModeConfirmed) return
+    await window.projectConsole.terminals.resumeAgent(
+      session.id,
+      session.dangerousMode
+    )
     setTab('terminal')
     onSelectSession(session.id)
     await onChanged()

@@ -5,6 +5,7 @@
 PanePilot's first preview release introduces:
 
 - Local and SSH-backed terminal projects with persistent tmux sessions.
+- Cross-laptop discovery of PanePilot-owned remote tmux sessions without a remote daemon.
 - Codex, Claude Code, login-shell, and custom-command launch profiles.
 - Agent lifecycle and attention states with terminal response input.
 - Read-only, searchable Codex and Claude conversation history.

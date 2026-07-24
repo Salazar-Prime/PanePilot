@@ -31,6 +31,8 @@ const api: ProjectConsoleApi = {
   },
   terminals: {
     start: (input: StartTerminalInput) => ipcRenderer.invoke('terminals:start', input),
+    discover: (connectionId?: string) =>
+      ipcRenderer.invoke('terminals:discover', connectionId),
     attach: (sessionId: string, cols: number, rows: number) =>
       ipcRenderer.invoke('terminals:attach', sessionId, cols, rows),
     write: (sessionId: string, data: string) =>
@@ -38,8 +40,12 @@ const api: ProjectConsoleApi = {
     resize: (sessionId: string, cols: number, rows: number) =>
       ipcRenderer.invoke('terminals:resize', sessionId, cols, rows),
     acknowledge: (sessionId: string) => ipcRenderer.invoke('terminals:acknowledge', sessionId),
-    resumeAgent: (sessionId: string) =>
-      ipcRenderer.invoke('terminals:resume-agent', sessionId),
+    resumeAgent: (sessionId: string, dangerousModeConfirmed = false) =>
+      ipcRenderer.invoke(
+        'terminals:resume-agent',
+        sessionId,
+        dangerousModeConfirmed
+      ),
     rename: (sessionId: string, name: string) =>
       ipcRenderer.invoke('terminals:rename', sessionId, name),
     setPinned: (sessionId: string, pinned: boolean) =>

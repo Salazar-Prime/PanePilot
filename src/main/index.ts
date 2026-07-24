@@ -114,6 +114,9 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('terminals:start', (_event, input: StartTerminalInput) => terminals.start(input))
+  ipcMain.handle('terminals:discover', (_event, connectionId?: string) =>
+    terminals.reconcileRemoteSessions(connectionId)
+  )
   ipcMain.handle(
     'terminals:attach',
     (_event, sessionId: string, cols: number, rows: number) =>
@@ -156,9 +159,12 @@ function registerIpc(): void {
   ipcMain.handle('terminals:acknowledge', (_event, sessionId: string) => {
     terminals.acknowledge(sessionId)
   })
-  ipcMain.handle('terminals:resume-agent', (_event, sessionId: string) => {
-    terminals.resumeAgent(sessionId)
-  })
+  ipcMain.handle(
+    'terminals:resume-agent',
+    (_event, sessionId: string, dangerousModeConfirmed = false) => {
+      terminals.resumeAgent(sessionId, dangerousModeConfirmed)
+    }
+  )
   ipcMain.handle('terminals:rename', (_event, sessionId: string, name: string) => {
     terminals.rename(sessionId, name)
   })
@@ -309,7 +315,10 @@ app
     })
     registerIpc()
     createWindow()
-    void terminals.discoverSavedProviderSessions()
+    void terminals
+      .reconcileRemoteSessions()
+      .catch(() => 0)
+      .then(() => terminals.discoverSavedProviderSessions())
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -23,7 +23,14 @@ Starting a terminal:
 3. Checks whether tmux is available.
 4. Validates or generates a tmux-safe unique name.
 5. Persists the new `idle` session before process launch.
-6. Spawns its local or remote PTY.
+6. Builds versioned `@panepilot_*` tmux metadata from the persisted session.
+7. Spawns its local or remote PTY.
+
+The pane sets its tmux metadata before executing the selected profile. The metadata
+contains a stable terminal UUID, originating project ID, canonical project folder,
+profile, creation time, safety indicator, and any known provider or LaTeX chat
+identity. The pane is targeted explicitly through `TMUX_PANE`, which prevents a nested
+tmux client from accidentally tagging the caller's session.
 
 A failed process spawn can therefore leave a persisted session that records the launch
 attempt and can transition to an error.
@@ -59,6 +66,29 @@ applied.
 Remote tmux discovery, existence checks, and rename operations run separately with
 batch-mode SSH and short timeouts.
 
+## Remote discovery and reconciliation
+
+PanePilot periodically asks the selected SSH user's default tmux server for all
+sessions and their `@panepilot_*` user options. No remote daemon or PanePilot service is
+installed.
+
+The canonical remote project folder is the portable project match across laptops;
+local project UUIDs may differ. The stable terminal UUID is then used to upsert a local
+SQLite row:
+
+- A tagged remote session missing locally is imported.
+- A known session refreshes its name, profile, provider link, and safety indicator.
+- A legacy untagged session with the exact name of a known local terminal is adopted
+  by adding metadata.
+- A metadata-managed local row is marked completed when a successful remote scan
+  proves that its tmux session no longer exists.
+- An unreachable host leaves cached local state unchanged.
+
+LaTeX chat scope, mode, and portable section source/title information are included so
+an imported chat can be reconciled with the receiving laptop's section identities.
+Discovery displays matching terminals but does not immediately attach every tmux
+client; attachment occurs when the user selects a terminal.
+
 ## Exact Codex resume
 
 tmux persistence and provider resume solve different problems:
@@ -75,6 +105,10 @@ Provider session discovery reads `session_meta` records independently of lifecyc
 hooks. On startup PanePilot makes a best-effort pass over unlinked Codex terminals,
 using the local indexer or the remote indexer associated with the terminal's original
 connection.
+
+Once a Codex or Claude provider ID is discovered, PanePilot writes it to SQLite and
+the live tmux user options. Another laptop can therefore import both the terminal and
+its exact resumable provider identity.
 
 ## Output and rendering
 
