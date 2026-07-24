@@ -1,0 +1,77 @@
+---
+title: Files, chats, and activity
+description: Project file access, local and remote provider archives, and the project timeline.
+icon: Files
+---
+
+## Files
+
+The Files tab lists directories before files and excludes `.git` and `node_modules`.
+Selecting a text file opens it in the bundled Monaco editor with extension-based
+language detection.
+
+File access is constrained to the project's canonical folder:
+
+- Local paths are resolved with real paths and rejected if they escape the project root.
+- Remote operations perform the same canonical-root check on the SSH host.
+- Symlinks that resolve outside the project folder are not exposed.
+- Only existing files can be saved; the UI does not create, rename, or delete files.
+
+Previews read at most 1 MB. A larger file is marked truncated and cannot be edited.
+Files containing a null byte are treated as binary and are not rendered as text.
+Explicitly choose **Edit** before changing a file, then **Save** to write it.
+
+Remote file operations require Python 3 and batch-mode SSH. Their script and input are
+sent separately from terminal sessions.
+
+## LLM Chats
+
+The LLM Chats tab indexes provider-owned archives read-only. Local projects use:
+
+| Provider | Local archive root |
+| --- | --- |
+| Codex | `~/.codex/sessions/**/*.jsonl` |
+| Claude | `~/.claude/projects/**/*.jsonl` |
+
+Remote projects use the same locations under the selected SSH user's home directory.
+A bounded Python 3 scan runs on the remote host, filters by the remote project's
+normalized working directory, and returns base64-encoded normalized data. It has a
+20-second timeout, a 20 MB output cap, and a short per-host/project cache. The original
+JSONL files remain remote and unchanged.
+
+PanePilot normalizes user and assistant text, preserves provider session IDs, associates
+a conversation with a project when working directories match, and derives a title from
+the first user message or Claude summary.
+
+Search covers:
+
+- Title.
+- Working directory.
+- Complete user and assistant message text.
+
+Results show a matching snippet and match count; the selected transcript highlights
+matches and displays a shortened provider session ID. Local parsed files are cached by
+path, modification time, and size, then rescanned when those values change. Remote
+normalized scans use a separate five-second cache.
+
+Codex provider session IDs also allow a stopped linked terminal to resume its exact
+conversation. See [Terminal sessions](./terminals.mdx#codex-session-identity-and-resume).
+
+## Activity
+
+The Activity tab shows up to the 100 most recent events for the project. Events include:
+
+- Project creation, rename, archive, and restore.
+- Terminal creation and launch profile.
+- Terminal state changes and exits.
+- Terminal rename, pin, unpin, archive, restore, and deletion.
+- Whether an agent was launched with permission checks disabled.
+
+The activity log is PanePilot metadata, separate from provider transcripts and raw
+terminal output.
+
+## Repository shortcut
+
+At local project creation, PanePilot reads Git's `remote.origin.url`. When it can
+normalize a web URL, the project header and context menu offer **Repository**.
+The application only opens `http` or `https` URLs externally.

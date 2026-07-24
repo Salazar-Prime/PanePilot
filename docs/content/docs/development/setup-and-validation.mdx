@@ -1,0 +1,92 @@
+---
+title: Setup and validation
+description: Development commands, native dependency preparation, and restart requirements.
+icon: Wrench
+---
+
+## Desktop application
+
+Requirements:
+
+- Node.js 20.18 or newer.
+- npm.
+- A supported build toolchain for `node-pty`.
+
+Install and run:
+
+```bash
+npm install
+npm run dev
+```
+
+The project tracks `package-lock.json`. Do not add `pnpm-lock.yaml` unless the owner
+intentionally changes package managers.
+
+## Native Electron dependencies
+
+`node-pty` includes a native macOS `spawn-helper`. npm can reinstall the prebuilt helper
+without its executable bit, causing the otherwise opaque error:
+
+```text
+posix_spawnp failed
+```
+
+`postinstall`, `predev`, and `prestart` run
+`scripts/prepare-node-pty.mjs`. Keep all three guards. `predev` and `prestart` also run
+`scripts/prepare-electron.mjs`.
+
+## Restart requirements
+
+Renderer changes use Vite hot reload. Main-process and preload changes do not.
+
+After changing anything under `src/main/` or `src/preload/`:
+
+1. Stop the current `npm run dev`.
+2. Start it again.
+3. Create a new terminal when launch environment or tmux creation behavior changed.
+
+An already-running tmux server or session will not retroactively receive new launch
+arguments or environment.
+
+## Desktop validation
+
+```bash
+npm test
+npm run typecheck
+npm run build
+git diff --check
+```
+
+Run focused smoke tests for the behavior you touched. Main-process terminal work should
+cover at least local startup, tmux attachment, rename, stop, and app restart. SSH changes
+should preserve both remote tmux and PTY fallbacks.
+
+## Documentation application
+
+The Fumadocs site is isolated under `docs/` because it uses Next.js 16 and React 19 while
+the Electron renderer currently uses React 18.
+
+Use Node.js 22 or newer:
+
+```bash
+cd docs
+npm install
+npm run dev
+```
+
+Validate:
+
+```bash
+npm run typecheck
+npm run build
+```
+
+From the repository root, the equivalent commands are:
+
+```bash
+npm run docs:typecheck
+npm run docs:build
+```
+
+Documentation changes should also verify search, `/llms.txt`, `/llms-full.txt`, and at
+least one page's `.md` representation.

@@ -4,7 +4,20 @@ PanePilot is a desktop control center for local and SSH projects worked on by pe
 coding agents. It keeps project folders, persistent terminals, agent attention state,
 files, and activity in one Electron window.
 
-## Run it
+## Documentation
+
+The complete product, user, architecture, and development documentation lives in the
+Fumadocs site under [`docs/`](docs/README.md).
+
+```bash
+cd docs
+npm install
+npm run dev
+```
+
+Then open <http://localhost:3000>. The documentation site requires Node.js 22 or newer.
+
+## Run the desktop app
 
 Requirements:
 
@@ -26,10 +39,9 @@ npm run typecheck
 npm run build
 ```
 
-## Agent status fallback
+## Current agent status tracking
 
-PanePilot deliberately does not depend on provider hooks in this build. For Codex and
-Claude terminals it watches the rendered terminal screen:
+The current implementation watches the rendered terminal screen for Codex and Claude:
 
 - `esc to interrupt` visible → **Working**
 - the marker disappears after being visible → **Needs attention**

@@ -1,0 +1,122 @@
+---
+title: Terminal runtime
+description: How PanePilot creates, attaches, renders, persists, and tracks terminal sessions.
+icon: SquareTerminal
+---
+
+`TerminalManager` is the owner of live PTYs. Each attached session has a runtime
+containing:
+
+- A `node-pty` child.
+- A headless xterm instance.
+- An optional Codex/Claude screen detector.
+- A short debounce timer for screen scans.
+- A bounded retry timer for Codex provider-session discovery.
+- App-exit and current-session metadata.
+
+## Creation
+
+Starting a terminal:
+
+1. Resolves its project and connection.
+2. Validates a custom command when required.
+3. Checks whether tmux is available.
+4. Validates or generates a tmux-safe unique name.
+5. Persists the new `idle` session before process launch.
+6. Spawns its local or remote PTY.
+
+A failed process spawn can therefore leave a persisted session that records the launch
+attempt and can transition to an error.
+
+For a new Codex session, the runtime also polls provider archives for the unclaimed
+Codex session ID whose working directory and start time match the terminal. A
+`terminal:metadata` event refreshes the renderer after a successful link.
+
+## Local commands
+
+For a tmux-backed local session, PanePilot creates:
+
+```text
+tmux new-session -s <name> -c <project-folder> <launch-command>
+```
+
+Reattachment uses an exact session target:
+
+```text
+tmux attach-session -t =<name>
+```
+
+Without tmux, shell profiles spawn the configured shell with `-l`; other profiles use
+the configured shell with `-lc`.
+
+## Remote commands
+
+Remote sessions spawn local `ssh -tt`. The remote command first changes to the project
+folder, then creates or attaches to tmux when available. Agent and custom profiles are
+wrapped in the remote user's interactive login shell so normal remote PATH setup is
+applied.
+
+Remote tmux discovery, existence checks, and rename operations run separately with
+batch-mode SSH and short timeouts.
+
+## Exact Codex resume
+
+tmux persistence and provider resume solve different problems:
+
+- Reattachment reconnects xterm to a Codex process that is still running in tmux.
+- Provider resume starts a new Codex process for a stopped or errored terminal with
+  `codex resume <provider-session-id>`.
+
+Resume is limited to linked Codex terminals that are not archived. PanePilot uses the
+same project folder, connection, dangerous-mode setting, and terminal identity. It
+attaches instead if the named tmux session still exists.
+
+Provider session discovery reads `session_meta` records independently of lifecycle
+hooks. On startup PanePilot makes a best-effort pass over unlinked Codex terminals,
+using the local indexer or the remote indexer associated with the terminal's original
+connection.
+
+## Output and rendering
+
+Each PTY data chunk is handled in three independent paths:
+
+1. Append the raw bytes to the capped SQLite output.
+2. Send a `terminal:data` event to the active BrowserWindow.
+3. Write the data to headless xterm and schedule a screen scan.
+
+The renderer creates its own xterm with a 5,000-line scrollback and a fit addon. It
+subscribes to live data, attaches the session, replays saved output, then enables
+`onData` forwarding and focuses the terminal.
+
+Replaying while input forwarding is disabled is an important invariant. xterm can emit
+protocol replies while interpreting old output; forwarding those replies would write
+numeric garbage into the live PTY.
+
+## Reattachment
+
+If a tmux session has no current runtime, PanePilot launches an attach PTY. For an agent
+profile whose state was neither Ready nor Needs input, reattachment normalizes the state
+to Ready because the rendered-screen detector has no reliable continuity across the
+detached interval.
+
+A detached PTY backend cannot be recovered. PanePilot marks it completed with an
+activity explaining why.
+
+## Exit and shutdown
+
+An unexpected process exit maps code zero to `completed` and any non-zero code to
+`error`. A user-requested stop marks the session completed immediately and then tears
+down its backend.
+
+During application exit, attached PTYs and screen instances are disposed without
+changing stored terminal state. tmux sessions continue to run; plain PTY processes end.
+
+## Current activity detector
+
+The headless xterm exposes the rendered viewport, not the raw output stream. After a
+120 ms debounce, the detector searches visible text for `esc to interrupt`. Seeing it
+arms the turn and sets Working; seeing it disappear after being armed sets Needs
+attention.
+
+Raw terminal output is never modified to carry lifecycle metadata. If structured
+provider events are added later, they should travel through a separate channel.

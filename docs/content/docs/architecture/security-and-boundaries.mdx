@@ -1,0 +1,101 @@
+---
+title: Security and boundaries
+description: Trust boundaries, filesystem containment, remote execution, and destructive-action guards.
+icon: ShieldCheck
+---
+
+PanePilot intentionally combines a desktop renderer with powerful local and remote
+operations. Its safety model depends on keeping those operations narrow, validated, and
+visible.
+
+## Renderer trust boundary
+
+- Node integration is disabled.
+- Context isolation is enabled.
+- The renderer receives only the typed preload API.
+- Main-process handlers resolve IDs and validate the referenced objects again.
+
+The Electron renderer sandbox is currently disabled, so a renderer compromise would
+still make the preload surface security-critical. Do not expose raw `ipcRenderer`,
+arbitrary command execution, unrestricted filesystem paths, or generic shell helpers.
+
+## Filesystem containment
+
+Local and remote file services canonicalize both project root and requested path.
+Requests are rejected unless the final real path is the root itself or a descendant.
+
+This protects against:
+
+- `..` traversal.
+- Absolute-path escape.
+- Symlinks that resolve outside the project.
+
+Writes are limited to existing regular files no larger than 1 MB. The 1 MB limit is
+checked in both renderer behavior and trusted services; the service-side check is the
+actual security boundary.
+
+## Remote execution
+
+SSH host configuration remains in OpenSSH. PanePilot uses aliases instead of accepting
+arbitrary host flags from the renderer.
+
+Dynamic remote values are shell-quoted before insertion into command strings. Remote
+file operations encode a fixed Python script and send variable payloads as JSON over
+stdin. Non-interactive actions use timeouts and `BatchMode=yes`.
+
+Remote conversation scanning also executes a fixed Python script. It filters by project
+working directory before transfer, emits normalized message data instead of raw archive
+files, enforces time and output limits, and keeps its cache in memory.
+
+## Port forwards
+
+Every forward:
+
+- Binds only to `127.0.0.1`.
+- Uses `ExitOnForwardFailure=yes`.
+- Clears inherited forwarding configuration.
+- Uses keepalives.
+- Stops when PanePilot exits.
+
+Forward target host input permits only hostname and IPv4-style characters without
+spaces. Ports must be integers from 1 through 65,535.
+
+## External URLs and native actions
+
+Repository actions accept only `http` or `https` URLs before delegating to Electron's
+external browser. Opening a project folder is limited to local projects and uses the
+stored folder rather than a renderer-supplied arbitrary path.
+
+## Dangerous agent mode
+
+Permission bypass is:
+
+- Off by default.
+- Chosen for one agent terminal at a time.
+- Confirmed immediately before launch.
+- Persistently marked as `unsafe`.
+- Recorded in activity.
+
+It must never become a silent application-wide preference.
+
+## Destructive operations
+
+Archiving is the preferred reversible action. Permanent terminal deletion:
+
+- Is allowed only for `completed` or `error` sessions.
+- Requires UI confirmation.
+- Removes PanePilot's saved output and linked events.
+- Does not touch provider archives.
+
+The stored Codex provider ID is immutable after linking. This prevents an existing
+terminal from being silently redirected to a different provider conversation.
+
+Project archiving requires all of its terminals to be stopped. Project deletion is not
+currently exposed.
+
+## Sensitive data
+
+Saved terminal output and provider chat archives can contain secrets. The SQLite
+database is local application data but is not encrypted by PanePilot. Documentation,
+logs, error messages, and future telemetry must not copy terminal output or conversation
+content by default.

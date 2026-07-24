@@ -1,0 +1,89 @@
+---
+title: Processes and IPC
+description: Electron initialization, the preload contract, and cross-boundary change requirements.
+icon: Cable
+---
+
+## Startup sequence
+
+After Electron becomes ready, the main process:
+
+1. Opens the SQLite store under Electron's user-data directory and runs migrations.
+2. Parses SSH aliases and synchronizes connection records.
+3. Creates local and remote conversation indexers.
+4. Creates the terminal manager with both indexers.
+5. Creates the port-forward manager.
+6. Registers IPC handlers.
+7. Creates the BrowserWindow.
+8. Reconciles provider session IDs for existing unlinked Codex terminals.
+
+The BrowserWindow loads the Vite development URL in development and the built renderer
+HTML in packaged or preview mode.
+
+On quit, PanePilot shuts down attached terminal runtimes, stops all live port-forward
+processes, and closes SQLite. Killing a local PTY attachment does not kill a tmux server
+session; this is what permits tmux-backed terminals to survive app closure.
+
+## BrowserWindow boundary
+
+The window is created with:
+
+```ts
+{
+  contextIsolation: true,
+  nodeIntegration: false,
+  sandbox: false
+}
+```
+
+The renderer cannot import Node modules directly. It reaches privileged behavior only
+through `window.projectConsole`, exposed by the preload script.
+
+## API groups
+
+The preload contract is organized by capability:
+
+| Group | Representative operations |
+| --- | --- |
+| `connections` | List and test |
+| `projects` | List, create, rename, archive, restore, choose folder, open repository |
+| `terminals` | Start, attach, write, resize, acknowledge, resume Codex, rename, pin, stop, archive, restore, delete |
+| `files` | List, preview, save |
+| `remoteFolders` | Browse directories on an SSH connection |
+| `conversations` | List and read local or SSH-host provider archives |
+| `portForwards` | List, create/start, stop, delete, subscribe to changes |
+| `system` | Copy text and open a local project folder |
+
+Terminal data, state, and provider-metadata links, plus port-forward changes, flow from
+main to renderer as events. Every preload subscription returns an unsubscribe function;
+React components call those cleanup functions when they unmount.
+
+## Adding a cross-boundary capability
+
+A complete IPC change normally touches five places:
+
+1. Add shared request, response, and event types in `src/shared/types.ts`.
+2. Register and validate the main-process handler in `src/main/index.ts`.
+3. Expose the operation through `src/preload/index.ts`.
+4. Keep `src/renderer/src/env.d.ts` aligned with the shared window type.
+5. Consume the operation in a renderer service or component.
+
+Treat inputs from the renderer as untrusted even though it is bundled with the
+application. Main-process handlers must re-resolve IDs, verify connection kinds, bound
+paths, validate ports and names, and enforce lifecycle guards.
+
+## Refresh model
+
+The renderer currently reloads complete project aggregates through `projects:list`
+after most mutations. Live terminal events patch visible state more quickly, then
+periodic or mutation-driven refreshes reconcile the full project tree.
+
+Each returned `Project` is hydrated with all of its terminal sessions and its 100 most
+recent activities. This model keeps renderer state straightforward at the cost of
+larger list payloads as the number of projects and sessions grows.
+
+## Development consequence
+
+Vite hot reload updates renderer code only. Any change to main-process or preload code
+requires stopping and restarting `npm run dev`; otherwise the renderer may be calling an
+older IPC surface.

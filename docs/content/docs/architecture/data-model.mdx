@@ -1,0 +1,132 @@
+---
+title: Data model
+description: SQLite tables, aggregate state, migrations, and data ownership.
+icon: Database
+---
+
+On macOS, PanePilot stores its database at:
+
+```text
+~/Library/Application Support/project-console/project-console.sqlite
+```
+
+Electron supplies the parent user-data path on other platforms. The store uses
+`node:sqlite`'s synchronous API, enables foreign keys, and runs in WAL journal mode.
+
+## Entity relationships
+
+```text
+connections 1 ──────── * projects
+projects    1 ──────── * terminal_sessions
+projects    1 ──────── * activities
+terminal_sessions 1 ── * activities
+terminal_sessions 1 ── * agent_events
+connections 1 ──────── * port_forwards
+```
+
+## Tables
+
+### `connections`
+
+Stores stable local or SSH connection identities:
+
+- `id`
+- `kind`: `local` or `ssh`
+- `name`
+- `ssh_alias`
+
+SSH records are synchronized additively from config. The current startup code upserts
+present aliases but does not delete records for aliases removed from SSH config.
+
+### `projects`
+
+Stores base project identity and current location:
+
+- Stable `id` and `type`.
+- Display `name`.
+- Required `connection_id` and `folder`.
+- Optional `repository_url`.
+- Aggregate `state`.
+- `archived`, `created_at`, and `updated_at`.
+- Legacy `parent_id`.
+
+`parent_id` remains for migration compatibility and is cleared on startup. PanePilot
+does not implement subprojects.
+
+### `terminal_sessions`
+
+Stores:
+
+- Project ownership, display name, and launch profile.
+- Optional immutable provider session identity, currently used for exact Codex resume.
+- Optional custom command.
+- `tmux` or `pty` backend and optional tmux name.
+- Current lifecycle state.
+- Dangerous-mode, archive, and pinned flags.
+- Capped raw terminal output.
+- Created and updated timestamps.
+
+The output column retains only the latest 512 KiB. `provider_session_id` is separate
+from both the PanePilot session ID and tmux name.
+
+### `activities`
+
+Stores project timeline entries with an optional terminal session, event kind, human
+message, and timestamp. Hydrated projects include the latest 100 events.
+
+### `agent_events`
+
+Provides storage for idempotent structured provider events associated with a terminal.
+The current checkout does not ingest provider hooks, so this table is presently only a
+forward-compatible schema and deletion target.
+
+### `port_forwards`
+
+Stores a saved forward definition:
+
+- Connection.
+- Name.
+- Fixed bind address.
+- Local port.
+- Remote host and port.
+- Creation time.
+
+Live process state and errors are in memory and are intentionally absent from SQLite.
+
+## Aggregate project state
+
+Whenever a terminal state, archive flag, or deletion changes, the store recalculates
+the project state from non-archived terminals. It chooses the first visible state in
+this priority list:
+
+```ts
+[
+  'needs-input',
+  'needs-attention',
+  'running',
+  'response-ready',
+  'idle',
+  'error',
+  'completed',
+]
+```
+
+With no visible terminals, the project state is `idle`.
+
+## Migration strategy
+
+The schema is created idempotently, then additive migrations inspect `PRAGMA
+table_info` and add missing columns. Compatibility updates copy data from older column
+names such as `host`, `label`, `command`, `backend_name`, `dangerous`, and `content`.
+
+Migrations must be forward-compatible with an existing user database. Do not replace
+the database, drop user data, or assume a fresh schema during development.
+
+## Ownership and deletion
+
+SQLite owns PanePilot metadata, not provider archives or project files. Terminal
+deletion removes its session and linked `agent_events`; foreign-key cascade removes
+session-owned activity. PanePilot then adds a project-level deletion activity.
+
+Project deletion is not implemented. Archiving is the reversible project-level cleanup
+mechanism.

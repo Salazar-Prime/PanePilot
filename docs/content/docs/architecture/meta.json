@@ -1,0 +1,12 @@
+{
+  "title": "Architecture",
+  "icon": "Boxes",
+  "defaultOpen": true,
+  "pages": [
+    "index",
+    "process-and-ipc",
+    "data-model",
+    "terminal-runtime",
+    "security-and-boundaries"
+  ]
+}

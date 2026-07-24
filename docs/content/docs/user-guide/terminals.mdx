@@ -1,0 +1,121 @@
+---
+title: Terminal sessions
+description: Launch profiles, tmux persistence, organization, and terminal lifecycle operations.
+icon: SquareTerminal
+---
+
+## Launch profiles
+
+PanePilot supports four profiles:
+
+| Profile | Local behavior | Remote behavior |
+| --- | --- | --- |
+| Shell | Starts the configured shell as a login shell | Starts the remote login shell |
+| Codex | Executes `codex` | Executes `codex` through an interactive login shell |
+| Claude Code | Executes `claude` | Executes `claude` through an interactive login shell |
+| Custom | Executes the command through the configured shell | Executes the command through an interactive login shell |
+
+The interactive login shell for remote agent and custom profiles helps the remote host
+load the environment that makes commands such as `codex` and `claude` available.
+
+## tmux and PTY backends
+
+PanePilot checks for tmux locally through `PATH` and common system or Homebrew
+locations. For SSH projects it performs a short batch-mode `command -v tmux` check.
+
+When tmux is available:
+
+- The session persists after its renderer view detaches.
+- The PanePilot terminal name and tmux session name are identical.
+- Reopening the terminal attaches to the existing tmux session.
+- The terminal context menu can copy an exact local or SSH tmux attach command.
+
+When tmux is unavailable, PanePilot uses a plain PTY. PTY sessions cannot survive an app
+restart; if PanePilot later tries to restore one, it marks the session completed and
+records that it was non-persistent.
+
+## Naming and rename
+
+Names must be non-empty, no longer than 80 characters, and contain neither colons nor
+control characters. PanePilot makes generated names unique against existing tmux
+sessions on the same connection.
+
+Renaming a tmux-backed terminal is one operation:
+
+1. Check whether the target tmux name already exists.
+2. Rename the live tmux session when it exists.
+3. Persist the PanePilot and tmux names together.
+
+The rename is rejected if another tmux session already uses the target name.
+
+## Pinning and sorting
+
+Pinning is persisted in SQLite. Pinned terminals remain first; unpinned terminals follow
+the selected sort mode:
+
+- Newest first.
+- Oldest first.
+- Name A–Z.
+- Needs attention, using the system state priority.
+
+The sort preference is stored in renderer `localStorage` and applies consistently to
+workspace tabs and sidebar terminal rows.
+
+## Codex session identity and resume
+
+PanePilot stores a Codex provider session ID separately from the PanePilot terminal ID.
+After a new Codex terminal launches, it searches Codex `session_meta` archive records
+for an unclaimed session created at the same time in the same project folder. Discovery
+works against local archives or, for SSH projects, on the original remote host.
+
+Discovery is best-effort during launch, on terminal exit, and at application startup for
+older unlinked Codex terminals. Once linked, the provider ID cannot be silently replaced
+by a different one. The terminal menu can copy it.
+
+A stopped or errored, non-archived Codex terminal with a provider ID offers **Resume
+Codex chat**. If no persistent tmux process remains, PanePilot starts:
+
+```text
+codex resume <exact-provider-session-id>
+```
+
+It does so in the terminal's original project folder and original local or SSH
+connection. Claude provider IDs are shown in conversation details, but Claude terminal
+resume is not implemented.
+
+## Saved output
+
+Raw PTY data is sent to xterm and appended to SQLite. PanePilot keeps the most recent
+512 KiB per terminal. When a renderer attaches, it replays saved output before it starts
+forwarding xterm input to the PTY. This replay guard prevents terminal protocol replies
+from being written back as user input.
+
+## Stop, archive, and delete
+
+Stopping a tmux terminal asks tmux to kill the session; stopping a PTY kills its child
+process. PanePilot then marks the session `completed`.
+
+Only `completed` or `error` sessions can be archived or deleted:
+
+- **Archive** hides the session from normal tabs and sidebar lists while preserving
+  output and activity.
+- **Restore** makes an archived terminal visible again.
+- **Delete** permanently removes PanePilot's saved session row, saved output, and linked
+  agent-event rows.
+
+Permanent deletion requires confirmation in the UI. It does not remove provider-owned
+Codex or Claude archive files. Deleting a linked Codex terminal therefore removes
+PanePilot's link, not the resumable provider conversation itself.
+
+## Dangerous agent mode
+
+For agent profiles, **Disable permission checks** adds:
+
+- Codex: `--dangerously-bypass-approvals-and-sandbox`
+- Claude Code: `--dangerously-skip-permissions`
+
+The option is off for every launch, available only for Codex and Claude, and confirmed
+immediately before launch. An `unsafe` badge remains visible on the terminal, and the
+activity timeline records that permission checks were disabled.
+
+Use it only in an isolated or disposable environment.

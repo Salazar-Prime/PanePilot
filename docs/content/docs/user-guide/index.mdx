@@ -1,0 +1,75 @@
+---
+title: User guide
+description: The operating model and primary workflows in PanePilot.
+icon: BookOpen
+---
+
+PanePilot organizes work from broadest to narrowest:
+
+```text
+Connection
+└── Project
+    ├── Terminal session
+    ├── Files
+    ├── Local or remote LLM chat archives
+    └── Activity
+```
+
+A **connection** identifies where work runs. A **project** gives a stable identity to a
+folder on that connection. A **terminal session** is one shell, coding agent, or custom
+command in the project. Files, archive search, and activity provide context around
+those terminals.
+
+## The application shell
+
+- The top bar shows the current project type and project identity.
+- The sidebar groups projects by connection and lists live terminals beneath each
+  project.
+- The main workspace switches between Terminals, Files, LLM Chats, and Activity.
+- The status bar counts active projects, terminals marked Working, and terminals in an
+  attention state.
+
+Right-click connection, project, and terminal rows to reveal actions that belong to
+that object. Common actions are also available beside the selected project or terminal.
+
+## Core workflows
+
+<Cards>
+  <Card
+    title="Projects and connections"
+    description="Create, navigate, rename, and archive workspaces."
+    href="/docs/user-guide/projects-and-connections"
+    icon="FolderKanban"
+  />
+  <Card
+    title="Terminal sessions"
+    description="Launch, persist, organize, stop, and clean up terminals."
+    href="/docs/user-guide/terminals"
+    icon="SquareTerminal"
+  />
+  <Card
+    title="Attention and status"
+    description="Interpret current agent state and its limitations."
+    href="/docs/user-guide/attention-and-status"
+    icon="Activity"
+  />
+  <Card
+    title="Files and history"
+    description="Browse project files and search local agent archives."
+    href="/docs/user-guide/files-and-history"
+    icon="Files"
+  />
+</Cards>
+
+## What PanePilot does not own
+
+PanePilot stores its project metadata, activity, saved terminal output, and saved port
+forward definitions. It does not take ownership of:
+
+- Your project files outside explicit saves from the Files tab.
+- Codex or Claude provider archives.
+- Arbitrary tmux sessions that were not created as PanePilot terminals.
+- SSH credentials or agent configuration.
+
+Deleting a PanePilot terminal therefore does not delete the corresponding Codex or
+Claude conversation archive.

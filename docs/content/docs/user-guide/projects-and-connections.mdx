@@ -1,0 +1,74 @@
+---
+title: Projects and connections
+description: How PanePilot identifies, groups, renames, and archives work.
+icon: FolderKanban
+---
+
+## Connections
+
+PanePilot creates a built-in local connection with the stable ID `local` and the display
+name **This Mac**. At startup it reads `~/.ssh/config` and adds one connection for each
+concrete `Host` alias. An SSH connection has an ID in the form `ssh:<alias>`.
+
+Projects are grouped under their connection in the sidebar. Empty SSH groups are hidden;
+the local group remains visible so the first project can be created.
+
+Connection context actions include:
+
+- Create a project on that connection.
+- Test an SSH connection.
+- Manage saved port forwards for an SSH connection.
+- Copy the corresponding `ssh <alias>` command.
+
+## Project identity
+
+Every project has:
+
+- A stable UUID.
+- A type. Only `terminal` is currently supported.
+- A display name.
+- One connection and one folder on that connection.
+- Optional repository URL metadata.
+- Aggregate state, archive state, and timestamps.
+
+A name is presentation, not identity. Renaming a project changes neither its UUID nor
+its location.
+
+## Local and remote creation
+
+Local creation uses the operating system's directory chooser and rejects paths that are
+not existing directories. Remote creation starts in the SSH user's home directory,
+shows subdirectories, follows canonical paths, and stores the selected remote path.
+
+The remote browser requires `python3` on the host. PanePilot sends a small base64-wrapped
+Python script over SSH and exchanges JSON over standard input and output.
+
+## Project actions
+
+Depending on connection and repository metadata, a project menu can:
+
+- Open the project.
+- Rename it.
+- Start a terminal.
+- Open its local folder in Finder.
+- Open its repository URL.
+- Copy its local path or `<ssh-alias>:<remote-path>`.
+- Archive it.
+
+Remote repository discovery is not currently implemented. The Repository action appears
+only when a URL was discovered for a local project at creation time.
+
+## Archiving projects
+
+A project can be archived only when every terminal is `completed` or `error`. This
+guard prevents a live workspace from silently disappearing from normal navigation.
+
+Archiving:
+
+- Hides the project from live connection groups.
+- Moves it to **Archived projects**.
+- Excludes it and its terminals from live status counts.
+- Preserves terminals, output, activity, files, and provider-owned archives.
+
+Restoring returns the project to normal navigation. There is no project-deletion
+workflow in the current implementation.

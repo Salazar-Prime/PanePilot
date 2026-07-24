@@ -1,0 +1,13 @@
+{
+  "title": "User guide",
+  "icon": "BookOpen",
+  "defaultOpen": true,
+  "pages": [
+    "index",
+    "projects-and-connections",
+    "terminals",
+    "attention-and-status",
+    "files-and-history",
+    "ssh-and-port-forwards"
+  ]
+}

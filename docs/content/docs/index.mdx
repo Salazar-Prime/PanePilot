@@ -1,0 +1,87 @@
+---
+title: PanePilot
+description: A desktop control center for projects worked on by people and coding agents.
+icon: PanelsTopLeft
+---
+
+PanePilot brings local projects, SSH workspaces, persistent terminals, coding-agent
+attention, files, provider chat archives, and project activity into one desktop window.
+The package is still named `project-console`, but the product name is PanePilot.
+
+<Cards>
+  <Card
+    title="Get started"
+    description="Install dependencies, launch the desktop app, and add a project."
+    href="/docs/getting-started"
+    icon="Rocket"
+  />
+  <Card
+    title="Use PanePilot"
+    description="Learn the project, terminal, file, history, and SSH workflows."
+    href="/docs/user-guide"
+    icon="BookOpen"
+  />
+  <Card
+    title="Architecture"
+    description="Understand process boundaries, persistence, IPC, and safety controls."
+    href="/docs/architecture"
+    icon="Boxes"
+  />
+  <Card
+    title="Develop"
+    description="Run checks and extend the application without breaking its invariants."
+    href="/docs/development"
+    icon="CodeXml"
+  />
+</Cards>
+
+## What exists today
+
+The current application supports one project type: a **terminal project** tied to one
+folder and one connection. A connection is either the local machine or a concrete SSH
+alias read from `~/.ssh/config`.
+
+Within a project, PanePilot provides:
+
+- Multiple terminal sessions with login shell, Codex, Claude Code, and custom-command
+  launch profiles.
+- tmux-backed persistence when tmux is available, with a plain PTY fallback.
+- Direct terminal jumps from both the sidebar and workspace tabs.
+- Pinning, sorting, rename, stop, archive, restore, and permanent deletion workflows.
+- Exact Codex conversation identity and restart through `codex resume <session-id>`.
+- Local and remote file browsing, 1 MB previews, and explicit Monaco-based editing.
+- Read-only search across local and remote Codex and Claude conversation archives.
+- A project activity timeline and cross-project attention counts.
+- Local Git remote discovery and a repository shortcut.
+- SSH connection tests and loopback-only SSH port forwards.
+
+## Current release boundary
+
+> This documentation describes the code in commit `817a705` as reviewed on July 23,
+> 2026. It distinguishes implemented behavior from target architecture.
+
+In particular, the current code tracks Codex and Claude turns by observing the rendered
+terminal marker `esc to interrupt`. Structured provider hooks are a target direction,
+not part of this checkout. Writing projects, project deletion, path-aware terminal
+links, and remote repository discovery are also not implemented.
+
+## Product shape
+
+PanePilot is intentionally a single desktop UI:
+
+| Region | Responsibility |
+| --- | --- |
+| Top bar | Project type, selected project identity, repository action, and settings |
+| Left sidebar | Connections, projects, terminals, state, and direct navigation |
+| Main workspace | Type-specific tools: Terminals, Files, LLM Chats, and Activity |
+| Bottom status bar | Live project, working-agent, and attention totals |
+
+The application is not a general terminal multiplexer. It uses terminal sessions as a
+project capability and adds project identity, agent-oriented state, archives, files,
+and remote operations around them.
+
+## Start reading
+
+If you want to use the app, continue with [Getting started](./getting-started.mdx).
+If you are changing the code, read [Architecture](./architecture/index.mdx) and
+[Engineering invariants](./development/engineering-invariants.mdx) first.

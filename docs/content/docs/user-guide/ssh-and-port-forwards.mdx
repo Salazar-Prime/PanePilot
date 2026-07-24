@@ -1,0 +1,78 @@
+---
+title: SSH and port forwards
+description: Remote execution, connection tests, file operations, and forwarding safety.
+icon: Network
+---
+
+## SSH connections
+
+PanePilot delegates host, user, key, proxy, and other connection details to OpenSSH
+aliases in `~/.ssh/config`. It does not maintain a separate credential store.
+
+Interactive remote terminals use:
+
+```bash
+ssh -tt <alias> <remote-command>
+```
+
+Non-interactive connection tests, folder and file operations, tmux checks, rename
+checks, and port forwards use batch mode with bounded timeouts. This prevents background
+operations from hanging on an invisible password prompt.
+
+## Test a connection
+
+Right-click an SSH connection and choose **Test SSH connection**. PanePilot runs a
+no-terminal command with:
+
+- `BatchMode=yes`.
+- A six-second OpenSSH connection timeout.
+- `ClearAllForwardings=yes`.
+
+Success reports the alias and measured round-trip duration. Failure reports the last
+OpenSSH error line when available.
+
+## Remote terminal persistence
+
+If the remote host has tmux, PanePilot creates or attaches to a named tmux session after
+changing to the project folder. If tmux is missing, it launches the selected profile in
+a remote PTY attached to the SSH process.
+
+tmux discovery and lifecycle management require non-interactive authentication. The
+initial interactive terminal can still expose normal OpenSSH prompts in its xterm view.
+
+## Port forwards
+
+Right-click an SSH connection and choose **Manage port forwards**. A saved definition
+contains:
+
+- Name.
+- Local port.
+- Remote host.
+- Remote port.
+- The fixed bind address `127.0.0.1`.
+
+PanePilot starts OpenSSH with behavior equivalent to:
+
+```bash
+ssh -N -T \
+  -o BatchMode=yes \
+  -o ExitOnForwardFailure=yes \
+  -o ClearAllForwardings=yes \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -L 127.0.0.1:<local-port>:<remote-host>:<remote-port> \
+  <alias>
+```
+
+The loopback-only bind prevents the forwarded local port from being exposed on other
+network interfaces. Duplicate running local ports are rejected.
+
+## Persistence semantics
+
+Forward **definitions** are stored in SQLite. Running SSH processes are not restored
+automatically after a PanePilot restart. All running forwards receive `SIGTERM` during
+application shutdown.
+
+A running forward must be stopped before its saved definition can be deleted. If an SSH
+process exits unexpectedly, the UI preserves its definition and reports an error state
+with the most recent SSH diagnostic.

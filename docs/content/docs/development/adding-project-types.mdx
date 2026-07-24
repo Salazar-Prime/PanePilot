@@ -1,0 +1,96 @@
+---
+title: Adding project types
+description: Extend PanePilot through registries, type-owned services, and reusable capabilities.
+icon: Blocks
+---
+
+PanePilot currently supports only terminal projects, but the renderer and main process
+already contain the beginnings of a registry architecture.
+
+## What exists now
+
+The renderer's `projectTypeRegistry` maps a `ProjectType` to:
+
+```ts
+interface ProjectTypeDefinition {
+  id: ProjectType
+  label: string
+  description: string
+  capabilities: Array<
+    'terminal' | 'files' | 'repository' | 'agent-history'
+  >
+  Workspace: React.ComponentType<ProjectWorkspaceProps>
+}
+```
+
+The `terminal` definition selects `TerminalProjectWorkspace`. Terminal-specific
+workspace content is no longer embedded directly in `App.tsx`, and Files, LLM Chats,
+and Activity are reusable panel components.
+
+The main process has a `projectTypeServices` map. Its terminal service currently owns
+creation validation, including the local-folder existence check.
+
+## Remaining single-type assumptions
+
+Before a second type can be added safely:
+
+- `ProjectType` is still the literal `'terminal'`.
+- `CreateProjectInput` has no project type or type-specific payload.
+- The main creation handler always looks up the terminal service.
+- `Store.createProject` always writes type `terminal`.
+- Every project requires `connection_id` and `folder`.
+- The New Project dialog is hard-coded around local or remote folder selection.
+- The service registry validates but does not own create, delete, or summary behavior.
+
+Do not paper over these assumptions with fake folders or fake local connections.
+
+## Target separation
+
+Separate:
+
+1. **Base identity** — ID, type, name, timestamps, and optional location identity.
+2. **Type-owned data** — a dedicated table and service keyed by `project_id`.
+3. **Reusable capabilities** — Files, Repository, Terminals, Agent history, and Search.
+
+A renderer definition may choose capabilities and a workspace. It should not own
+persistence. A main-process service should validate and persist its type-specific input.
+
+## Recommended sequence
+
+1. Decide whether all project types require a folder and connection.
+2. If not, migrate the base location model so those fields can be genuinely absent.
+3. Extend `ProjectType` and add discriminated creation input types.
+4. Extend the renderer definition with type-aware creation fields.
+5. Make the main service registry own type validation and creation behavior.
+6. Add a type-specific table through a forward-compatible migration.
+7. Add type-specific IPC and mirror it through shared types, preload, and renderer
+   declarations.
+8. Dispatch workspace, available tabs, actions, labels, and empty states through the
+   registry.
+9. Add creation, reload, switching, archive, and deletion tests for both types.
+
+Avoid a large `if (project.type === ...)` chain across the application shell.
+
+## Writing projects
+
+Writing was part of the original vision but is deliberately not implemented. A possible
+type-owned table is:
+
+```text
+writing_projects
+  project_id         PRIMARY KEY → projects.id
+  document_root      nullable path or workspace identity
+  primary_document   nullable document identity
+  workflow_state     idea | outlining | drafting | revising | complete
+  settings_json
+```
+
+Owner decisions are required first:
+
+- Must every writing project have a local or remote folder?
+- Is the primary unit one document, a collection, or both?
+- Are drafts Markdown files, database records, or user-selectable?
+- Do writing agents use Codex/Claude terminals, a direct API, or both?
+- What sidebar state replaces terminal-centric status for writing workflows?
+
+Do not implement the writing type until these questions are answered.

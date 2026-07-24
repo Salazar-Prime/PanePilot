@@ -1,0 +1,71 @@
+---
+title: Roadmap and known gaps
+description: Implemented boundaries, next architectural work, and decisions still needed.
+icon: Map
+---
+
+This page separates current implementation gaps from settled product direction. It is
+not a delivery schedule.
+
+## Agent lifecycle
+
+The shared state model anticipates structured Codex and Claude lifecycle events, but the
+current runtime uses a rendered-screen fallback. The next implementation should:
+
+- Add provider events without injecting metadata into raw terminal output.
+- Preserve existing provider settings and require clear user approval for remote setup.
+- Make Needs input sticky until terminal input or stronger execution evidence clears it.
+- Distinguish direct questions, permission prompts, completed answers, and runtime
+  failures.
+- Keep startup at Ready and exclude shell/custom profiles.
+- Reconnect and deduplicate remote event streams.
+
+The `agent_events` table exists, but the current checkout has no event monitor, hook
+installer, or remote follower.
+
+## Conversation history
+
+- Move search to SQLite FTS when in-memory scans become too expensive.
+- Track file version and modification metadata for incremental indexing.
+- Add durable incremental indexing for remote archives instead of short-lived full
+  remote scans.
+- Keep all provider archives read-only.
+
+## Project types
+
+- Finish type-aware creation and persistence services.
+- Decide whether base project location is optional.
+- Add a type-specific data table for every new type.
+- Resolve the open writing-project product questions before implementation.
+
+## Project and connection management
+
+- Add project deletion with explicit ownership and confirmation semantics.
+- Add persistent connection health diagnostics.
+- Improve repository discovery for remote projects.
+- Define behavior for SSH aliases removed from config while projects still reference
+  their stored connection rows.
+
+## Terminal experience
+
+- Add path-aware terminal links with optional line and column navigation.
+- Improve persistent-session recovery diagnostics.
+- Expand focused terminal-manager and Electron integration tests.
+
+Although file-looking terminal links are part of the product direction, the current
+`ManagedTerminal` does not register an xterm link provider.
+
+## Packaging
+
+- Make any future lifecycle hook installation safe in packaged builds rather than
+  referring to a development checkout.
+- Add a release and signing workflow.
+- Verify platform-specific storage paths and native dependency preparation beyond the
+  current macOS-centered development flow.
+
+## Documentation
+
+- Keep the current-behavior boundary synchronized with code.
+- Add screenshots after the visual design stabilizes.
+- Add deployment configuration when a hosting target is chosen.
+- Consider versioned docs once public releases need long-lived historical guidance.

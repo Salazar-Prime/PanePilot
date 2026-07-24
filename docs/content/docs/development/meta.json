@@ -1,0 +1,13 @@
+{
+  "title": "Development",
+  "icon": "CodeXml",
+  "defaultOpen": false,
+  "pages": [
+    "index",
+    "setup-and-validation",
+    "engineering-invariants",
+    "adding-project-types",
+    "testing",
+    "roadmap"
+  ]
+}

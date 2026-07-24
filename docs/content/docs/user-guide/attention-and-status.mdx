@@ -1,0 +1,78 @@
+---
+title: Attention and status
+description: What terminal state means today, how it is detected, and where it is shown.
+icon: Activity
+---
+
+Agent state describes what PanePilot believes the current terminal needs. The shared
+model includes seven states:
+
+| Internal state | UI label | Meaning in the current implementation |
+| --- | --- | --- |
+| `idle` | Ready | The session is open and not currently detected as working |
+| `running` | Working | A Codex or Claude working marker is visible |
+| `needs-input` | Needs input | Reserved in the shared model; not produced by current screen tracking |
+| `response-ready` | Response ready | Reserved in the shared model; not produced by current screen tracking |
+| `needs-attention` | Needs attention | A previously visible working marker disappeared |
+| `completed` | Stopped | The terminal process or tmux session ended normally or was stopped |
+| `error` | Error | The terminal exited with a non-zero code |
+
+## Detection today
+
+Only Codex and Claude profiles receive a screen detector. The detector examines the
+current rendered terminal viewport after output settles:
+
+```text
+"esc to interrupt" appears
+        │
+        ▼
+     running
+        │
+        │ marker later disappears
+        ▼
+ needs-attention
+        │
+        │ terminal is opened or reselected
+        ▼
+       idle
+```
+
+Shell and custom-command terminals are excluded, so ordinary output cannot create an
+agent Working state.
+
+> Screen tracking is deliberately narrow but inherently provider-UI-dependent. It
+> cannot reliably distinguish a completed answer from a direct question or permission
+> prompt. Structured provider lifecycle events are the intended long-term replacement.
+
+## Where status appears
+
+- A state dot on every project and terminal row.
+- An animated Working indication for `running`.
+- An attention badge on `needs-input`, `needs-attention`, or `response-ready`.
+- Aggregate Working and attention counts in the bottom status bar.
+- State-change entries in the project Activity tab.
+
+## Project aggregation
+
+The project state is the highest-priority state among non-archived sessions:
+
+```text
+needs-input
+needs-attention
+running
+response-ready
+idle
+error
+completed
+```
+
+This ordering prioritizes actionable live work over passive or ended sessions. Archived
+terminals do not participate in the project aggregate.
+
+## Important limitation
+
+The shared state names express the target product semantics, but the current detector
+only transitions agent sessions through `idle`, `running`, and `needs-attention`, plus
+process-derived `completed` or `error`. Do not interpret a Ready state as proof that a
+provider is at a prompt, and do not interpret Needs attention as proof that the last
+message was a direct question.

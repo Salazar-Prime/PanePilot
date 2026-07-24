@@ -1,0 +1,87 @@
+---
+title: Testing
+description: Existing test coverage and the highest-value additions.
+icon: TestTubeDiagonal
+---
+
+The current test suite uses Vitest:
+
+```bash
+npm test
+```
+
+## Covered today
+
+| Suite | Focus |
+| --- | --- |
+| `conversation-indexer.test.ts` | Codex and Claude archive parsing and normalized messages |
+| `remote-conversation-indexer.test.ts` | Remote normalization payloads, server-side filtering, and optional SSH smoke coverage |
+| `file-service.test.ts` | Local file listing, preview limits, and root containment |
+| `screen-activity-detector.test.ts` | Working-marker transitions and acknowledgment |
+| `session-sort.test.ts` | Pinning and every terminal sort mode |
+
+These tests exercise pure or bounded services. The SSH integration case is opt-in
+through `PANEPILOT_TEST_SSH_ALIAS` and `PANEPILOT_TEST_REMOTE_PROJECT`. There are no
+formal Electron integration tests yet.
+
+## Test design principles
+
+- Prefer stable units at trust boundaries: path containment, command validation, state
+  transitions, and archive parsing.
+- Use temporary directories for filesystem behavior.
+- Do not read or mutate the developer's real provider archives, SSH config, tmux server,
+  or application database.
+- Test both acceptance and rejection paths.
+- Keep shell and custom profiles out of LLM state detection tests.
+- Preserve exact state priority and sticky-state semantics when structured events land.
+
+## High-value missing coverage
+
+### Store
+
+- Migrate representative older schemas without data loss.
+- Enforce stopped-session archive and delete guards.
+- Recalculate project state after state, archive, and deletion changes.
+- Flatten legacy `parent_id`.
+- Preserve output caps and activity retention behavior.
+
+### Terminal manager
+
+- Select tmux versus PTY for local and SSH connections.
+- Generate and validate unique tmux-safe names.
+- Rename PanePilot and tmux identities atomically.
+- Mark detached PTY sessions completed.
+- Keep application shutdown from falsely completing persistent sessions.
+- Link one unclaimed provider session per Codex terminal and resume by the exact ID on
+  both local and SSH connections.
+
+Process tests should inject or wrap spawn behavior rather than depend on the machine's
+actual tmux server.
+
+### IPC
+
+- Reject invalid connection or project IDs.
+- Reject remote requests against local-only operations and vice versa.
+- Preserve path, URL, port, and lifecycle validation in main handlers.
+- Verify preload listener cleanup.
+
+### Renderer
+
+- Create local and remote projects.
+- Switch projects and sessions.
+- Preserve active-session fallback when a terminal is archived.
+- Require confirmation for dangerous mode and permanent deletion.
+- Exclude archived projects and sessions from live counts.
+
+## Documentation validation
+
+The docs site uses generated Fumadocs content types and Next.js route types:
+
+```bash
+cd docs
+npm run typecheck
+npm run build
+```
+
+The production build is also a content test: it compiles every MDX page and generates
+each static documentation route.

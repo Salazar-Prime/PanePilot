@@ -1,0 +1,77 @@
+---
+title: Engineering invariants
+description: The product and implementation rules every change must preserve.
+icon: ListChecks
+---
+
+These rules are more important than local convenience. A change that violates one
+needs an explicit product decision, not an incidental refactor.
+
+## Projects and location
+
+- Project IDs are stable and independent from display names.
+- A terminal project belongs to exactly one folder and one connection.
+- Connections are the local machine or an SSH alias imported from user config.
+- Projects are grouped by connection.
+- Subprojects are not part of the product; legacy parent IDs remain flattened.
+- Archived projects do not contribute to live status counts.
+- All terminals must be stopped before a project can be archived.
+
+## Terminals
+
+- One project may own many terminal sessions.
+- Terminals remain directly reachable from both sidebar rows and workspace tabs.
+- tmux is preferred; PTY is a deliberate non-persistent fallback.
+- A persistent terminal's PanePilot name and tmux name are identical.
+- Rename must update PanePilot and tmux as one operation.
+- A Codex provider session ID is distinct from PanePilot and tmux identities.
+- Resuming a stopped Codex terminal uses its exact provider ID on its original
+  connection.
+- Raw PTY output must remain byte-for-byte intact.
+- Replayed output must not activate xterm input forwarding.
+- Pinned terminals remain ahead of the selected sort order.
+
+## Agent state
+
+- Agent state represents a current turn, not merely a living process.
+- New Codex and Claude terminals start Ready, not Working.
+- Shell and custom terminals never create LLM Working state.
+- Completed means the terminal ended, not that an answer finished.
+- When structured provider events are implemented, direct questions and permission
+  prompts must produce sticky Needs input.
+- Screen parsing is a fallback and must not override stronger structured evidence.
+
+The present code only provides a screen-based subset of these target semantics. Preserve
+that distinction in code and documentation.
+
+## Destructive actions
+
+- Dangerous permission bypass is per terminal, off by default, confirmed, visible, and
+  recorded.
+- Only stopped or errored terminals can be archived or deleted.
+- Deletion requires confirmation and does not delete provider archives.
+- Project archiving is reversible and does not delete terminals, activity, files, or
+  provider archives.
+
+## Files, archives, and remote behavior
+
+- File reads and writes stay inside the canonical project folder.
+- Editing is explicit and limited to existing files no larger than 1 MB.
+- Local and remote provider archives are indexed read-only.
+- Remote archive normalization and project filtering happen on the SSH host.
+- A remote project uses a remote folder browser, never the local native folder dialog.
+- SSH port forwards bind to `127.0.0.1`, fail when forwarding cannot be established,
+  and stop on app exit.
+- Terminal output and future remote lifecycle data use separate channels.
+
+## Cross-process changes
+
+Update shared types, main IPC, preload, renderer declarations, and renderer consumers as
+one coherent change. Validate again after a complete Electron restart.
+
+## Storage
+
+- Migrations are additive and preserve existing databases.
+- Type-specific project data belongs in a table keyed by `project_id`, not in a growing
+  set of nullable columns on `projects`.
+- Provider-owned data remains provider-owned.

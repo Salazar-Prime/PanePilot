@@ -1,0 +1,125 @@
+---
+title: Getting started
+description: Install, launch, and create your first PanePilot project.
+icon: Rocket
+---
+
+## Requirements
+
+- macOS or Linux.
+- Node.js 20.18 or newer for the desktop application.
+- npm, using the repository's tracked `package-lock.json`.
+- tmux for persistent terminal sessions. PanePilot falls back to a plain PTY when tmux
+  is unavailable.
+- `codex` and/or `claude` on `PATH` if you want those launch profiles.
+- OpenSSH for remote projects.
+- Python 3 on an SSH host for remote folder, file, and provider-archive operations.
+
+The documentation site is a separate Fumadocs application and requires Node.js 22 or
+newer.
+
+## Run the desktop app
+
+From the repository root:
+
+```bash
+npm install
+npm run dev
+```
+
+The development command prepares Electron and restores the executable bit on
+`node-pty`'s native `spawn-helper` before starting Electron Vite.
+
+If a terminal fails before the shell appears with `posix_spawnp failed`, rerun:
+
+```bash
+node scripts/prepare-node-pty.mjs
+```
+
+## Create a local project
+
+1. Choose **New project**.
+2. Keep **This Mac** selected.
+3. Choose an existing folder.
+4. Accept the folder-derived project name or enter a different display name.
+5. Create the project.
+
+The project receives a stable UUID independent of its name. Renaming the project later
+does not change its folder, connection, terminal identities, or history.
+
+For local projects, PanePilot also asks Git for `remote.origin.url`. Git SSH remotes such
+as `git@github.com:owner/repo.git` are normalized to a browser-friendly HTTPS URL.
+
+## Start a terminal
+
+Open **New terminal** and choose a profile:
+
+| Profile | Command behavior |
+| --- | --- |
+| Login shell | Starts the user's normal interactive login shell |
+| Codex | Runs `codex` |
+| Claude Code | Runs `claude` |
+| Custom | Runs the entered command through the user's shell |
+
+The terminal name is also the tmux session name when tmux is used. If you omit it,
+PanePilot generates a profile-based name such as `Codex 1` and adds a numeric suffix
+when that tmux name already exists on the connection.
+
+## Add an SSH project
+
+PanePilot reads concrete aliases from `~/.ssh/config`. Wildcard, negated, and pattern
+hosts are ignored. For example:
+
+```text
+Host buildbox
+  HostName 203.0.113.40
+  User dev
+  IdentityFile ~/.ssh/id_ed25519
+```
+
+Restart PanePilot after changing SSH config, then:
+
+1. Choose **New project**.
+2. Select `buildbox`.
+3. Browse from the remote home directory to the project folder.
+4. Create the project.
+
+Remote browsing is intentionally performed on the SSH host; it does not open the local
+native folder picker. Non-interactive operations such as browsing and connection tests
+use batch-mode SSH, so key-based authentication or a reusable SSH agent is expected.
+
+The LLM Chats tab also scans that host's Codex and Claude archives. Normalization and
+project-folder filtering happen on the remote host; PanePilot transfers normalized
+conversation records rather than copying provider JSONL files locally.
+
+## Run the documentation
+
+```bash
+cd docs
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`. Search is available in the Fumadocs interface, and
+machine-readable versions are exposed at `/llms.txt` and `/llms-full.txt`.
+
+## Validate a change
+
+Run the desktop checks from the repository root:
+
+```bash
+npm test
+npm run typecheck
+npm run build
+git diff --check
+```
+
+Run the documentation checks from `docs/`:
+
+```bash
+npm run typecheck
+npm run build
+```
+
+Main-process and preload changes require a complete restart of `npm run dev`; renderer
+hot reload does not restart Electron's trusted process.

@@ -1,0 +1,64 @@
+---
+title: Development
+description: How to work on PanePilot safely and keep the implementation coherent.
+icon: CodeXml
+---
+
+Start by reading the repository's `AGENTS.md`. It is the durable product and engineering
+handoff, including owner-approved decisions that should remain invariants unless the
+owner explicitly changes them.
+
+Then use this section for implementation-oriented guidance:
+
+<Cards>
+  <Card
+    title="Setup and validation"
+    description="Install, run, restart, and validate both applications."
+    href="/docs/development/setup-and-validation"
+    icon="Wrench"
+  />
+  <Card
+    title="Engineering invariants"
+    description="Rules that preserve lifecycle, persistence, remote behavior, and safety."
+    href="/docs/development/engineering-invariants"
+    icon="ListChecks"
+  />
+  <Card
+    title="Adding project types"
+    description="Extend the registries and persistence model without type conditionals everywhere."
+    href="/docs/development/adding-project-types"
+    icon="Blocks"
+  />
+  <Card
+    title="Roadmap"
+    description="Known gaps and decisions that remain open."
+    href="/docs/development/roadmap"
+    icon="Map"
+  />
+</Cards>
+
+## Source layout
+
+```text
+src/
+├── main/                 trusted Electron services
+├── preload/index.ts      typed IPC bridge
+├── renderer/src/         React application
+└── shared/types.ts       cross-process contracts
+
+scripts/                  native dependency preparation
+tests/                    focused Vitest suites
+docs/                     Fumadocs documentation application
+```
+
+## Working principle
+
+Classify a change before implementing it:
+
+1. Is it base project identity or lifecycle?
+2. Is it owned by one project type?
+3. Is it a reusable capability such as Files, Repository, Terminal, or Agent history?
+4. Does it cross the Electron trust boundary?
+
+That classification determines where state lives, which registry owns behavior, and
+which contracts and tests must move together.

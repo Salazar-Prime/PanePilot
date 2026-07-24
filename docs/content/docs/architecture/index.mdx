@@ -1,0 +1,102 @@
+---
+title: Architecture overview
+description: The system boundaries and major services that make up PanePilot.
+icon: Boxes
+---
+
+PanePilot is an Electron application built with React, TypeScript, SQLite, xterm,
+`node-pty`, tmux, and OpenSSH. Its central architectural rule is that privileged system
+access remains in Electron's main process; the renderer consumes a typed, narrow API.
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ React renderer                                              │
+│ App shell · project registry · terminal/files/chat panels   │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ window.projectConsole
+┌───────────────────────────▼─────────────────────────────────┐
+│ Preload bridge                                              │
+│ Typed invoke methods · event subscriptions · cleanup        │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ Electron IPC
+┌───────────────────────────▼─────────────────────────────────┐
+│ Main process                                                │
+│ Store · TerminalManager · files · archives · SSH · Git      │
+└──────────────┬────────────────┬──────────────────┬───────────┘
+               │                │                  │
+        SQLite database   PTY / tmux / SSH   Local provider JSONL
+```
+
+## Process responsibilities
+
+| Boundary | Owns |
+| --- | --- |
+| Main | SQLite, process launch, tmux, SSH, filesystem, Git, native dialogs, clipboard, and external URLs |
+| Preload | The allowlisted `window.projectConsole` contract and renderer event subscriptions |
+| Renderer | Navigation, state presentation, xterm and Monaco views, confirmation UI, and user interaction |
+| Shared | TypeScript contracts used by main, preload, and renderer |
+
+The renderer has `nodeIntegration: false` and `contextIsolation: true`. Electron's
+renderer sandbox is currently disabled because the preload and native dependency setup
+run without it, so the narrow preload surface remains an important trust boundary.
+
+## Main-process services
+
+- `Store` owns schema migration, persistence, activities, and aggregate project state.
+- `TerminalManager` owns PTYs, tmux creation and attachment, session names, saved
+  output, screen-based agent tracking, and process exit handling.
+- `ConversationIndexer` discovers and normalizes local Codex and Claude JSONL archives.
+- `RemoteConversationIndexer` runs bounded read-only normalization on SSH hosts and
+  discovers remote Codex provider session IDs.
+- Local and remote file services enforce project-root bounds.
+- `PortForwardManager` owns live OpenSSH forwarding processes and their transient state.
+- SSH config and Git helpers discover external connection and repository metadata.
+- `projectTypeServices` is the main-side registry for type-aware creation validation.
+
+## Renderer structure
+
+`App.tsx` remains the application shell: it loads connections and projects, owns global
+selection, renders connection trees and context menus, and displays cross-project
+counts.
+
+Terminal-specific workspace behavior has been extracted into
+`TerminalProjectWorkspace.tsx`. Files, LLM Chats, and Activity are separate capability
+components. A renderer `projectTypeRegistry` maps `terminal` to its label,
+capabilities, and workspace component.
+
+This split is the first step toward additional project types, but project creation and
+the base persistence model still assume that every project has a connection and folder.
+
+## Data flows
+
+### Terminal output
+
+```text
+PTY output
+  ├─► SQLite capped output
+  ├─► renderer IPC event ─► xterm
+  └─► headless xterm ─► screen activity detector ─► state update
+```
+
+### Files
+
+```text
+Renderer request
+  └─► IPC
+      ├─► local realpath-bounded service
+      └─► SSH + remote Python realpath-bounded service
+```
+
+### Conversations
+
+```text
+Local JSONL ─► mtime-and-size cache ─┐
+                                    ├─► normalized conversations
+Remote JSONL ─► SSH Python scan ─────┘     └─► project match ─► search / transcript
+```
+
+## Extension direction
+
+Capabilities should remain reusable while project-type persistence and workspace
+behavior remain type-owned. A future writing project may choose Files or Terminals, but
+it must not be represented as a terminal project with different labels.

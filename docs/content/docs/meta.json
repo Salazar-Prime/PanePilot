@@ -1,0 +1,13 @@
+{
+  "title": "PanePilot",
+  "pages": [
+    "index",
+    "getting-started",
+    "---Use PanePilot---",
+    "user-guide",
+    "---Understand the system---",
+    "architecture",
+    "---Build PanePilot---",
+    "development"
+  ]
+}
