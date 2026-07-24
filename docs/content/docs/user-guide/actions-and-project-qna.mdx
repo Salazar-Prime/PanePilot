@@ -1,0 +1,46 @@
+---
+title: Actions and project Q&A
+description: Run reusable commands and keep one dedicated Codex question-and-answer session per project.
+icon: Play
+---
+
+## Actions
+
+An Action is an editable project-scoped name and shell command. Actions replace the old
+Custom terminal profile and live in the top-level **Actions** tab.
+
+Each run:
+
+1. Starts from the project folder.
+2. Uses a fresh ephemeral tmux session. PanePilot reports an error if tmux is
+   unavailable on the project connection.
+3. Streams output into the embedded terminal.
+4. Accepts terminal input while the command is running, for commands that prompt.
+5. Finishes when the command exits.
+6. Replaces the prior saved run and its output.
+
+Use **Run again** to invoke the current definition in another fresh session. Editing an
+Action changes future runs; it does not alter a command that is already executing.
+Deleting an Action also deletes its latest saved run output.
+
+Legacy Custom terminals migrate into Actions using their existing terminal name,
+command, and saved output.
+
+Action definitions are stored in local SQLite and copied into same-user tmux metadata
+while a run is live so remote discovery can restore them. Do not place secrets directly
+in a command; reference protected environment variables or credential files instead.
+
+## Project Q&A
+
+Every project can have one dedicated **Project Q&A** Codex chat. Start it lazily from
+the top-level project tab. PanePilot launches Codex in a persistent tmux session and
+keeps it separate from ordinary terminal tabs and sidebar terminal rows.
+
+Questions submitted through the Q&A composer include an instruction to answer about
+the current project without modifying files. The underlying terminal remains visible
+for provider output and interactive prompts. If the tmux process stops, **Resume Q&A**
+uses the linked provider session identity.
+
+The Q&A session participates in normal Codex lifecycle and attention tracking. It is
+also tagged in tmux metadata, so remote discovery restores it into the Q&A tab instead
+of exposing it as an ordinary terminal.

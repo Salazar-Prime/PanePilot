@@ -3,10 +3,12 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import type {
   CreatePortForwardInput,
   CreateProjectInput,
+  CreateProjectActionInput,
   LatexChatMode,
   StartLatexChatInput,
   StartTerminalInput,
-  UpdateLatexProjectInput
+  UpdateLatexProjectInput,
+  UpdateProjectActionInput
 } from '../shared/types'
 import { ConversationIndexer } from './conversation-indexer'
 import { listLocalFiles, previewLocalFile, writeLocalFile } from './file-service'
@@ -114,6 +116,30 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('terminals:start', (_event, input: StartTerminalInput) => terminals.start(input))
+  ipcMain.handle('actions:create', (_event, input: CreateProjectActionInput) =>
+    terminals.createAction(input)
+  )
+  ipcMain.handle('actions:update', (_event, input: UpdateProjectActionInput) =>
+    terminals.updateAction(input)
+  )
+  ipcMain.handle('actions:run', (_event, actionId: string) =>
+    terminals.runAction(actionId)
+  )
+  ipcMain.handle('actions:stop', (_event, actionId: string) => {
+    terminals.stopAction(actionId)
+  })
+  ipcMain.handle('actions:delete', (_event, actionId: string) => {
+    terminals.deleteAction(actionId)
+  })
+  ipcMain.handle('project-qna:start', (_event, projectId: string) =>
+    terminals.startProjectQna(projectId)
+  )
+  ipcMain.handle(
+    'project-qna:send-prompt',
+    (_event, sessionId: string, prompt: string) => {
+      terminals.sendProjectQnaPrompt(sessionId, prompt)
+    }
+  )
   ipcMain.handle('terminals:discover', (_event, connectionId?: string) =>
     terminals.reconcileRemoteSessions(connectionId)
   )

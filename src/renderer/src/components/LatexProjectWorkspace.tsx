@@ -5,7 +5,9 @@ import {
   Files,
   FileText,
   LoaderCircle,
+  MessageCircleQuestion,
   MessageSquareText,
+  Play,
   Plus
 } from 'lucide-react'
 import type {
@@ -14,14 +16,22 @@ import type {
   StartLatexChatInput
 } from '@shared/types'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
+import { ActionsPanel } from './ActionsPanel'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
 import { FilesPanel } from './FilesPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { LatexAgentPane } from './LatexAgentPane'
 import { LatexChatLauncher } from './LatexChatLauncher'
 import { LatexManuscript } from './LatexManuscript'
+import { ProjectQnaPane } from './ProjectQnaPane'
 
-type WorkspaceTab = 'manuscript' | 'files' | 'chats' | 'activity'
+type WorkspaceTab =
+  | 'manuscript'
+  | 'actions'
+  | 'qna'
+  | 'files'
+  | 'chats'
+  | 'activity'
 
 export function LatexProjectWorkspace({
   project,
@@ -41,14 +51,20 @@ export function LatexProjectWorkspace({
   const sessions = useMemo(
     () =>
       project.sessions.filter(
-        (session) => !session.archived && session.latexChat != null
+        (session) =>
+          !session.archived &&
+          session.kind === 'latex-chat' &&
+          session.latexChat != null
       ),
     [project.sessions]
   )
   const archivedSessions = useMemo(
     () =>
       project.sessions.filter(
-        (session) => session.archived && session.latexChat != null
+        (session) =>
+          session.archived &&
+          session.kind === 'latex-chat' &&
+          session.latexChat != null
       ),
     [project.sessions]
   )
@@ -178,6 +194,12 @@ export function LatexProjectWorkspace({
         >
           <FileText size={15} /> Manuscript
         </button>
+        <button className={tab === 'actions' ? 'active' : ''} onClick={() => setTab('actions')}>
+          <Play size={15} /> Actions
+        </button>
+        <button className={tab === 'qna' ? 'active' : ''} onClick={() => setTab('qna')}>
+          <MessageCircleQuestion size={15} /> Project Q&amp;A
+        </button>
         <button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>
           <Files size={15} /> Files
         </button>
@@ -236,6 +258,8 @@ export function LatexProjectWorkspace({
           initialPath={filesInitialPath}
         />
       )}
+      {tab === 'actions' && <ActionsPanel project={project} onChanged={onChanged} />}
+      {tab === 'qna' && <ProjectQnaPane project={project} onChanged={onChanged} />}
       {tab === 'chats' && <ChatHistoryPanel project={project} />}
       {tab === 'activity' && <HistoryPanel project={project} />}
 

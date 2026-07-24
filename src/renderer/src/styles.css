@@ -451,6 +451,7 @@ select:focus-visible {
   align-items: flex-end;
   gap: 5px;
   padding: 0 16px;
+  overflow-x: auto;
   border-bottom: 1px solid #232731;
   background: #0d0f15cc;
 }
@@ -458,6 +459,7 @@ select:focus-visible {
 .workspace-tabs button {
   position: relative;
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 7px;
   height: 35px;
@@ -1550,9 +1552,9 @@ select:focus-visible {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
-  height: 37px;
   padding: 0 10px;
   color: #d9dce4;
   border: 1px solid #303641;
@@ -1561,7 +1563,21 @@ select:focus-visible {
   font-size: 11px;
 }
 
-.field input::placeholder {
+.field input,
+.field select {
+  height: 37px;
+}
+
+.field textarea {
+  min-height: 96px;
+  padding: 10px;
+  resize: vertical;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  line-height: 1.5;
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
   color: #4e5562;
 }
 
@@ -3425,6 +3441,272 @@ button.type-switcher {
   height: 100%;
 }
 
+/* Project actions and Q&A */
+
+.terminal-profile-icon {
+  flex: 0 0 auto;
+  color: #7f8ed7;
+}
+
+.actions-panel {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: 242px minmax(0, 1fr);
+  background: #090b10;
+}
+
+.actions-list {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid #242933;
+  background: #0d1016;
+}
+
+.actions-list > header,
+.action-runner-heading,
+.project-qna-pane > header {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 13px;
+  border-bottom: 1px solid #232832;
+}
+
+.actions-list > header > div,
+.action-runner-heading > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.actions-list > header strong,
+.action-runner-heading strong {
+  color: #d6dae3;
+  font-size: 12px;
+}
+
+.actions-list-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.actions-list-scroll > button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 11px;
+  color: #68717f;
+  border: 0;
+  border-bottom: 1px solid #1e232c;
+  background: transparent;
+  text-align: left;
+}
+
+.actions-list-scroll > button:hover,
+.actions-list-scroll > button.active {
+  color: #94a2ef;
+  background: #171b25;
+}
+
+.actions-list-scroll > button.active {
+  box-shadow: inset 2px 0 0 #7184e6;
+}
+
+.actions-list-scroll > button > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.actions-list-scroll strong,
+.actions-list-scroll small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions-list-scroll strong {
+  color: #c8cdd7;
+  font-size: 10px;
+}
+
+.actions-list-scroll small {
+  color: #5c6573;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 8px;
+}
+
+.actions-list-empty {
+  display: flex;
+  align-items: center;
+  padding: 42px 20px;
+  color: #586171;
+  flex-direction: column;
+  gap: 7px;
+  text-align: center;
+}
+
+.actions-list-empty span {
+  color: #a8afbb;
+  font-size: 10px;
+}
+
+.actions-list-empty small {
+  max-width: 155px;
+  line-height: 1.5;
+}
+
+.action-runner,
+.project-qna-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.action-runner-heading > div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.action-runner-heading code {
+  max-width: min(600px, 60vw);
+  overflow: hidden;
+  color: #697382;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-terminal,
+.project-qna-terminal {
+  min-height: 0;
+  flex: 1;
+  padding: 9px 5px 5px 11px;
+  background: #090b10;
+}
+
+.action-terminal > .capability-empty {
+  height: 100%;
+}
+
+.action-runner-footer {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  padding: 0 13px;
+  color: #626c7a;
+  border-top: 1px solid #222730;
+  background: #0d1016;
+  font-size: 8px;
+}
+
+.action-error {
+  margin: 0;
+  padding: 7px 13px;
+  color: #ef9aa6;
+  border-bottom: 1px solid #512a33;
+  background: #241419;
+  font-size: 9px;
+}
+
+.action-editor-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.field-help {
+  margin: -5px 0 0;
+  color: #646d7a;
+  font-size: 9px;
+}
+
+.project-qna-empty {
+  height: 100%;
+  padding: 40px;
+}
+
+.project-qna-empty p {
+  max-width: 460px;
+}
+
+.project-qna-pane {
+  min-height: 0;
+  flex: 1;
+  background: #090b10;
+}
+
+.project-qna-pane > header > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.project-qna-pane > header span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.project-qna-pane > header strong {
+  color: #d7dbe4;
+  font-size: 11px;
+}
+
+.project-qna-pane > header small {
+  color: #697280;
+  font-size: 8px;
+}
+
+.project-qna-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid #252a34;
+  background: #0d1016;
+}
+
+.project-qna-composer textarea {
+  min-height: 60px;
+  padding: 9px 10px;
+  resize: none;
+  color: #d8dce5;
+  border: 1px solid #303743;
+  border-radius: 7px;
+  outline: none;
+  background: #090b10;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.project-qna-composer textarea:focus {
+  border-color: #5262a7;
+}
+
+.project-qna-composer .primary-button {
+  align-self: end;
+}
+
+.project-qna-composer > small {
+  color: #58616e;
+  font-size: 8px;
+}
+
 @media (max-width: 1190px) {
   .latex-manuscript {
     grid-template-columns: minmax(0, 1fr);
@@ -3436,6 +3718,10 @@ button.type-switcher {
 
   .latex-workbench {
     grid-template-columns: minmax(0, 1fr) 318px;
+  }
+
+  .actions-panel {
+    grid-template-columns: 210px minmax(0, 1fr);
   }
 }
 

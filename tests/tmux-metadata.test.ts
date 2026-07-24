@@ -20,6 +20,7 @@ import {
 const TERMINAL_ID = '550e8400-e29b-41d4-a716-446655440000'
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111'
 const SECTION_ID = '22222222-2222-4222-8222-222222222222'
+const ACTION_ID = '33333333-3333-4333-8333-333333333333'
 
 function metadata(
   overrides: Partial<PanePilotTmuxMetadata> = {}
@@ -33,6 +34,8 @@ function metadata(
     providerSessionName: 'Codex 1 · abc123',
     createdAt: '2026-07-24T12:00:00.000Z',
     dangerousMode: false,
+    sessionKind: 'terminal',
+    action: null,
     latex: null,
     ...overrides
   }
@@ -84,6 +87,26 @@ describe('PanePilot tmux metadata', () => {
       name: 'existing shell',
       metadata: null
     })
+  })
+
+  it('round-trips an ephemeral Action definition with its live run', () => {
+    const value = metadata({
+      profile: 'custom',
+      providerSessionId: null,
+      providerSessionName: null,
+      sessionKind: 'action',
+      action: {
+        id: ACTION_ID,
+        name: 'Run tests',
+        command: 'npm test'
+      }
+    })
+
+    expect(parseTmuxSessionList(tmuxListLine(value, 'Action · Run tests'))[0])
+      .toMatchObject({
+        name: 'Action · Run tests',
+        metadata: value
+      })
   })
 
   it('builds shell-safe set and unset commands for session options', () => {
@@ -262,6 +285,55 @@ describe('tmux discovery persistence', () => {
         title: 'Results',
         sourceFile: 'sections/results.tex'
       })
+    } finally {
+      store.close()
+    }
+  })
+
+  it('restores a live remote Action without exposing it as an ordinary terminal', () => {
+    appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-action-tmux-store-'))
+    const store = new Store(appDataPath)
+    try {
+      store.syncConnections(['remote-work'])
+      const project = store.createProject({
+        type: 'terminal',
+        name: 'Remote service',
+        connectionId: 'ssh:remote-work',
+        folder: '/srv/papers/example',
+        repositoryUrl: null
+      })
+      const value = metadata({
+        profile: 'custom',
+        providerSessionId: null,
+        providerSessionName: null,
+        sessionKind: 'action',
+        action: {
+          id: ACTION_ID,
+          name: 'Run tests',
+          command: 'npm test'
+        }
+      })
+      const discovered = store.upsertDiscoveredTmuxSession(
+        project.id,
+        'Action · Run tests',
+        value
+      )
+
+      expect(discovered?.session.kind).toBe('action')
+      expect(
+        store.upsertDiscoveredProjectAction(
+          project.id,
+          TERMINAL_ID,
+          value.action!
+        )
+      ).toBe(true)
+      expect(store.getProject(project.id)?.actions).toEqual([
+        expect.objectContaining({
+          id: ACTION_ID,
+          command: 'npm test',
+          lastSessionId: TERMINAL_ID
+        })
+      ])
     } finally {
       store.close()
     }

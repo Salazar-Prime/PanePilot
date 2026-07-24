@@ -19,18 +19,17 @@ containing:
 Starting a terminal:
 
 1. Resolves its project and connection.
-2. Validates a custom command when required.
-3. Checks whether tmux is available.
-4. Validates or generates a tmux-safe unique name.
-5. Persists the new `idle` session before process launch.
-6. Builds versioned `@panepilot_*` tmux metadata from the persisted session.
-7. Spawns its local or remote PTY.
+2. Checks whether tmux is available.
+3. Validates or generates a tmux-safe unique name.
+4. Persists the new `idle` session before process launch.
+5. Builds versioned `@panepilot_*` tmux metadata from the persisted session.
+6. Spawns its local or remote PTY.
 
 The pane sets its tmux metadata before executing the selected profile. The metadata
 contains a stable terminal UUID, originating project ID, canonical project folder,
-profile, creation time, safety indicator, and any known provider or LaTeX chat
-identity. The pane is targeted explicitly through `TMUX_PANE`, which prevents a nested
-tmux client from accidentally tagging the caller's session.
+profile, session kind, creation time, safety indicator, and any known Action, provider,
+or LaTeX chat identity. The pane is targeted explicitly through `TMUX_PANE`, which
+prevents a nested tmux client from accidentally tagging the caller's session.
 
 A failed process spawn can therefore leave a persisted session that records the launch
 attempt and can transition to an error.
@@ -59,7 +58,7 @@ the configured shell with `-lc`.
 ## Remote commands
 
 Remote sessions spawn local `ssh -tt`. The remote command first changes to the project
-folder, then creates or attaches to tmux when available. Agent and custom profiles are
+folder, then creates or attaches to tmux when available. Agent and Action commands are
 wrapped in the remote user's interactive login shell so normal remote PATH setup is
 applied.
 
@@ -88,6 +87,28 @@ LaTeX chat scope, mode, and portable section source/title information are includ
 an imported chat can be reconciled with the receiving laptop's section identities.
 Discovery displays matching terminals but does not immediately attach every tmux
 client; attachment occurs when the user selects a terminal.
+
+## Action runs
+
+An Action definition lives independently of its latest terminal session. Running it:
+
+1. Requires tmux on the project connection and rejects a second invocation while its
+   current command is still active.
+2. Deletes the completed prior session and saved output.
+3. Creates and links a new session with internal profile `custom` and kind `action`.
+4. Runs the definition through the user's shell from the project folder.
+5. Leaves xterm input connected until the command exits.
+
+The tmux server removes the ephemeral session when the command exits. PanePilot then
+marks the run completed and retains its bounded output until rerun or deletion.
+
+## Project Q&A
+
+The partial SQLite uniqueness constraint permits one `project-qna` session per
+project. It requires tmux and uses the normal Codex launch, provider-ID discovery,
+lifecycle tracking, persistence, and exact resume behavior, but renderer workspaces
+expose it through the top-level Project Q&A tab instead of ordinary terminal
+navigation.
 
 ## Exact Codex resume
 

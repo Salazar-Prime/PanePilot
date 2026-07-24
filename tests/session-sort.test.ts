@@ -11,6 +11,7 @@ function session(
   return {
     id: name,
     projectId: 'project',
+    kind: 'terminal',
     name,
     profile: 'codex',
     providerSessionId: null,

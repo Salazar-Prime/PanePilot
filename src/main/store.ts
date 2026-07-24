@@ -12,9 +12,11 @@ import type {
   LatexSection,
   LaunchProfile,
   Project,
+  ProjectAction,
   ProjectType,
   TerminalBackend,
-  TerminalSession
+  TerminalSession,
+  TerminalSessionKind
 } from '../shared/types'
 import type {
   PanePilotTmuxLatexMetadata,
@@ -99,6 +101,7 @@ export interface LatexEditSnapshot {
 type SessionRow = {
   id: string
   project_id: string
+  session_kind: TerminalSessionKind
   name: string
   profile: LaunchProfile
   provider_session_id: string | null
@@ -111,6 +114,16 @@ type SessionRow = {
   archived: number
   pinned: number
   output: string
+  created_at: string
+  updated_at: string
+}
+
+type ProjectActionRow = {
+  id: string
+  project_id: string
+  name: string
+  command: string
+  last_session_id: string | null
   created_at: string
   updated_at: string
 }
@@ -155,6 +168,26 @@ function now(): string {
   return new Date().toISOString()
 }
 
+function validatedActionName(value: string): string {
+  const name = value.trim()
+  if (!name) throw new Error('Action name cannot be empty.')
+  if (name.length > 80) throw new Error('Action names must be 80 characters or fewer.')
+  if (/[\u0000-\u001f\u007f]/.test(name)) {
+    throw new Error('Action names cannot contain control characters.')
+  }
+  return name
+}
+
+function validatedActionCommand(value: string): string {
+  const command = value.trim()
+  if (!command) throw new Error('Action command cannot be empty.')
+  if (command.length > 4_096) {
+    throw new Error('Action commands must be 4,096 characters or fewer.')
+  }
+  if (command.includes('\0')) throw new Error('Action commands cannot contain null bytes.')
+  return command
+}
+
 function mapConnection(row: ConnectionRow): Connection {
   return {
     id: row.id,
@@ -186,6 +219,18 @@ function mapLatexSection(row: LatexSectionRow): LatexSection {
   }
 }
 
+function mapProjectAction(row: ProjectActionRow): ProjectAction {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    command: row.command,
+    lastSessionId: row.last_session_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
 function mapLatexChat(row: LatexChatRow): LatexChatAttachment {
   return {
     terminalSessionId: row.terminal_session_id,
@@ -204,6 +249,7 @@ function mapSession(
   return {
     id: row.id,
     projectId: row.project_id,
+    kind: row.session_kind,
     name: row.name,
     profile: row.profile,
     providerSessionId: row.provider_session_id,
@@ -282,6 +328,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS terminal_sessions (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        session_kind TEXT NOT NULL DEFAULT 'terminal'
+          CHECK (session_kind IN ('terminal', 'action', 'project-qna', 'latex-chat')),
         name TEXT NOT NULL,
         profile TEXT NOT NULL,
         provider_session_id TEXT,
@@ -295,6 +343,16 @@ export class Store {
         archived INTEGER NOT NULL DEFAULT 0,
         pinned INTEGER NOT NULL DEFAULT 0,
         output TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS project_actions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        command TEXT NOT NULL,
+        last_session_id TEXT UNIQUE REFERENCES terminal_sessions(id) ON DELETE SET NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -368,6 +426,11 @@ export class Store {
     this.ensureColumn('connections', 'ssh_alias', 'TEXT')
     this.ensureColumn('projects', 'created_at', `TEXT NOT NULL DEFAULT ''`)
     this.ensureColumn('projects', 'archived', 'INTEGER NOT NULL DEFAULT 0')
+    this.ensureColumn(
+      'terminal_sessions',
+      'session_kind',
+      `TEXT NOT NULL DEFAULT 'terminal'`
+    )
     this.ensureColumn('terminal_sessions', 'name', `TEXT NOT NULL DEFAULT ''`)
     this.ensureColumn('terminal_sessions', 'provider_session_id', 'TEXT')
     this.ensureColumn('terminal_sessions', 'provider_session_name', 'TEXT')
@@ -410,6 +473,21 @@ export class Store {
     }
 
     this.db.exec(`
+      UPDATE terminal_sessions
+      SET session_kind = 'latex-chat'
+      WHERE id IN (SELECT terminal_session_id FROM latex_chat_sessions);
+
+      INSERT OR IGNORE INTO project_actions
+        (id, project_id, name, command, last_session_id, created_at, updated_at)
+      SELECT id, project_id, name, custom_command, id, created_at, updated_at
+      FROM terminal_sessions
+      WHERE profile = 'custom' AND custom_command IS NOT NULL;
+
+      UPDATE terminal_sessions
+      SET session_kind = 'action'
+      WHERE profile = 'custom'
+        AND id IN (SELECT last_session_id FROM project_actions);
+
       UPDATE projects SET created_at = updated_at WHERE created_at = '';
       CREATE INDEX IF NOT EXISTS terminal_sessions_project_idx
         ON terminal_sessions(project_id, archived);
@@ -425,9 +503,13 @@ export class Store {
         ON latex_sections(project_id, missing, ordinal);
       CREATE INDEX IF NOT EXISTS latex_chat_sessions_project_idx
         ON latex_chat_sessions(project_id, scope, section_id);
+      CREATE INDEX IF NOT EXISTS project_actions_project_idx
+        ON project_actions(project_id, created_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS terminal_sessions_project_qna_idx
+        ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 6;
+      PRAGMA user_version = 7;
     `)
   }
 
@@ -741,20 +823,28 @@ export class Store {
       }
     }
     const timestamp = now()
-    this.db
-      .prepare(
-        `INSERT INTO latex_chat_sessions
-         (terminal_session_id, project_id, scope, section_id, mode, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        terminalSessionId,
-        input.projectId,
-        input.scope,
-        input.scope === 'section' ? input.sectionId : null,
-        input.mode,
-        timestamp
-      )
+    this.inTransaction(() => {
+      this.db
+        .prepare(
+          `UPDATE terminal_sessions
+           SET session_kind = 'latex-chat', updated_at = ? WHERE id = ?`
+        )
+        .run(timestamp, terminalSessionId)
+      this.db
+        .prepare(
+          `INSERT INTO latex_chat_sessions
+           (terminal_session_id, project_id, scope, section_id, mode, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          terminalSessionId,
+          input.projectId,
+          input.scope,
+          input.scope === 'section' ? input.sectionId : null,
+          input.mode,
+          timestamp
+        )
+    })
     this.addActivity(
       input.projectId,
       terminalSessionId,
@@ -848,13 +938,22 @@ export class Store {
     const sessions = (
       this.db
         .prepare(
-          `SELECT id, project_id, name, profile, provider_session_id, provider_session_name,
+          `SELECT id, project_id, session_kind, name, profile,
+                  provider_session_id, provider_session_name,
                   custom_command, backend, tmux_name, state,
                   dangerous_mode, archived, pinned, output, created_at, updated_at
            FROM terminal_sessions WHERE project_id = ? ORDER BY created_at`
         )
         .all(row.id) as SessionRow[]
     ).map((session) => mapSession(session, latexChats.get(session.id) ?? null))
+    const actions = (
+      this.db
+        .prepare(
+          `SELECT id, project_id, name, command, last_session_id, created_at, updated_at
+           FROM project_actions WHERE project_id = ? ORDER BY created_at`
+        )
+        .all(row.id) as ProjectActionRow[]
+    ).map(mapProjectAction)
     const activities = (
       this.db
         .prepare(
@@ -877,12 +976,184 @@ export class Store {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       sessions,
+      actions,
       activities
     }
   }
 
+  getProjectAction(id: string): ProjectAction | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, project_id, name, command, last_session_id, created_at, updated_at
+         FROM project_actions WHERE id = ?`
+      )
+      .get(id) as ProjectActionRow | undefined
+    return row ? mapProjectAction(row) : null
+  }
+
+  getActionForSession(sessionId: string): ProjectAction | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, project_id, name, command, last_session_id, created_at, updated_at
+         FROM project_actions WHERE last_session_id = ?`
+      )
+      .get(sessionId) as ProjectActionRow | undefined
+    return row ? mapProjectAction(row) : null
+  }
+
+  createProjectAction(input: {
+    projectId: string
+    name: string
+    command: string
+  }): ProjectAction {
+    const project = this.getProject(input.projectId)
+    if (!project || project.archived) throw new Error('Choose an active project.')
+    const id = randomUUID()
+    const timestamp = now()
+    const name = validatedActionName(input.name)
+    const command = validatedActionCommand(input.command)
+    this.db
+      .prepare(
+        `INSERT INTO project_actions
+         (id, project_id, name, command, last_session_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, NULL, ?, ?)`
+      )
+      .run(id, input.projectId, name, command, timestamp, timestamp)
+    this.addActivity(
+      input.projectId,
+      null,
+      'action-created',
+      `Created action ${name}`
+    )
+    return this.getProjectAction(id)!
+  }
+
+  updateProjectAction(
+    id: string,
+    input: { name: string; command: string }
+  ): ProjectAction {
+    const action = this.getProjectAction(id)
+    if (!action) throw new Error('Action not found.')
+    const name = validatedActionName(input.name)
+    const command = validatedActionCommand(input.command)
+    if (action.name === name && action.command === command) return action
+    this.db
+      .prepare(
+        `UPDATE project_actions
+         SET name = ?, command = ?, updated_at = ? WHERE id = ?`
+      )
+      .run(name, command, now(), id)
+    this.addActivity(
+      action.projectId,
+      null,
+      'action-updated',
+      `Updated action ${name}`
+    )
+    return this.getProjectAction(id)!
+  }
+
+  setProjectActionSession(actionId: string, sessionId: string | null): void {
+    const action = this.getProjectAction(actionId)
+    if (!action) throw new Error('Action not found.')
+    if (sessionId) {
+      const session = this.getSession(sessionId)
+      if (
+        !session ||
+        session.projectId !== action.projectId ||
+        session.kind !== 'action'
+      ) {
+        throw new Error('The action run is invalid.')
+      }
+    }
+    this.db
+      .prepare(
+        `UPDATE project_actions
+         SET last_session_id = ?, updated_at = ? WHERE id = ?`
+      )
+      .run(sessionId, now(), actionId)
+  }
+
+  upsertDiscoveredProjectAction(
+    projectId: string,
+    sessionId: string,
+    input: { id: string; name: string; command: string }
+  ): boolean {
+    const session = this.getSession(sessionId)
+    if (
+      !session ||
+      session.projectId !== projectId ||
+      session.kind !== 'action'
+    ) {
+      return false
+    }
+    const collision = this.getProjectAction(input.id)
+    if (collision && collision.projectId !== projectId) return false
+    const name = validatedActionName(input.name)
+    const command = validatedActionCommand(input.command)
+    if (
+      collision?.name === name &&
+      collision.command === command &&
+      collision.lastSessionId === sessionId
+    ) {
+      return false
+    }
+    const timestamp = now()
+    this.db
+      .prepare(
+        `INSERT INTO project_actions
+         (id, project_id, name, command, last_session_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           command = excluded.command,
+           last_session_id = excluded.last_session_id,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        input.id,
+        projectId,
+        name,
+        command,
+        sessionId,
+        collision?.createdAt ?? timestamp,
+        timestamp
+      )
+    return true
+  }
+
+  deleteProjectAction(id: string): void {
+    const action = this.getProjectAction(id)
+    if (!action) throw new Error('Action not found.')
+    const session = action.lastSessionId
+      ? this.getSession(action.lastSessionId)
+      : null
+    if (session && !['completed', 'error'].includes(session.state)) {
+      throw new Error('Stop the current action run before deleting it.')
+    }
+    this.db.prepare('DELETE FROM project_actions WHERE id = ?').run(id)
+    if (session) this.deleteSession(session.id)
+    this.addActivity(
+      action.projectId,
+      null,
+      'action-deleted',
+      `Deleted action ${action.name}`
+    )
+  }
+
+  getProjectQnaSession(projectId: string): TerminalSession | null {
+    const row = this.db
+      .prepare(
+        `SELECT id FROM terminal_sessions
+         WHERE project_id = ? AND session_kind = 'project-qna'
+         LIMIT 1`
+      )
+      .get(projectId) as { id: string } | undefined
+    return row ? this.getSession(row.id) : null
+  }
+
   createSession(input: {
     projectId: string
+    kind?: TerminalSessionKind
     name: string
     profile: LaunchProfile
     providerSessionName: string | null
@@ -893,15 +1164,16 @@ export class Store {
   }): TerminalSession {
     const id = randomUUID()
     const timestamp = now()
+    const kind = input.kind ?? 'terminal'
     if (this.tableColumns('terminal_sessions').has('label')) {
       this.db
         .prepare(
           `INSERT INTO terminal_sessions
            (id, project_id, name, label, profile, provider_session_name, custom_command, command,
-            backend, tmux_name, backend_name, state, dangerous_mode, dangerous,
+            session_kind, backend, tmux_name, backend_name, state, dangerous_mode, dangerous,
             tmux_metadata_version, archived, pinned, output,
             created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?, 0, 0, '', ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?, 0, 0, '', ?, ?)`
         )
         .run(
           id,
@@ -912,6 +1184,7 @@ export class Store {
           input.providerSessionName,
           input.customCommand,
           input.customCommand,
+          kind,
           input.backend,
           input.tmuxName,
           input.tmuxName,
@@ -926,8 +1199,9 @@ export class Store {
         .prepare(
           `INSERT INTO terminal_sessions
            (id, project_id, name, profile, provider_session_name, custom_command, backend, tmux_name, state,
-            dangerous_mode, tmux_metadata_version, archived, pinned, output, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, 0, 0, '', ?, ?)`
+            session_kind, dangerous_mode, tmux_metadata_version, archived, pinned, output,
+            created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?, ?, 0, 0, '', ?, ?)`
         )
         .run(
           id,
@@ -938,6 +1212,7 @@ export class Store {
           input.customCommand,
           input.backend,
           input.tmuxName,
+          kind,
           input.dangerousMode ? 1 : 0,
           input.backend === 'tmux' ? 1 : 0,
           timestamp,
@@ -969,6 +1244,17 @@ export class Store {
     }
     const existing = this.getSession(metadata.terminalId)
     if (existing && existing.projectId !== projectId) return null
+    const sessionKind =
+      metadata.sessionKind ??
+      existing?.kind ??
+      (metadata.latex ? 'latex-chat' : 'terminal')
+    if (sessionKind === 'project-qna') {
+      const existingQna = this.getProjectQnaSession(projectId)
+      if (existingQna && existingQna.id !== metadata.terminalId) return null
+    }
+    const customCommand =
+      sessionKind === 'action' ? metadata.action?.command ?? null : null
+    if (sessionKind === 'action' && !metadata.action) return null
 
     let providerSessionId = metadata.providerSessionId
     if (providerSessionId) {
@@ -997,7 +1283,9 @@ export class Store {
         existing.state === 'completed' || existing.state === 'error'
       const changed =
         existing.name !== name ||
+        existing.kind !== sessionKind ||
         existing.profile !== metadata.profile ||
+        existing.customCommand !== customCommand ||
         existing.tmuxName !== name ||
         existing.dangerousMode !== metadata.dangerousMode ||
         existing.providerSessionId !== nextProviderSessionId ||
@@ -1011,7 +1299,8 @@ export class Store {
         this.db
           .prepare(
             `UPDATE terminal_sessions
-             SET name = ?, label = ?, profile = ?, provider_session_id = ?,
+             SET name = ?, label = ?, session_kind = ?, profile = ?,
+                 custom_command = ?, command = ?, provider_session_id = ?,
                  provider_session_name = ?, backend = 'tmux', tmux_name = ?,
                  backend_name = ?, dangerous_mode = ?, dangerous = ?,
                  tmux_metadata_version = 1, archived = 0,
@@ -1022,7 +1311,10 @@ export class Store {
           .run(
             name,
             name,
+            sessionKind,
             metadata.profile,
+            customCommand,
+            customCommand,
             nextProviderSessionId,
             nextProviderSessionName,
             name,
@@ -1036,7 +1328,8 @@ export class Store {
         this.db
           .prepare(
             `UPDATE terminal_sessions
-             SET name = ?, profile = ?, provider_session_id = ?,
+             SET name = ?, session_kind = ?, profile = ?, custom_command = ?,
+                 provider_session_id = ?,
                  provider_session_name = ?, backend = 'tmux', tmux_name = ?,
                  dangerous_mode = ?, tmux_metadata_version = 1, archived = 0,
                  state = CASE WHEN state IN ('completed', 'error') THEN 'idle' ELSE state END,
@@ -1045,7 +1338,9 @@ export class Store {
           )
           .run(
             name,
+            sessionKind,
             metadata.profile,
+            customCommand,
             nextProviderSessionId,
             nextProviderSessionName,
             name,
@@ -1070,20 +1365,23 @@ export class Store {
       this.db
         .prepare(
           `INSERT INTO terminal_sessions
-           (id, project_id, name, label, profile, provider_session_id,
+           (id, project_id, session_kind, name, label, profile, provider_session_id,
             provider_session_name, custom_command, command, backend, tmux_name,
             backend_name, state, dangerous_mode, dangerous, tmux_metadata_version,
             archived, pinned, output, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'tmux', ?, ?, 'idle', ?, ?, 1, 0, 0, '', ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'tmux', ?, ?, 'idle', ?, ?, 1, 0, 0, '', ?, ?)`
         )
         .run(
           metadata.terminalId,
           projectId,
+          sessionKind,
           name,
           name,
           metadata.profile,
           providerSessionId,
           metadata.providerSessionName,
+          customCommand,
+          customCommand,
           name,
           name,
           metadata.dangerousMode ? 1 : 0,
@@ -1095,19 +1393,21 @@ export class Store {
       this.db
         .prepare(
           `INSERT INTO terminal_sessions
-           (id, project_id, name, profile, provider_session_id,
+           (id, project_id, session_kind, name, profile, provider_session_id,
             provider_session_name, custom_command, backend, tmux_name, state,
             dangerous_mode, tmux_metadata_version, archived, pinned, output,
             created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, NULL, 'tmux', ?, 'idle', ?, 1, 0, 0, '', ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'tmux', ?, 'idle', ?, 1, 0, 0, '', ?, ?)`
         )
         .run(
           metadata.terminalId,
           projectId,
+          sessionKind,
           name,
           metadata.profile,
           providerSessionId,
           metadata.providerSessionName,
+          customCommand,
           name,
           metadata.dangerousMode ? 1 : 0,
           metadata.createdAt,
@@ -1289,7 +1589,8 @@ export class Store {
   getSession(id: string): TerminalSession | null {
     const row = this.db
       .prepare(
-        `SELECT id, project_id, name, profile, provider_session_id, provider_session_name,
+        `SELECT id, project_id, session_kind, name, profile,
+                provider_session_id, provider_session_name,
                 custom_command, backend, tmux_name, state,
                 dangerous_mode, archived, pinned, output, created_at, updated_at
          FROM terminal_sessions WHERE id = ?`
@@ -1528,7 +1829,10 @@ export class Store {
 
   private updateProjectState(projectId: string): void {
     const states = this.db
-      .prepare('SELECT state FROM terminal_sessions WHERE project_id = ? AND archived = 0')
+      .prepare(
+        `SELECT state FROM terminal_sessions
+         WHERE project_id = ? AND archived = 0 AND session_kind <> 'action'`
+      )
       .all(projectId) as Array<{ state: AgentState }>
     const aggregate =
       STATE_PRIORITY.find((candidate) => states.some(({ state }) => state === candidate)) ?? 'idle'

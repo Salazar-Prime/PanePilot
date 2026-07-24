@@ -2,6 +2,11 @@ export type ProjectType = 'terminal' | 'latex'
 export type ConnectionKind = 'local' | 'ssh'
 export type LaunchProfile = 'shell' | 'codex' | 'claude' | 'custom'
 export type TerminalBackend = 'tmux' | 'pty'
+export type TerminalSessionKind =
+  | 'terminal'
+  | 'action'
+  | 'project-qna'
+  | 'latex-chat'
 export type LatexChatMode = 'ask' | 'edit'
 export type LatexChatScope = 'project' | 'section'
 export type AgentState =
@@ -23,6 +28,7 @@ export interface Connection {
 export interface TerminalSession {
   id: string
   projectId: string
+  kind: TerminalSessionKind
   name: string
   profile: LaunchProfile
   providerSessionId: string | null
@@ -36,6 +42,16 @@ export interface TerminalSession {
   pinned: boolean
   output: string
   latexChat: LatexChatAttachment | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectAction {
+  id: string
+  projectId: string
+  name: string
+  command: string
+  lastSessionId: string | null
   createdAt: string
   updatedAt: string
 }
@@ -62,6 +78,7 @@ export interface Project {
   createdAt: string
   updatedAt: string
   sessions: TerminalSession[]
+  actions: ProjectAction[]
   activities: Activity[]
 }
 
@@ -93,6 +110,18 @@ export interface StartTerminalInput {
   dangerousMode: boolean
   cols?: number
   rows?: number
+}
+
+export interface CreateProjectActionInput {
+  projectId: string
+  name: string
+  command: string
+}
+
+export interface UpdateProjectActionInput {
+  actionId: string
+  name: string
+  command: string
 }
 
 export interface LatexProjectDetails {
@@ -293,6 +322,17 @@ export interface ProjectConsoleApi {
     onData(listener: (event: TerminalDataEvent) => void): () => void
     onState(listener: (event: TerminalStateEvent) => void): () => void
     onMetadata(listener: (event: TerminalMetadataEvent) => void): () => void
+  }
+  actions: {
+    create(input: CreateProjectActionInput): Promise<ProjectAction>
+    update(input: UpdateProjectActionInput): Promise<ProjectAction>
+    run(actionId: string): Promise<TerminalSession>
+    stop(actionId: string): Promise<void>
+    delete(actionId: string): Promise<void>
+  }
+  projectQna: {
+    start(projectId: string): Promise<TerminalSession>
+    sendPrompt(sessionId: string, prompt: string): Promise<void>
   }
   files: {
     list(projectId: string, relativePath?: string): Promise<FileEntry[]>

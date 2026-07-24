@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   CreatePortForwardInput,
   CreateProjectInput,
+  CreateProjectActionInput,
   LatexChatMode,
   ProjectConsoleApi,
   StartLatexChatInput,
@@ -9,7 +10,8 @@ import type {
   TerminalDataEvent,
   TerminalMetadataEvent,
   TerminalStateEvent,
-  UpdateLatexProjectInput
+  UpdateLatexProjectInput,
+  UpdateProjectActionInput
 } from '../shared/types'
 
 const api: ProjectConsoleApi = {
@@ -74,6 +76,20 @@ const api: ProjectConsoleApi = {
       ipcRenderer.on('terminal:metadata', handler)
       return () => ipcRenderer.removeListener('terminal:metadata', handler)
     }
+  },
+  actions: {
+    create: (input: CreateProjectActionInput) =>
+      ipcRenderer.invoke('actions:create', input),
+    update: (input: UpdateProjectActionInput) =>
+      ipcRenderer.invoke('actions:update', input),
+    run: (actionId: string) => ipcRenderer.invoke('actions:run', actionId),
+    stop: (actionId: string) => ipcRenderer.invoke('actions:stop', actionId),
+    delete: (actionId: string) => ipcRenderer.invoke('actions:delete', actionId)
+  },
+  projectQna: {
+    start: (projectId: string) => ipcRenderer.invoke('project-qna:start', projectId),
+    sendPrompt: (sessionId: string, prompt: string) =>
+      ipcRenderer.invoke('project-qna:send-prompt', sessionId, prompt)
   },
   files: {
     list: (projectId: string, relativePath = '.') =>

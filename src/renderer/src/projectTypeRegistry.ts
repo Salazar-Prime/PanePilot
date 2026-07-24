@@ -23,6 +23,8 @@ export interface ProjectTypeDefinition {
     | 'agent-history'
     | 'latex-editor'
     | 'agent-chat'
+    | 'actions'
+    | 'project-qna'
     | 'context'
   >
   Workspace: ComponentType<ProjectWorkspaceProps>
@@ -36,7 +38,14 @@ export const projectTypeRegistry: Record<ProjectType, ProjectTypeDefinition> = {
     id: 'terminal',
     label: 'Terminal',
     description: 'Shell and coding-agent workspaces',
-    capabilities: ['terminal', 'files', 'repository', 'agent-history'],
+    capabilities: [
+      'terminal',
+      'actions',
+      'project-qna',
+      'files',
+      'repository',
+      'agent-history'
+    ],
     Workspace: TerminalProjectWorkspace,
     createFields: ['folder', 'repository']
   },
@@ -47,6 +56,8 @@ export const projectTypeRegistry: Record<ProjectType, ProjectTypeDefinition> = {
     capabilities: [
       'latex-editor',
       'agent-chat',
+      'actions',
+      'project-qna',
       'context',
       'files',
       'repository',

@@ -17,7 +17,7 @@ current runtime uses a rendered-screen fallback. The next implementation should:
 - Make Needs input sticky until terminal input or stronger execution evidence clears it.
 - Distinguish direct questions, permission prompts, completed answers, and runtime
   failures.
-- Keep startup at Ready and exclude shell/custom profiles.
+- Keep startup at Ready and exclude shell terminals and Action runs.
 - Reconnect and deduplicate remote event streams.
 
 The `agent_events` table exists, but the current checkout has no event monitor, hook

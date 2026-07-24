@@ -11,10 +11,14 @@ import type {
   AgentState,
   Connection,
   ConversationProvider,
+  CreateProjectActionInput,
   LaunchProfile,
   Project,
+  ProjectAction,
   StartTerminalInput,
-  TerminalSession
+  TerminalSession,
+  TerminalSessionKind,
+  UpdateProjectActionInput
 } from '../shared/types'
 import {
   codexComposerIsReady,
@@ -86,6 +90,15 @@ function validatedTerminalName(value: string): string {
   return name
 }
 
+function generatedTerminalName(value: string): string {
+  const cleaned = value
+    .replace(/[:\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80)
+  return cleaned || 'PanePilot session'
+}
+
 function launchCommand(
   profile: LaunchProfile,
   customCommand: string | null,
@@ -127,6 +140,107 @@ export class TerminalManager {
   ) {}
 
   start(input: StartTerminalInput): TerminalSession {
+    if (input.profile === 'custom') {
+      throw new Error('Create a project Action to run a custom command.')
+    }
+    return this.startSession(input, 'terminal')
+  }
+
+  createAction(input: CreateProjectActionInput): ProjectAction {
+    return this.store.createProjectAction(input)
+  }
+
+  updateAction(input: UpdateProjectActionInput): ProjectAction {
+    const action = this.store.updateProjectAction(input.actionId, input)
+    if (action.lastSessionId) void this.syncSessionMetadata(action.lastSessionId)
+    return action
+  }
+
+  runAction(actionId: string): TerminalSession {
+    const action = this.store.getProjectAction(actionId)
+    if (!action) throw new Error('Action not found.')
+    this.requireProjectTmux(action.projectId, 'Actions')
+    const previous = action.lastSessionId
+      ? this.store.getSession(action.lastSessionId)
+      : null
+    if (previous && !['completed', 'error'].includes(previous.state)) {
+      throw new Error('This action is already running.')
+    }
+    if (previous) this.store.deleteSession(previous.id)
+    return this.startSession(
+      {
+        projectId: action.projectId,
+        name: generatedTerminalName(`Action · ${action.name}`),
+        profile: 'custom',
+        customCommand: action.command,
+        dangerousMode: false
+      },
+      'action',
+      (session) => this.store.setProjectActionSession(action.id, session.id),
+      true
+    )
+  }
+
+  stopAction(actionId: string): void {
+    const action = this.store.getProjectAction(actionId)
+    if (!action?.lastSessionId) throw new Error('This action has no run to stop.')
+    const session = this.store.getSession(action.lastSessionId)
+    if (!session || ['completed', 'error'].includes(session.state)) return
+    this.stop(session.id)
+  }
+
+  deleteAction(actionId: string): void {
+    const action = this.store.getProjectAction(actionId)
+    if (!action) throw new Error('Action not found.')
+    const session = action.lastSessionId
+      ? this.store.getSession(action.lastSessionId)
+      : null
+    if (session && !['completed', 'error'].includes(session.state)) {
+      this.stop(session.id)
+    }
+    this.store.deleteProjectAction(actionId)
+  }
+
+  startProjectQna(projectId: string): TerminalSession {
+    const existing = this.store.getProjectQnaSession(projectId)
+    if (existing) {
+      if (!['completed', 'error'].includes(existing.state)) return existing
+      this.resumeAgent(existing.id)
+      return this.requireSession(existing.id)
+    }
+    const project = this.store.getProject(projectId)
+    if (!project || project.archived) throw new Error('Choose an active project.')
+    this.requireProjectTmux(projectId, 'Project Q&A')
+    return this.startSession(
+      {
+        projectId,
+        name: generatedTerminalName(`Q&A · ${project.name}`),
+        profile: 'codex',
+        dangerousMode: false
+      },
+      'project-qna',
+      undefined,
+      true
+    )
+  }
+
+  sendProjectQnaPrompt(sessionId: string, prompt: string): void {
+    const session = this.requireSession(sessionId)
+    if (session.kind !== 'project-qna' || session.profile !== 'codex') {
+      throw new Error('Project Q&A session not found.')
+    }
+    this.sendPrompt(
+      sessionId,
+      `Answer this question about the current project. Do not modify files. ${prompt}`
+    )
+  }
+
+  private startSession(
+    input: StartTerminalInput,
+    kind: TerminalSessionKind,
+    onPersist?: (session: TerminalSession) => void,
+    tmuxAlreadyConfirmed = false
+  ): TerminalSession {
     const project = this.store.getProject(input.projectId)
     if (!project) throw new Error('Project not found.')
     const connection = this.store.getConnection(project.connectionId)
@@ -136,9 +250,15 @@ export class TerminalManager {
     }
 
     const tmuxAvailable =
-      connection.kind === 'local'
-        ? Boolean(this.tmuxPath)
-        : remoteHasTmux(connection.sshAlias ?? connection.name)
+      tmuxAlreadyConfirmed || this.connectionHasTmux(connection)
+    if (
+      (kind === 'action' || kind === 'project-qna') &&
+      !tmuxAvailable
+    ) {
+      throw new Error(
+        `${kind === 'action' ? 'Actions' : 'Project Q&A'} require tmux on this connection.`
+      )
+    }
     const profileLabel =
       input.profile === 'shell'
         ? basename(process.env.SHELL || 'Shell')
@@ -148,7 +268,10 @@ export class TerminalManager {
             ? 'Codex'
             : 'Command'
     const sameProfileCount = project.sessions.filter(
-      (session) => session.profile === input.profile
+      (session) =>
+        session.profile === input.profile &&
+        session.kind !== 'action' &&
+        session.kind !== 'project-qna'
     ).length
     const requestedName = input.name ? validatedTerminalName(input.name) : null
     let sessionName = requestedName || `${profileLabel} ${sameProfileCount + 1}`
@@ -166,6 +289,7 @@ export class TerminalManager {
       input.profile === 'codex' ? createCodexSessionName(sessionName, randomUUID()) : null
     const session = this.store.createSession({
       projectId: input.projectId,
+      kind,
       name: sessionName,
       profile: input.profile,
       providerSessionName,
@@ -174,8 +298,42 @@ export class TerminalManager {
       tmuxName,
       dangerousMode: input.dangerousMode
     })
-    this.launch(session, project.folder, connection, input.cols ?? 100, input.rows ?? 30, true)
+    try {
+      onPersist?.(session)
+      this.launch(
+        session,
+        project.folder,
+        connection,
+        input.cols ?? 100,
+        input.rows ?? 30,
+        true
+      )
+    } catch (error) {
+      this.changeState(
+        this.requireSession(session.id),
+        'error',
+        `${session.name} could not be started.`
+      )
+      throw error
+    }
     return this.store.getSession(session.id)!
+  }
+
+  private connectionHasTmux(connection: Connection): boolean {
+    return connection.kind === 'local'
+      ? Boolean(this.tmuxPath)
+      : remoteHasTmux(connection.sshAlias ?? connection.name)
+  }
+
+  private requireProjectTmux(projectId: string, capability: string): void {
+    const project = this.store.getProject(projectId)
+    const connection = project
+      ? this.store.getConnection(project.connectionId)
+      : null
+    if (!project || !connection) throw new Error('Project connection not found.')
+    if (!this.connectionHasTmux(connection)) {
+      throw new Error(`${capability} requires tmux on this connection.`)
+    }
   }
 
   async discoverSavedProviderSessions(): Promise<void> {
@@ -766,6 +924,7 @@ export class TerminalManager {
     return panePilotTmuxMetadata({
       project,
       session,
+      action: this.store.getActionForSession(session.id),
       latexSection
     })
   }
@@ -840,7 +999,29 @@ export class TerminalManager {
     const liveByName = new Map(listed.map((session) => [session.name, session]))
 
     for (const listedSession of listed) {
-      const metadata = listedSession.metadata
+      let metadata = listedSession.metadata
+      let upgradeLegacyMetadata = false
+      if (metadata && metadata.sessionKind == null) {
+        const known = this.store.getSession(metadata.terminalId)
+        if (known?.projectId) {
+          const action =
+            known.kind === 'action'
+              ? this.store.getActionForSession(known.id)
+              : null
+          metadata = {
+            ...metadata,
+            sessionKind: known.kind,
+            action: action
+              ? {
+                  id: action.id,
+                  name: action.name,
+                  command: action.command
+                }
+              : null
+          }
+          upgradeLegacyMetadata = true
+        }
+      }
       const project = this.projectForDiscoveredSession(projects, listedSession)
       if (!metadata || !project) continue
       const result = this.store.upsertDiscoveredTmuxSession(
@@ -850,6 +1031,17 @@ export class TerminalManager {
       )
       if (!result) continue
       let changed = result.changed
+      if (upgradeLegacyMetadata) {
+        changed = (await this.syncSessionMetadata(result.session.id)) || changed
+      }
+      if (metadata.action && result.session.kind === 'action') {
+        changed =
+          this.store.upsertDiscoveredProjectAction(
+            project.id,
+            result.session.id,
+            metadata.action
+          ) || changed
+      }
       if (metadata.latex) {
         changed =
           this.store.upsertDiscoveredLatexChat(

@@ -74,7 +74,7 @@ export function ArchivedProjectsPage({
       <header>
         <span className="eyebrow">PROJECT LIBRARY</span>
         <h1>Archived projects</h1>
-        <p>Stopped projects stay here with their terminal output and activity history intact.</p>
+        <p>Stopped projects stay here with their latest run output and activity history intact.</p>
       </header>
       {projects.length ? (
         <div className="archived-project-grid">
@@ -98,7 +98,7 @@ export function ArchivedProjectsPage({
                     {connection?.name} · {project.folder}
                   </span>
                   <small>
-                    {project.sessions.length} terminal
+                    {project.sessions.length} saved session
                     {project.sessions.length === 1 ? '' : 's'} · archived{' '}
                     {new Date(project.updatedAt).toLocaleDateString()}
                   </small>

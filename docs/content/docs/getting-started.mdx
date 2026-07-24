@@ -59,11 +59,15 @@ Open **New terminal** and choose a profile:
 | Login shell | Starts the user's normal interactive login shell |
 | Codex | Runs `codex` |
 | Claude Code | Runs `claude` |
-| Custom | Runs the entered command through the user's shell |
 
 The terminal name is also the tmux session name when tmux is used. If you omit it,
 PanePilot generates a profile-based name such as `Codex 1` and adds a numeric suffix
 when that tmux name already exists on the connection.
+
+Use the project’s **Actions** tab for reusable custom shell commands. Actions are
+editable, run in fresh ephemeral tmux sessions, and keep only the latest run output.
+The separate **Project Q&A** tab creates one persistent Codex question-and-answer
+session for the project.
 
 ## Add an SSH project
 

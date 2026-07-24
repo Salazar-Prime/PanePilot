@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import {
   Archive,
   ArchiveRestore,
-  Bot,
   MessageCircleQuestion,
   PencilLine,
   Plus,
@@ -19,6 +18,7 @@ import type {
 } from '@shared/types'
 import { ManagedTerminal } from './ManagedTerminal'
 import { StatusDot } from './StatusDot'
+import { TerminalProfileIcon } from './TerminalProfileIcon'
 
 interface Props {
   sessions: TerminalSession[]
@@ -204,7 +204,7 @@ export function LatexAgentPane({
               title={`${session.name} · ${scopeLabel(session)}`}
             >
               <StatusDot state={session.state} compact />
-              {session.profile === 'codex' ? <Sparkles size={12} /> : <Bot size={12} />}
+              <TerminalProfileIcon profile={session.profile} size={12} />
               <span>{session.name}</span>
               {session.latexChat && (
                 <small className={session.latexChat.mode}>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bot, Code2, ShieldAlert, Sparkles, TerminalSquare, X } from 'lucide-react'
+import { Bot, ShieldAlert, Sparkles, TerminalSquare, X } from 'lucide-react'
 import type { LaunchProfile, StartTerminalInput } from '@shared/types'
 
 const profiles: Array<{
@@ -10,8 +10,7 @@ const profiles: Array<{
 }> = [
   { id: 'shell', label: 'Login shell', description: 'Your normal interactive shell', icon: TerminalSquare },
   { id: 'codex', label: 'Codex', description: 'Start an OpenAI coding agent', icon: Sparkles },
-  { id: 'claude', label: 'Claude Code', description: 'Start an Anthropic coding agent', icon: Bot },
-  { id: 'custom', label: 'Custom', description: 'Run any command in this folder', icon: Code2 }
+  { id: 'claude', label: 'Claude Code', description: 'Start an Anthropic coding agent', icon: Bot }
 ]
 
 interface Props {
@@ -23,7 +22,6 @@ interface Props {
 export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
   const [profile, setProfile] = useState<LaunchProfile>('codex')
   const [name, setName] = useState('')
-  const [customCommand, setCustomCommand] = useState('')
   const [dangerousMode, setDangerousMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -46,7 +44,6 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
         projectId,
         name: name.trim() || undefined,
         profile,
-        customCommand: profile === 'custom' ? customCommand : undefined,
         dangerousMode: isAgent && dangerousMode
       })
       onClose()
@@ -94,7 +91,7 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
                   className={`profile-card ${profile === item.id ? 'selected' : ''}`}
                   onClick={() => {
                     setProfile(item.id)
-                    if (item.id === 'shell' || item.id === 'custom') setDangerousMode(false)
+                    if (item.id === 'shell') setDangerousMode(false)
                   }}
                 >
                   <Icon size={20} />
@@ -104,17 +101,6 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
               )
             })}
           </div>
-          {profile === 'custom' && (
-            <label className="field">
-              <span>Command</span>
-              <input
-                value={customCommand}
-                onChange={(event) => setCustomCommand(event.target.value)}
-                placeholder="npm run dev"
-                autoFocus
-              />
-            </label>
-          )}
           {isAgent && (
             <label className={`danger-option ${dangerousMode ? 'enabled' : ''}`}>
               <input
@@ -136,7 +122,7 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
             </button>
             <button
               className="primary-button"
-              disabled={submitting || (profile === 'custom' && !customCommand.trim())}
+              disabled={submitting}
             >
               {submitting ? 'Starting…' : 'Start terminal'}
             </button>

@@ -53,11 +53,16 @@ Tmux user options are editable by any process running as the same remote Unix us
 PanePilot therefore treats `@panepilot_*` values as bounded discovery metadata, not as
 authentication or authorization.
 
-Imported UUIDs, profiles, timestamps, names, encoded paths, provider IDs, and LaTeX
-scope fields are length- and shape-validated before SQLite writes. A project is matched
-only on the SSH connection being scanned and an exact normalized remote folder.
+Imported UUIDs, profiles, session kinds, timestamps, names, encoded paths, bounded
+Action definitions, provider IDs, and LaTeX scope fields are length- and
+shape-validated before SQLite writes. A project is matched only on the SSH connection
+being scanned and an exact normalized remote folder.
 Metadata can preserve an `unsafe` indicator for a running agent, but it cannot bypass
 the fresh confirmation required before PanePilot launches a dangerous resume.
+
+Live Action metadata contains the bounded command definition needed for cross-laptop
+reconciliation. It is visible to the same remote Unix user, as is the running process
+command line, and must not be used as a secret store.
 
 ## Port forwards
 

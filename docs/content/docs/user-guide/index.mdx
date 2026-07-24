@@ -10,22 +10,26 @@ PanePilot organizes work from broadest to narrowest:
 Connection
 └── Project
     ├── Terminal session
+    ├── Actions
+    ├── Project Q&A
     ├── Files
     ├── Local or remote LLM chat archives
     └── Activity
 ```
 
 A **connection** identifies where work runs. A **project** gives a stable identity to a
-folder on that connection. A **terminal session** is one shell, coding agent, or custom
-command in the project. Files, archive search, and activity provide context around
-those terminals.
+folder on that connection. A **terminal session** is one shell or coding agent in the
+project. **Actions** are editable commands with one retained run, while **Project Q&A**
+is the project’s single dedicated Codex chat. Files, archive search, and activity
+provide context around those capabilities.
 
 ## The application shell
 
 - The top bar shows the current project type and project identity.
 - The sidebar groups projects by connection and lists live terminals beneath each
   project.
-- The main workspace switches between Terminals, Files, LLM Chats, and Activity.
+- The main workspace switches between Terminals, Actions, Project Q&A, Files, LLM
+  Chats, and Activity.
 - The status bar counts active projects, terminals marked Working, and terminals in an
   attention state.
 
@@ -46,6 +50,12 @@ that object. Common actions are also available beside the selected project or te
     description="Launch, persist, organize, stop, and clean up terminals."
     href="/docs/user-guide/terminals"
     icon="SquareTerminal"
+  />
+  <Card
+    title="Actions and project Q&A"
+    description="Run reusable commands and ask Codex about a project."
+    href="/docs/user-guide/actions-and-project-qna"
+    icon="Play"
   />
   <Card
     title="Attention and status"

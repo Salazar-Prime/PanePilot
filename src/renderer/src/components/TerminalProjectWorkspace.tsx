@@ -5,11 +5,13 @@ import {
   Clipboard,
   Files,
   History,
+  MessageCircleQuestion,
   MessageSquareText,
   MoreHorizontal,
   Pencil,
   Pin,
   PinOff,
+  Play,
   Plus,
   RotateCcw,
   Square,
@@ -24,14 +26,26 @@ import {
   useSessionSort
 } from '../lib/sessionSort'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
+import { ActionsPanel } from './ActionsPanel'
 import { FilesPanel } from './FilesPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { ManagedTerminal } from './ManagedTerminal'
+import { ProjectQnaPane } from './ProjectQnaPane'
 import { RenameDialog } from './RenameDialog'
 import { StatusDot } from './StatusDot'
 import { TerminalLauncher } from './TerminalLauncher'
+import {
+  TerminalProfileIcon,
+  terminalProfileLabel
+} from './TerminalProfileIcon'
 
-type WorkspaceTab = 'terminal' | 'files' | 'chats' | 'history'
+type WorkspaceTab =
+  | 'terminal'
+  | 'actions'
+  | 'qna'
+  | 'files'
+  | 'chats'
+  | 'history'
 
 export function TerminalProjectWorkspace({
   project,
@@ -51,13 +65,18 @@ export function TerminalProjectWorkspace({
   const visibleSessions = useMemo(
     () =>
       sortSessions(
-        project.sessions.filter((session) => !session.archived),
+        project.sessions.filter(
+          (session) => !session.archived && session.kind === 'terminal'
+        ),
         sessionSort
       ),
     [project.sessions, sessionSort]
   )
   const archivedSessions = useMemo(
-    () => project.sessions.filter((session) => session.archived),
+    () =>
+      project.sessions.filter(
+        (session) => session.archived && session.kind === 'terminal'
+      ),
     [project.sessions]
   )
   const activeSession =
@@ -183,6 +202,14 @@ export function TerminalProjectWorkspace({
           <TerminalSquare size={15} />
           Terminals
         </button>
+        <button className={tab === 'actions' ? 'active' : ''} onClick={() => setTab('actions')}>
+          <Play size={15} />
+          Actions
+        </button>
+        <button className={tab === 'qna' ? 'active' : ''} onClick={() => setTab('qna')}>
+          <MessageCircleQuestion size={15} />
+          Project Q&amp;A
+        </button>
         <button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>
           <Files size={15} />
           Files
@@ -219,6 +246,10 @@ export function TerminalProjectWorkspace({
                     onClick={() => void selectSession(session.id)}
                   >
                     <StatusDot state={session.state} compact />
+                    <TerminalProfileIcon
+                      profile={session.profile}
+                      className="terminal-profile-icon"
+                    />
                     {session.pinned && <Pin className="pinned-indicator" size={10} />}
                     <span>{session.name}</span>
                     {session.dangerousMode && <small className="unsafe-badge">unsafe</small>}
@@ -292,7 +323,7 @@ export function TerminalProjectWorkspace({
               <span className="eyebrow">READY WHEN YOU ARE</span>
               <h2>Start your first terminal</h2>
               <p>
-                Run a shell, Codex, Claude Code, or any custom command in{' '}
+                Run a shell, Codex, or Claude Code in{' '}
                 <strong>{project.name}</strong>.
               </p>
               <button className="primary-button" onClick={() => setShowLauncher(true)}>
@@ -321,6 +352,8 @@ export function TerminalProjectWorkspace({
           )}
         </section>
       )}
+      {tab === 'actions' && <ActionsPanel project={project} onChanged={onChanged} />}
+      {tab === 'qna' && <ProjectQnaPane project={project} onChanged={onChanged} />}
       {tab === 'files' && <FilesPanel project={project} />}
       {tab === 'chats' && <ChatHistoryPanel project={project} />}
       {tab === 'history' && <HistoryPanel project={project} />}
@@ -438,10 +471,14 @@ export function TerminalProjectWorkspace({
               {archivedSessions.map((session) => (
                 <div key={session.id}>
                   <StatusDot state={session.state} compact />
+                  <TerminalProfileIcon
+                    profile={session.profile}
+                    className="terminal-profile-icon"
+                  />
                   <div>
                     <strong>{session.name}</strong>
                     <span>
-                      {session.profile} · {session.backend}
+                      {terminalProfileLabel(session.profile)} · {session.backend}
                       {(session.providerSessionId ?? session.providerSessionName) &&
                         ` · ${(session.providerSessionId ?? session.providerSessionName)!.slice(0, 18)}…`}
                     </span>

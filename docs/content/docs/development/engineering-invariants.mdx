@@ -35,7 +35,10 @@ needs an explicit product decision, not an incidental refactor.
 
 - Agent state represents a current turn, not merely a living process.
 - New Codex and Claude terminals start Ready, not Working.
-- Shell and custom terminals never create LLM Working state.
+- Shell terminals and Action runs never create LLM Working state.
+- An Action retains at most one run and one saved output buffer.
+- Each project has at most one project Q&A session, rendered outside ordinary terminal
+  navigation.
 - Completed means the terminal ended, not that an answer finished.
 - When structured provider events are implemented, direct questions and permission
   prompts must produce sticky Needs input.

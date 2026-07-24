@@ -6,17 +6,20 @@ icon: SquareTerminal
 
 ## Launch profiles
 
-PanePilot supports four profiles:
+PanePilot supports three user-created terminal profiles:
 
 | Profile | Local behavior | Remote behavior |
 | --- | --- | --- |
 | Shell | Starts the configured shell as a login shell | Starts the remote login shell |
 | Codex | Executes `codex` | Executes `codex` through an interactive login shell |
 | Claude Code | Executes `claude` | Executes `claude` through an interactive login shell |
-| Custom | Executes the command through the configured shell | Executes the command through an interactive login shell |
 
-The interactive login shell for remote agent and custom profiles helps the remote host
-load the environment that makes commands such as `codex` and `claude` available.
+The interactive login shell for remote agent profiles helps the remote host load the
+environment that makes commands such as `codex` and `claude` available.
+
+Each profile has its own icon in terminal tabs, sidebar rows, LaTeX chat switchers, and
+archived-terminal lists. Custom commands are managed as project
+[Actions](./actions-and-project-qna.mdx), rather than ordinary terminal profiles.
 
 ## tmux and PTY backends
 

@@ -57,7 +57,7 @@ does not implement subprojects.
 
 Stores:
 
-- Project ownership, display name, and launch profile.
+- Project ownership, session kind, display name, and launch profile.
 - Optional immutable provider session identity, currently used for exact Codex resume.
 - Optional custom command.
 - `tmux` or `pty` backend and optional tmux name.
@@ -70,11 +70,21 @@ Stores:
 The output column retains only the latest 512 KiB. `provider_session_id` is separate
 from both the PanePilot session ID and tmux name.
 
+`session_kind` separates ordinary terminals, Action runs, project Q&A, and LaTeX chats
+without overloading the launch profile. The internal `custom` profile remains only as
+the execution mechanism for an Action run.
+
 For a live remote terminal, tmux is authoritative for whether the process still
 exists. SQLite is a durable local materialized view: it retains projects, stopped and
 archived terminals, output, type-specific attachments, activities, and provider links
 after tmux metadata disappears. A foreign tagged session can recreate its local row
 using the stable terminal UUID; no database file is synchronized between laptops.
+
+### `project_actions`
+
+Stores an editable project-scoped name and bounded shell command. `last_session_id`
+points to the one retained Action run. Starting another run deletes the previous
+terminal row and saved output before linking a fresh ephemeral session.
 
 ### `activities`
 

@@ -33,7 +33,7 @@ These are owner-approved decisions and should be treated as product invariants u
 6. A project may have multiple terminal sessions.
 7. Terminals appear both as tabs in the main workspace and as direct-jump items under their project in the sidebar.
 8. Persistent terminals use tmux when available. A plain PTY is the fallback.
-9. Supported launch profiles are login shell, Codex, Claude Code, and a custom command.
+9. User-created terminal launch profiles are login shell, Codex, and Claude Code. Reusable custom commands are project Actions, not ordinary terminal tabs.
 10. Dangerous permission bypass is per terminal, off by default, visibly marked, and confirmed before launch. It must never become a silent global default.
 11. Terminal rename is non-destructive. Archive hides a stopped terminal but preserves its saved output. Permanent deletion requires a stopped terminal and confirmation.
 12. Deleting a terminal does not delete the provider's Codex or Claude conversation archive.
@@ -47,6 +47,8 @@ These are owner-approved decisions and should be treated as product invariants u
 20. SSH port forwards are explicit, bind to `127.0.0.1`, use `ExitOnForwardFailure`, and stop when PanePilot exits.
 21. A new Codex terminal receives a stable, unique provider session name before launch. PanePilot applies it with `/rename` when the Codex composer becomes ready, then attaches the provider's actual session ID when archive metadata appears. Resume uses the exact provider ID when known and the unique provider name only during the pre-ID window.
 22. PanePilot-owned tmux sessions carry versioned session-scoped `@panepilot_*` metadata. On an SSH connection, live tagged sessions are discovered with one-shot tmux commands and reconciled into the local database by stable terminal UUID and canonical project folder. This enables another PanePilot machine to attach without a remote daemon. Tmux is authoritative for live-session presence; SQLite remains authoritative for durable local workspace state.
+23. A project Action is an editable name and shell command. Each invocation replaces the prior saved run with a fresh ephemeral tmux session; the latest output remains visible, and xterm input remains available while the command is running.
+24. Every project has at most one project Q&A Codex session. It is a persistent tmux-backed agent session rendered as a top-level project capability, not as an ordinary terminal tab or sidebar terminal.
 
 ## Agent lifecycle semantics
 
@@ -103,6 +105,8 @@ Every new capability that crosses the Electron boundary must be updated in all o
 
 - `src/renderer/components/App.tsx`: application shell, connection/project sidebar, project header, History UI, and Files UI.
 - `src/renderer/components/ManagedTerminal.tsx`: xterm lifecycle, terminal tabs, launcher, rename/archive/delete UI, dangerous mode, and response input.
+- `src/renderer/src/components/ActionsPanel.tsx`: editable project Actions, latest-run output, rerun, stop, and deletion UI.
+- `src/renderer/src/components/ProjectQnaPane.tsx`: the single project-scoped Codex Q&A terminal and question composer.
 - `src/main/terminal-manager.ts`: PTY/tmux lifecycle, persistence, SSH attachment, state transitions, and terminal operations.
 - `src/main/remote-agent-hooks.ts`: additive SSH-host hook bootstrap and remote event bridge.
 - `src/main/remote-agent-event-follower.ts`: reconnecting SSH follower for remote lifecycle event spools.
@@ -135,6 +139,7 @@ Core tables:
 - `connections`: local or SSH connection identities.
 - `projects`: base project identity, type, connection, folder, repository URL, aggregate state, and timestamps.
 - `terminal_sessions`: terminal profile, command, backend, tmux identity, provider session name and ID, lifecycle state, dangerous-mode flag, archive flag, and saved output.
+- `project_actions`: editable project-scoped command definitions and the terminal session containing only the latest run.
 - `activities`: project timeline entries.
 - `agent_events`: idempotently ingested provider lifecycle payloads.
 - `port_forwards`: saved loopback-only SSH forwarding configurations. Running processes are intentionally not persisted across app exits.
@@ -153,11 +158,13 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - Each PanePilot terminal has its own tmux session name.
 - The tmux session name must exactly match the PanePilot terminal name. Rename both as one operation.
 - New tmux sessions are tagged before the launch profile starts with the stable terminal ID, originating project ID, canonical project folder, profile, creation time, dangerous-mode indicator, and any known provider/LaTeX attachment identity.
+- Session metadata also distinguishes ordinary terminals, Action runs, project Q&A, and LaTeX chats. A live Action includes its bounded definition so another PanePilot client can reconcile it without exposing the run as a normal terminal.
 - Remote discovery lists only the selected SSH user's default tmux server. Tagged sessions whose canonical project folder matches exactly are imported or refreshed in local SQLite; untagged sessions are ignored unless they match a legacy local terminal record, in which case PanePilot adopts them by adding metadata.
 - Another local PanePilot installation may attach to the same discovered session. Normal attachment does not detach an existing tmux client.
 - Discovery uses bounded `BatchMode` SSH calls and no remote daemon, registry, or background service. Offline hosts leave the locally cached workspace untouched.
 - A provider session ID discovered after launch is mirrored into the live tmux metadata. The PanePilot terminal UUID remains the primary identity because provider IDs are not available at tmux creation time.
 - Closing/detaching the renderer does not kill a persistent tmux session.
+- Action tmux sessions are intentionally ephemeral: they end when the command exits. PanePilot deletes the prior run row before rerunning so only the latest output is retained.
 - A PTY fallback is used when tmux cannot be found or created.
 - Tmux preserves a still-running Codex process. A new Codex terminal persists `provider_session_name` before spawn and applies it through `/rename` once the TUI composer is ready; Codex has no create-time name flag. `provider_session_id` is linked from archive metadata after the first spawn.
 - A stopped Codex terminal restarts with `codex resume <exact-id>` when the ID is known, or its unique provider session name while ID discovery is still pending.

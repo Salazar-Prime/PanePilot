@@ -37,8 +37,9 @@ current rendered terminal viewport after output settles:
        idle
 ```
 
-Shell and custom-command terminals are excluded, so ordinary output cannot create an
-agent Working state.
+Shell terminals and Action runs are excluded, so ordinary command output cannot create
+an agent Working state. The project Q&A session is a Codex agent and participates in
+normal lifecycle and attention counts.
 
 > Screen tracking is deliberately narrow but inherently provider-UI-dependent. It
 > cannot reliably distinguish a completed answer from a direct question or permission

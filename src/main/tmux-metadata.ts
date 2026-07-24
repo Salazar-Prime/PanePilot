@@ -4,7 +4,8 @@ import type {
   LatexChatScope,
   LaunchProfile,
   Project,
-  TerminalSession
+  TerminalSession,
+  TerminalSessionKind
 } from '../shared/types'
 
 export const PANEPILOT_TMUX_METADATA_VERSION = 1
@@ -22,6 +23,10 @@ const TMUX_METADATA_KEYS = {
   providerSessionName: '@panepilot_provider_session_name',
   createdAt: '@panepilot_created_at',
   dangerousMode: '@panepilot_dangerous_mode',
+  sessionKind: '@panepilot_session_kind',
+  actionId: '@panepilot_action_id',
+  actionName: '@panepilot_action_name',
+  actionCommand: '@panepilot_action_command',
   latexScope: '@panepilot_latex_scope',
   latexMode: '@panepilot_latex_mode',
   latexSectionId: '@panepilot_latex_section_id',
@@ -33,6 +38,12 @@ const TMUX_METADATA_KEYS = {
 export const PANEPILOT_TMUX_OPTION_KEYS = Object.values(TMUX_METADATA_KEYS)
 
 const VALID_PROFILES = new Set<LaunchProfile>(['shell', 'codex', 'claude', 'custom'])
+const VALID_SESSION_KINDS = new Set<TerminalSessionKind>([
+  'terminal',
+  'action',
+  'project-qna',
+  'latex-chat'
+])
 const VALID_LATEX_SCOPES = new Set<LatexChatScope>(['project', 'section'])
 const VALID_LATEX_MODES = new Set<LatexChatMode>(['ask', 'edit'])
 const UUID_PATTERN =
@@ -56,6 +67,12 @@ export interface PanePilotTmuxMetadata {
   providerSessionName: string | null
   createdAt: string
   dangerousMode: boolean
+  sessionKind: TerminalSessionKind | null
+  action: {
+    id: string
+    name: string
+    command: string
+  } | null
   latex: PanePilotTmuxLatexMetadata | null
 }
 
@@ -69,6 +86,11 @@ export interface ListedTmuxSession {
 interface SessionMetadataContext {
   project: Project
   session: TerminalSession
+  action: {
+    id: string
+    name: string
+    command: string
+  } | null
   latexSection: {
     id: string
     sourceFile: string
@@ -112,6 +134,7 @@ function quote(value: string): string {
 export function panePilotTmuxMetadata({
   project,
   session,
+  action,
   latexSection
 }: SessionMetadataContext): PanePilotTmuxMetadata {
   const chat = session.latexChat
@@ -124,6 +147,15 @@ export function panePilotTmuxMetadata({
     providerSessionName: session.providerSessionName,
     createdAt: session.createdAt,
     dangerousMode: session.dangerousMode,
+    sessionKind: session.kind,
+    action:
+      session.kind === 'action' && action
+        ? {
+            id: action.id,
+            name: action.name,
+            command: action.command
+          }
+        : null,
     latex: chat
       ? {
           scope: chat.scope,
@@ -156,6 +188,14 @@ export function encodePanePilotTmuxMetadata(
       : null,
     [TMUX_METADATA_KEYS.createdAt]: metadata.createdAt,
     [TMUX_METADATA_KEYS.dangerousMode]: metadata.dangerousMode ? '1' : '0',
+    [TMUX_METADATA_KEYS.sessionKind]: metadata.sessionKind,
+    [TMUX_METADATA_KEYS.actionId]: metadata.action?.id ?? null,
+    [TMUX_METADATA_KEYS.actionName]: metadata.action
+      ? encodeText(metadata.action.name)
+      : null,
+    [TMUX_METADATA_KEYS.actionCommand]: metadata.action
+      ? encodeText(metadata.action.command)
+      : null,
     [TMUX_METADATA_KEYS.latexScope]: metadata.latex?.scope ?? null,
     [TMUX_METADATA_KEYS.latexMode]: metadata.latex?.mode ?? null,
     [TMUX_METADATA_KEYS.latexSectionId]: metadata.latex?.sectionId ?? null,
@@ -182,7 +222,10 @@ export function tmuxMetadataShellCommand(
     ? ` -t ${quote(`=${targetName}:`)}`
     : ' -t "$TMUX_PANE"'
   const executable = quote(tmuxCommand)
-  return Object.entries(encodePanePilotTmuxMetadata(metadata))
+  const encoded = encodePanePilotTmuxMetadata(metadata)
+  const managedKey = TMUX_METADATA_KEYS.managed
+  const optionCommands = Object.entries(encoded)
+    .filter(([key]) => key !== managedKey)
     .flatMap(([key, value]) => {
       if (value == null) {
         return unsetMissing
@@ -193,7 +236,11 @@ export function tmuxMetadataShellCommand(
         `${executable} set-option -q${target} ${quote(key)} ${quote(value)}`
       ]
     })
-    .join(' && ')
+  return [
+    `${executable} set-option -q${target} ${quote(managedKey)} '0'`,
+    ...optionCommands,
+    `${executable} set-option -q${target} ${quote(managedKey)} '1'`
+  ].join(' && ')
 }
 
 export function tmuxSessionListFormat(): string {
@@ -218,13 +265,42 @@ function parseMetadata(values: Map<string, string>): PanePilotTmuxMetadata | nul
   const projectPath = decodeText(encodedProjectPath, 4_096)
   const profile = values.get(TMUX_METADATA_KEYS.profile) as LaunchProfile | undefined
   const createdAt = values.get(TMUX_METADATA_KEYS.createdAt) ?? ''
+  const sessionKindValue = values.get(TMUX_METADATA_KEYS.sessionKind) ?? ''
+  const sessionKind = sessionKindValue
+    ? (sessionKindValue as TerminalSessionKind)
+    : null
   if (
     !validUuid(terminalId) ||
     !validUuid(originProjectId) ||
     !projectPath ||
     !profile ||
     !VALID_PROFILES.has(profile) ||
+    (sessionKind != null && !VALID_SESSION_KINDS.has(sessionKind)) ||
     !validTimestamp(createdAt)
+  ) {
+    return null
+  }
+
+  let action: PanePilotTmuxMetadata['action'] = null
+  if (sessionKind === 'action') {
+    const actionId = values.get(TMUX_METADATA_KEYS.actionId) ?? ''
+    const actionNameValue = values.get(TMUX_METADATA_KEYS.actionName) ?? ''
+    const actionCommandValue = values.get(TMUX_METADATA_KEYS.actionCommand) ?? ''
+    const actionName = decodeText(actionNameValue, 80)
+    const actionCommand = decodeText(actionCommandValue, 4_096)
+    if (
+      !validUuid(actionId) ||
+      !actionName ||
+      /[\u0000-\u001f\u007f]/.test(actionName) ||
+      !actionCommand
+    ) {
+      return null
+    }
+    action = { id: actionId, name: actionName, command: actionCommand }
+  }
+  if (
+    (sessionKind === 'action' && profile !== 'custom') ||
+    (sessionKind === 'project-qna' && profile !== 'codex')
   ) {
     return null
   }
@@ -287,6 +363,12 @@ function parseMetadata(values: Map<string, string>): PanePilotTmuxMetadata | nul
       sectionLevel: scope === 'section' ? sectionLevel : null
     }
   }
+  if (
+    sessionKind === 'latex-chat' &&
+    (!latex || (profile !== 'codex' && profile !== 'claude'))
+  ) {
+    return null
+  }
 
   return {
     terminalId,
@@ -297,6 +379,8 @@ function parseMetadata(values: Map<string, string>): PanePilotTmuxMetadata | nul
     providerSessionName,
     createdAt: new Date(createdAt).toISOString(),
     dangerousMode: values.get(TMUX_METADATA_KEYS.dangerousMode) === '1',
+    sessionKind,
+    action,
     latex
   }
 }

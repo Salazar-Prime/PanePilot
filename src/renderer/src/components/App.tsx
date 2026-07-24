@@ -45,6 +45,7 @@ import { PortForwardDialog } from './PortForwardDialog'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
 import { RenameDialog } from './RenameDialog'
 import { StatusDot } from './StatusDot'
+import { TerminalProfileIcon } from './TerminalProfileIcon'
 
 type SidebarContext =
   | { kind: 'connection'; connection: Connection; x: number; y: number }
@@ -60,6 +61,10 @@ type SidebarContext =
 type RenameTarget =
   | { kind: 'project'; project: Project }
   | { kind: 'session'; session: TerminalSession }
+
+function isSidebarSession(session: TerminalSession): boolean {
+  return session.kind === 'terminal' || session.kind === 'latex-chat'
+}
 
 export function App() {
   const [connections, setConnections] = useState<Connection[]>([])
@@ -161,14 +166,18 @@ export function App() {
       setSelectedProjectId(first.id)
       setSelectedSessionId(
         sortSessions(
-          first.sessions.filter((session) => !session.archived),
+          first.sessions.filter(
+            (session) => !session.archived && isSidebarSession(session)
+          ),
           sessionSort
         )[0]?.id ?? null
       )
       return
     }
     const visible = sortSessions(
-      selected.sessions.filter((session) => !session.archived),
+      selected.sessions.filter(
+        (session) => !session.archived && isSidebarSession(session)
+      ),
       sessionSort
     )
     if (!visible.some((session) => session.id === selectedSessionId)) {
@@ -245,7 +254,9 @@ export function App() {
     setSelectedSessionId(
       next
         ? sortSessions(
-            next.sessions.filter((session) => !session.archived),
+            next.sessions.filter(
+              (session) => !session.archived && isSidebarSession(session)
+            ),
             sessionSort
           )[0]?.id ?? null
         : null
@@ -744,7 +755,10 @@ export function App() {
                 </div>
                 {connectionProjects.map((candidate) => {
                   const visibleSessions = sortSessions(
-                    candidate.sessions.filter((session) => !session.archived),
+                    candidate.sessions.filter(
+                      (session) =>
+                        !session.archived && isSidebarSession(session)
+                    ),
                     sessionSort
                   )
                   return (
@@ -826,6 +840,10 @@ export function App() {
                                 }
                               >
                                 <StatusDot state={session.state} compact />
+                                <TerminalProfileIcon
+                                  profile={session.profile}
+                                  className="terminal-profile-icon"
+                                />
                                 {session.pinned && (
                                   <Pin className="pinned-indicator" size={10} />
                                 )}
