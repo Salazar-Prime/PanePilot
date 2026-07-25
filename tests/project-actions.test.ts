@@ -1,9 +1,18 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ConversationIndexer } from '../src/main/conversation-indexer'
+import { ProjectMetadataService } from '../src/main/project-metadata-service'
 import { RemoteConversationIndexer } from '../src/main/remote-conversation-indexer'
 import { Store } from '../src/main/store'
 import { TerminalManager } from '../src/main/terminal-manager'
@@ -76,6 +85,72 @@ describe('project actions and Q&A persistence', () => {
       store.setSessionState(run.id, 'completed')
       store.deleteSession(run.id)
       expect(store.getProjectAction(action.id)?.lastSessionId).toBeNull()
+    } finally {
+      store.close()
+    }
+  })
+
+  it('shares Action definitions through .panepilot/actions.json', () => {
+    const { store, project } = createStoreAndProject()
+    const metadata = new ProjectMetadataService(store)
+    try {
+      const action = metadata.createAction({
+        projectId: project.id,
+        name: 'Run tests',
+        command: 'npm test'
+      })
+      const actionsPath = join(
+        project.folder,
+        '.panepilot',
+        'actions.json'
+      )
+      expect(JSON.parse(readFileSync(actionsPath, 'utf8'))).toEqual({
+        version: 1,
+        actions: [
+          {
+            id: action.id,
+            name: 'Run tests',
+            command: 'npm test'
+          }
+        ]
+      })
+
+      const importedId = randomUUID()
+      writeFileSync(
+        actionsPath,
+        `${JSON.stringify(
+          {
+            version: 1,
+            actions: [
+              {
+                id: action.id,
+                name: 'Check project',
+                command: 'npm run typecheck'
+              },
+              {
+                id: importedId,
+                name: 'Build app',
+                command: 'npm run build'
+              }
+            ]
+          },
+          null,
+          2
+        )}\n`
+      )
+
+      expect(metadata.syncActions(project.id)).toEqual([
+        expect.objectContaining({
+          id: action.id,
+          name: 'Check project',
+          command: 'npm run typecheck'
+        }),
+        expect.objectContaining({
+          id: importedId,
+          name: 'Build app',
+          command: 'npm run build'
+        })
+      ])
     } finally {
       store.close()
     }
@@ -265,5 +340,3 @@ describe('project actions and Q&A persistence', () => {
     }
   )
 })
-import { spawnSync } from 'node:child_process'
-import { randomUUID } from 'node:crypto'

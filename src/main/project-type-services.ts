@@ -11,7 +11,7 @@ import {
   normalizeOptionalWebUrl,
   normalizeProjectRelativePath
 } from './latex-paths'
-import { previewRemoteFile } from './remote-file-service'
+import { listRemoteFolders, previewRemoteFile } from './remote-file-service'
 import type { Store } from './store'
 
 export interface ProjectTypeService {
@@ -19,21 +19,28 @@ export interface ProjectTypeService {
   create(store: Store, input: CreateProjectInput, connection: Connection): Project
 }
 
-function validateBase(input: CreateProjectInput, connection: Connection): void {
+function validateBase(input: CreateProjectInput, connection: Connection): string {
   if (!input.name.trim()) throw new Error('Project name is required.')
   if (!input.folder.trim()) throw new Error('Project folder is required.')
-  if (
-    connection.kind === 'local' &&
-    (!existsSync(input.folder) || !statSync(input.folder).isDirectory())
-  ) {
-    throw new Error('Choose an existing local folder.')
+  const folder = input.folder.trim()
+  if (connection.kind === 'local') {
+    if (!existsSync(folder) || !statSync(folder).isDirectory()) {
+      throw new Error('Choose an existing local folder.')
+    }
+    return folder
   }
+  if (!connection.sshAlias) throw new Error('The SSH connection has no alias.')
+  return listRemoteFolders(connection.sshAlias, folder).currentPath
 }
 
-function repositoryFor(input: CreateProjectInput, connection: Connection): string | null {
+function repositoryFor(
+  input: CreateProjectInput,
+  connection: Connection,
+  folder: string
+): string | null {
   return (
     normalizeOptionalWebUrl(input.repositoryUrl, 'Repository URL') ??
-    (connection.kind === 'local' ? discoverRepository(input.folder) : null)
+    (connection.kind === 'local' ? discoverRepository(folder) : null)
   )
 }
 
@@ -41,13 +48,13 @@ const terminalProjectService: ProjectTypeService = {
   type: 'terminal',
   create(store, input, connection) {
     if (input.type !== 'terminal') throw new Error('Invalid terminal project settings.')
-    validateBase(input, connection)
+    const folder = validateBase(input, connection)
     return store.createProject({
       type: 'terminal',
       name: input.name.trim(),
       connectionId: input.connectionId,
-      folder: input.folder.trim(),
-      repositoryUrl: repositoryFor(input, connection)
+      folder,
+      repositoryUrl: repositoryFor(input, connection, folder)
     })
   }
 }
@@ -56,7 +63,7 @@ const latexProjectService: ProjectTypeService = {
   type: 'latex',
   create(store, input, connection) {
     if (input.type !== 'latex') throw new Error('Invalid LaTeX project settings.')
-    validateBase(input, connection)
+    const folder = validateBase(input, connection)
     const mainFile = normalizeProjectRelativePath(
       input.latex.mainFile || 'main.tex',
       'Main LaTeX file',
@@ -71,10 +78,10 @@ const latexProjectService: ProjectTypeService = {
     try {
       preview =
         connection.kind === 'local'
-          ? previewLocalFile(input.folder, mainFile)
+          ? previewLocalFile(folder, mainFile)
           : previewRemoteFile(
               connection.sshAlias ?? connection.name,
-              input.folder,
+              folder,
               mainFile
             )
     } catch {
@@ -87,8 +94,8 @@ const latexProjectService: ProjectTypeService = {
       type: 'latex',
       name: input.name.trim(),
       connectionId: input.connectionId,
-      folder: input.folder.trim(),
-      repositoryUrl: repositoryFor(input, connection),
+      folder,
+      repositoryUrl: repositoryFor(input, connection, folder),
       latex: { mainFile, overleafUrl, contextFolder }
     })
   }

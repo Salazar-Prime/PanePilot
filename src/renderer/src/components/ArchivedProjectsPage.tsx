@@ -6,7 +6,8 @@ import {
   Github,
   Laptop,
   Pencil,
-  Server
+  Server,
+  Trash2
 } from 'lucide-react'
 import type { Connection, Project } from '@shared/types'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
@@ -16,13 +17,15 @@ interface Props {
   connections: Connection[]
   onRestore(project: Project): Promise<void>
   onRename(project: Project): Promise<void>
+  onDelete(project: Project): Promise<void>
 }
 
 export function ArchivedProjectsPage({
   projects,
   connections,
   onRestore,
-  onRename
+  onRename,
+  onDelete
 }: Props) {
   const [menu, setMenu] = useState<{ project: Project; x: number; y: number } | null>(
     null
@@ -65,7 +68,15 @@ export function ArchivedProjectsPage({
                 window.projectConsole.projects.openRepository(project.repositoryUrl!)
             }
           ]
-        : [])
+        : []),
+      {
+        id: 'delete',
+        label: 'Delete project from PanePilot',
+        icon: <Trash2 size={14} />,
+        danger: true,
+        separatorBefore: true,
+        action: () => onDelete(project)
+      }
     ]
   }
 
@@ -103,16 +114,30 @@ export function ArchivedProjectsPage({
                     {new Date(project.updatedAt).toLocaleDateString()}
                   </small>
                 </div>
-                <button
-                  className="secondary-button"
-                  onClick={() =>
-                    void onRestore(project).catch((caught: unknown) =>
-                      window.alert(caught instanceof Error ? caught.message : String(caught))
-                    )
-                  }
-                >
-                  <ArchiveRestore size={14} /> Restore
-                </button>
+                <div className="archived-project-actions">
+                  <button
+                    className="secondary-button"
+                    onClick={() =>
+                      void onRestore(project).catch((caught: unknown) =>
+                        window.alert(caught instanceof Error ? caught.message : String(caught))
+                      )
+                    }
+                  >
+                    <ArchiveRestore size={14} /> Restore
+                  </button>
+                  <button
+                    className="icon-button danger-text"
+                    title={`Delete ${project.name} from PanePilot`}
+                    aria-label={`Delete ${project.name} from PanePilot`}
+                    onClick={() =>
+                      void onDelete(project).catch((caught: unknown) =>
+                        window.alert(caught instanceof Error ? caught.message : String(caught))
+                      )
+                    }
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </article>
             )
           })}

@@ -26,6 +26,7 @@ import {
 } from './codex-pane-status'
 import { normalizeCodexThreadId } from './codex-thread-id'
 import { ConversationIndexer } from './conversation-indexer'
+import { ProjectMetadataService } from './project-metadata-service'
 import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import { acknowledgedAgentState, ScreenActivityDetector } from './screen-activity-detector'
 import { Store } from './store'
@@ -221,14 +222,18 @@ export class TerminalManager {
   private readonly remoteTmuxPaths = new Map<string, string>()
   private readonly pendingOutput = new Map<string, PendingOutput>()
   private readonly tmuxPath = resolveTmux()
+  private readonly metadata: ProjectMetadataService
   private shuttingDown = false
 
   constructor(
     private readonly store: Store,
     private readonly getWindow: () => BrowserWindow | null,
     private readonly conversations: ConversationIndexer,
-    private readonly remoteConversations: RemoteConversationIndexer
-  ) {}
+    private readonly remoteConversations: RemoteConversationIndexer,
+    metadata?: ProjectMetadataService
+  ) {
+    this.metadata = metadata ?? new ProjectMetadataService(store)
+  }
 
   start(input: StartTerminalInput): TerminalSession {
     if (input.profile === 'custom') {
@@ -238,13 +243,17 @@ export class TerminalManager {
   }
 
   createAction(input: CreateProjectActionInput): ProjectAction {
-    return this.store.createProjectAction(input)
+    return this.metadata.createAction(input)
   }
 
   updateAction(input: UpdateProjectActionInput): ProjectAction {
-    const action = this.store.updateProjectAction(input.actionId, input)
+    const action = this.metadata.updateAction(input)
     if (action.lastSessionId) void this.syncSessionMetadata(action.lastSessionId)
     return action
+  }
+
+  syncActions(projectId: string): ProjectAction[] {
+    return this.metadata.syncActions(projectId)
   }
 
   runAction(actionId: string): TerminalSession {
@@ -292,7 +301,7 @@ export class TerminalManager {
     if (session && !['completed', 'error'].includes(session.state)) {
       this.stop(session.id)
     }
-    this.store.deleteProjectAction(actionId)
+    this.metadata.deleteAction(actionId)
   }
 
   async startProjectQna(projectId: string): Promise<TerminalSession> {

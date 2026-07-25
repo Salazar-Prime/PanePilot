@@ -895,8 +895,124 @@ select:focus-visible {
   width: 100%;
 }
 
-.workspace-panel-cache > .notes-panel {
+.workspace-panel-cache > .notes-layout {
   width: 100%;
+}
+
+.notes-layout {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: 242px minmax(0, 1fr);
+  background: #090b10;
+}
+
+.notes-list {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid #242933;
+  background: #0d1016;
+}
+
+.notes-list > header {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 13px;
+  border-bottom: 1px solid #232832;
+}
+
+.notes-list > header > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.notes-list > header strong {
+  color: #d6dae3;
+  font-size: 12px;
+}
+
+.notes-list-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.notes-list-scroll > button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 11px;
+  color: #68717f;
+  border: 0;
+  border-bottom: 1px solid #1e232c;
+  background: transparent;
+  text-align: left;
+}
+
+.notes-list-scroll > button:hover,
+.notes-list-scroll > button.active {
+  color: #94a2ef;
+  background: #171b25;
+}
+
+.notes-list-scroll > button.active {
+  box-shadow: inset 2px 0 0 #7184e6;
+}
+
+.notes-list-scroll > button > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.notes-list-scroll strong,
+.notes-list-scroll small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-list-scroll strong {
+  color: #c8cdd7;
+  font-size: 10px;
+}
+
+.notes-list-scroll small {
+  color: #5c6573;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 8px;
+}
+
+.notes-list-empty {
+  display: flex;
+  align-items: center;
+  padding: 42px 20px;
+  color: #586171;
+  flex-direction: column;
+  gap: 7px;
+  text-align: center;
+}
+
+.notes-list-empty span {
+  color: #a8afbb;
+  font-size: 10px;
+}
+
+.notes-list-empty small {
+  max-width: 175px;
+  line-height: 1.5;
 }
 
 .notes-panel {
@@ -995,6 +1111,10 @@ select:focus-visible {
   border-top: 1px solid #222730;
   background: #0d1016;
   font-size: 8px;
+}
+
+.note-name-modal {
+  width: min(430px, calc(100vw - 32px));
 }
 
 .file-browser {
@@ -2184,13 +2304,13 @@ select:focus-visible {
   background: transparent;
 }
 
-.sidebar-footer-actions .new-project-sidebar {
-  border-top: 0;
+.new-project-actions {
+  display: flex;
+  border-top: 1px solid #1f232c;
 }
 
 .archived-projects-sidebar,
-.new-project-sidebar,
-.refresh-connections-sidebar {
+.new-project-sidebar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2203,8 +2323,7 @@ select:focus-visible {
 }
 
 .archived-projects-sidebar span,
-.new-project-sidebar span,
-.refresh-connections-sidebar span {
+.new-project-sidebar span {
   flex: 1;
 }
 
@@ -2215,8 +2334,28 @@ select:focus-visible {
 
 .archived-projects-sidebar:hover,
 .new-project-sidebar:hover,
-.refresh-connections-sidebar:hover,
 .archived-projects-sidebar.selected {
+  color: #cbd0dc;
+  background: #13161d;
+}
+
+.new-project-actions .new-project-sidebar {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+  border-top: 0;
+}
+
+.new-project-actions .refresh-connections-button {
+  display: grid;
+  width: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  color: #747d8c;
+  border-left: 1px solid #1f232c;
+}
+
+.new-project-actions .refresh-connections-button:hover {
   color: #cbd0dc;
   background: #13161d;
 }
@@ -2457,6 +2596,17 @@ select:focus-visible {
   height: 28px;
   padding: 0 9px;
   font-size: 9px;
+}
+
+.archived-project-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.archived-project-actions .icon-button {
+  width: 28px;
+  height: 28px;
 }
 
 .archive-empty {
@@ -3682,6 +3832,13 @@ button.type-switcher {
   gap: 4px;
 }
 
+.actions-list > header > .actions-list-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  gap: 5px;
+}
+
 .actions-list > header strong,
 .action-runner-heading strong {
   color: #d6dae3;
@@ -3929,7 +4086,8 @@ button.type-switcher {
     grid-template-columns: minmax(0, 1fr) 318px;
   }
 
-  .actions-panel {
+  .actions-panel,
+  .notes-layout {
     grid-template-columns: 210px minmax(0, 1fr);
   }
 }

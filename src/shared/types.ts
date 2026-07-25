@@ -243,10 +243,14 @@ export interface FilePreview {
   binary: boolean
 }
 
-export interface ProjectNotes {
-  path: '.notes-panepilot'
+export interface ProjectNoteSummary {
+  path: string
+  name: string
+  updatedAt: string
+}
+
+export interface ProjectNote extends ProjectNoteSummary {
   content: string
-  exists: boolean
 }
 
 export type ConversationProvider = 'codex' | 'claude'
@@ -321,6 +325,7 @@ export interface ProjectConsoleApi {
     rename(projectId: string, name: string): Promise<void>
     archive(projectId: string): Promise<void>
     restore(projectId: string): Promise<void>
+    delete(projectId: string): Promise<void>
     updateRepository(projectId: string, url: string | null): Promise<void>
     chooseFolder(): Promise<string | null>
     openRepository(url: string): Promise<void>
@@ -346,6 +351,7 @@ export interface ProjectConsoleApi {
     onTransport(listener: (event: TerminalTransportEvent) => void): () => void
   }
   actions: {
+    sync(projectId: string): Promise<ProjectAction[]>
     create(input: CreateProjectActionInput): Promise<ProjectAction>
     update(input: UpdateProjectActionInput): Promise<ProjectAction>
     run(actionId: string): Promise<TerminalSession>
@@ -358,8 +364,12 @@ export interface ProjectConsoleApi {
     sendPrompt(sessionId: string, prompt: string): Promise<void>
   }
   notes: {
-    read(projectId: string): Promise<ProjectNotes>
-    write(projectId: string, content: string): Promise<ProjectNotes>
+    list(projectId: string): Promise<ProjectNoteSummary[]>
+    create(projectId: string, name: string): Promise<ProjectNote>
+    read(projectId: string, path: string): Promise<ProjectNote>
+    write(projectId: string, path: string, content: string): Promise<ProjectNote>
+    rename(projectId: string, path: string, name: string): Promise<ProjectNote>
+    delete(projectId: string, path: string): Promise<void>
   }
   files: {
     list(projectId: string, relativePath?: string): Promise<FileEntry[]>

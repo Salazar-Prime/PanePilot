@@ -169,7 +169,17 @@ function now(): string {
   return new Date().toISOString()
 }
 
-function validatedActionName(value: string): string {
+export function validatedActionId(value: string): string {
+  const id = value.trim().toLowerCase()
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)
+  ) {
+    throw new Error('Action IDs must be UUIDs.')
+  }
+  return id
+}
+
+export function validatedActionName(value: string): string {
   const name = value.trim()
   if (!name) throw new Error('Action name cannot be empty.')
   if (name.length > 80) throw new Error('Action names must be 80 characters or fewer.')
@@ -179,7 +189,7 @@ function validatedActionName(value: string): string {
   return name
 }
 
-function validatedActionCommand(value: string): string {
+export function validatedActionCommand(value: string): string {
   const command = value.trim()
   if (!command) throw new Error('Action command cannot be empty.')
   if (command.length > 4_096) {
@@ -674,6 +684,22 @@ export class Store {
     )
   }
 
+  deleteProject(id: string): void {
+    const project = this.getProject(id)
+    if (!project) throw new Error('Project not found.')
+    if (!project.archived) {
+      throw new Error('Archive the project before deleting it.')
+    }
+    if (
+      project.sessions.some(
+        (session) => !['completed', 'error'].includes(session.state)
+      )
+    ) {
+      throw new Error('Stop every terminal or chat before deleting this project.')
+    }
+    this.db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+  }
+
   getProject(id: string): Project | null {
     const row = this.db
       .prepare(
@@ -1022,13 +1048,16 @@ export class Store {
   }
 
   createProjectAction(input: {
+    id?: string
     projectId: string
     name: string
     command: string
   }): ProjectAction {
     const project = this.getProject(input.projectId)
     if (!project || project.archived) throw new Error('Choose an active project.')
-    const id = randomUUID()
+    const id = input.id ? validatedActionId(input.id) : randomUUID()
+    const collision = this.getProjectAction(id)
+    if (collision) throw new Error('That Action ID is already in use.')
     const timestamp = now()
     const name = validatedActionName(input.name)
     const command = validatedActionCommand(input.command)
@@ -1046,6 +1075,42 @@ export class Store {
       `Created action ${name}`
     )
     return this.getProjectAction(id)!
+  }
+
+  upsertSharedProjectAction(
+    projectId: string,
+    input: { id: string; name: string; command: string }
+  ): boolean {
+    const project = this.getProject(projectId)
+    if (!project || project.archived) throw new Error('Choose an active project.')
+    const id = validatedActionId(input.id)
+    const name = validatedActionName(input.name)
+    const command = validatedActionCommand(input.command)
+    const existing = this.getProjectAction(id)
+    if (existing && existing.projectId !== projectId) {
+      throw new Error('A shared Action ID belongs to another project.')
+    }
+    if (existing?.name === name && existing.command === command) return false
+    const timestamp = now()
+    this.db
+      .prepare(
+        `INSERT INTO project_actions
+         (id, project_id, name, command, last_session_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, NULL, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           command = excluded.command,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        id,
+        projectId,
+        name,
+        command,
+        existing?.createdAt ?? timestamp,
+        timestamp
+      )
+    return true
   }
 
   updateProjectAction(

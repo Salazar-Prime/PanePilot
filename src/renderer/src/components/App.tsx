@@ -38,6 +38,7 @@ import type {
 } from '@shared/types'
 import { isAttentionState } from '../lib/status'
 import { sortSessions, useSessionSort } from '../lib/sessionSort'
+import { tmuxAttachCommand, tmuxOptionsCommand } from '../lib/tmuxCommands'
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
@@ -259,6 +260,17 @@ export function App() {
     setShowArchivedProjects(false)
     setSelectedProjectId(target.id)
     setSelectedSessionId(null)
+  }
+
+  async function deleteArchivedProject(target: Project) {
+    if (
+      !window.confirm(
+        `Permanently remove “${target.name}” from PanePilot? Saved terminal output and activity will be deleted. The project folder, .panepilot files, and provider chat archives will remain.`
+      )
+    )
+      return
+    await window.projectConsole.projects.delete(target.id)
+    await refresh()
   }
 
   function selectProject(id: string) {
@@ -543,9 +555,16 @@ export function App() {
               separatorBefore: true,
               action: () =>
                 window.projectConsole.system.copyText(
-                  ownerConnection?.kind === 'ssh'
-                    ? `ssh -t ${ownerConnection.sshAlias} tmux attach-session -t ${shellQuote(`=${session.tmuxName}`)}`
-                    : `tmux attach-session -t ${shellQuote(`=${session.tmuxName}`)}`
+                  tmuxAttachCommand(ownerConnection, session.tmuxName!)
+                )
+            },
+            {
+              id: 'copy-options',
+              label: 'Copy tmux options command',
+              icon: <Clipboard size={14} />,
+              action: () =>
+                window.projectConsole.system.copyText(
+                  tmuxOptionsCommand(ownerConnection, session.tmuxName!)
                 )
             }
           ]
@@ -915,20 +934,6 @@ export function App() {
         </div>
         <div className="sidebar-footer-actions">
           <button
-            className="refresh-connections-sidebar"
-            onClick={() => void refreshSshConnections()}
-            disabled={refreshingConnections}
-            title="Re-read SSH hosts from ~/.ssh/config"
-          >
-            <RefreshCw
-              size={15}
-              className={refreshingConnections ? 'spin' : ''}
-            />
-            <span>
-              {refreshingConnections ? 'Refreshing SSH hosts…' : 'Refresh SSH hosts'}
-            </span>
-          </button>
-          <button
             className={`archived-projects-sidebar ${
               showArchivedProjects ? 'selected' : ''
             }`}
@@ -941,10 +946,24 @@ export function App() {
             <span>Archived projects</span>
             <small>{archivedProjects.length}</small>
           </button>
-          <button className="new-project-sidebar" onClick={() => openNewProject()}>
-            <Plus size={15} />
-            <span>New project</span>
-          </button>
+          <div className="new-project-actions">
+            <button className="new-project-sidebar" onClick={() => openNewProject()}>
+              <Plus size={15} />
+              <span>New project</span>
+            </button>
+            <button
+              className="refresh-connections-button"
+              onClick={() => void refreshSshConnections()}
+              disabled={refreshingConnections}
+              title="Refresh SSH hosts from ~/.ssh/config"
+              aria-label="Refresh SSH hosts"
+            >
+              <RefreshCw
+                size={15}
+                className={refreshingConnections ? 'spin' : ''}
+              />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -961,6 +980,7 @@ export function App() {
             connections={connections}
             onRestore={restoreProject}
             onRename={promptRenameProject}
+            onDelete={deleteArchivedProject}
           />
         ) : project ? (
           <Workspace
@@ -1093,8 +1113,4 @@ function messageFor(value: unknown): string {
 
 function showError(value: unknown): void {
   window.alert(messageFor(value))
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`
 }

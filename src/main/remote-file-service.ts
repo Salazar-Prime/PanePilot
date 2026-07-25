@@ -6,7 +6,6 @@ import { pipeline } from 'node:stream/promises'
 import type {
   FileEntry,
   FilePreview,
-  ProjectNotes,
   RemoteFolderListing
 } from '../shared/types'
 
@@ -99,66 +98,6 @@ if len(content) > 1024 * 1024:
 with open(target, "wb") as handle:
     handle.write(content)
 print("{}")
-`
-
-const READ_PROJECT_NOTES_SCRIPT = String.raw`
-import json, os, sys
-payload = json.load(sys.stdin)
-root = os.path.realpath(os.path.expanduser(payload["root"]))
-if not os.path.isdir(root):
-    raise RuntimeError("The remote project folder does not exist.")
-target = os.path.join(root, ".notes-panepilot")
-if not os.path.lexists(target):
-    print(json.dumps({"path": ".notes-panepilot", "content": "", "exists": False}))
-    raise SystemExit(0)
-if os.path.islink(target) or not os.path.isfile(target):
-    raise RuntimeError(".notes-panepilot must be a regular file inside the project folder.")
-if os.path.getsize(target) > 1024 * 1024:
-    raise RuntimeError("Project notes must be 1 MB or smaller.")
-with open(target, "rb") as handle:
-    raw = handle.read()
-if b"\0" in raw:
-    raise RuntimeError("Project notes must be UTF-8 Markdown text.")
-try:
-    content = raw.decode("utf-8")
-except UnicodeDecodeError:
-    raise RuntimeError("Project notes must be UTF-8 Markdown text.")
-print(json.dumps({"path": ".notes-panepilot", "content": content, "exists": True}))
-`
-
-const WRITE_PROJECT_NOTES_SCRIPT = String.raw`
-import json, os, sys, tempfile
-payload = json.load(sys.stdin)
-root = os.path.realpath(os.path.expanduser(payload["root"]))
-if not os.path.isdir(root):
-    raise RuntimeError("The remote project folder does not exist.")
-target = os.path.join(root, ".notes-panepilot")
-if os.path.lexists(target) and (os.path.islink(target) or not os.path.isfile(target)):
-    raise RuntimeError(".notes-panepilot must be a regular file inside the project folder.")
-content = payload["content"].encode("utf-8")
-if len(content) > 1024 * 1024:
-    raise RuntimeError("Project notes must be 1 MB or smaller.")
-temporary = None
-try:
-    handle = tempfile.NamedTemporaryFile(
-        mode="wb",
-        dir=root,
-        prefix="..notes-panepilot.",
-        suffix=".tmp",
-        delete=False,
-    )
-    temporary = handle.name
-    with handle:
-        os.chmod(temporary, 0o600)
-        handle.write(content)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temporary, target)
-    temporary = None
-finally:
-    if temporary and os.path.exists(temporary):
-        os.unlink(temporary)
-print(json.dumps({"path": ".notes-panepilot", "content": payload["content"], "exists": True}))
 `
 
 const DOWNLOAD_FILE_SCRIPT = String.raw`
@@ -310,29 +249,6 @@ export function writeRemoteFile(
   runRemotePython<Record<string, never>>(sshAlias, WRITE_FILE_SCRIPT, {
     root,
     relativePath,
-    content
-  })
-}
-
-export function readRemoteProjectNotes(
-  sshAlias: string,
-  root: string
-): ProjectNotes {
-  return runRemotePython<ProjectNotes>(sshAlias, READ_PROJECT_NOTES_SCRIPT, {
-    root
-  })
-}
-
-export function writeRemoteProjectNotes(
-  sshAlias: string,
-  root: string,
-  content: string
-): ProjectNotes {
-  if (Buffer.byteLength(content, 'utf8') > MAX_FILE_BYTES) {
-    throw new Error('Project notes must be 1 MB or smaller.')
-  }
-  return runRemotePython<ProjectNotes>(sshAlias, WRITE_PROJECT_NOTES_SCRIPT, {
-    root,
     content
   })
 }

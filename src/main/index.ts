@@ -23,13 +23,12 @@ import {
   downloadLocalFile,
   listLocalFiles,
   previewLocalFile,
-  readLocalProjectNotes,
-  writeLocalProjectNotes,
   writeLocalFile
 } from './file-service'
 import { LatexProjectService } from './latex-project-service'
 import { normalizeOptionalWebUrl } from './latex-paths'
 import { PortForwardManager, testSshConnection } from './port-forward-manager'
+import { ProjectMetadataService } from './project-metadata-service'
 import { projectTypeServices } from './project-type-services'
 import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import {
@@ -37,8 +36,6 @@ import {
   listRemoteFiles,
   listRemoteFolders,
   previewRemoteFile,
-  readRemoteProjectNotes,
-  writeRemoteProjectNotes,
   writeRemoteFile
 } from './remote-file-service'
 import { discoverSshAliases } from './ssh-config'
@@ -52,6 +49,7 @@ let conversations: ConversationIndexer
 let remoteConversations: RemoteConversationIndexer
 let portForwards: PortForwardManager
 let latex: LatexProjectService
+let metadata: ProjectMetadataService
 
 // Keep the existing application-data identity when the packaged product name is PanePilot.
 app.setName('PanePilot')
@@ -124,6 +122,9 @@ function registerIpc(): void {
   ipcMain.handle('projects:restore', (_event, projectId: string) => {
     store.archiveProject(projectId, false)
   })
+  ipcMain.handle('projects:delete', (_event, projectId: string) => {
+    store.deleteProject(projectId)
+  })
   ipcMain.handle(
     'projects:update-repository',
     (_event, projectId: string, rawUrl: string | null) => {
@@ -139,6 +140,9 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('terminals:start', (_event, input: StartTerminalInput) => terminals.start(input))
+  ipcMain.handle('actions:sync', (_event, projectId: string) =>
+    terminals.syncActions(projectId)
+  )
   ipcMain.handle('actions:create', (_event, input: CreateProjectActionInput) =>
     terminals.createAction(input)
   )
@@ -250,27 +254,28 @@ function registerIpc(): void {
       : listRemoteFiles(connection.sshAlias!, project.folder, relativePath)
   })
 
-  ipcMain.handle('notes:read', (_event, projectId: string) => {
-    const project = store.getProject(projectId)
-    if (!project) throw new Error('Project not found.')
-    const connection = store.getConnection(project.connectionId)
-    if (!connection) throw new Error('Project connection not found.')
-    return connection.kind === 'local'
-      ? readLocalProjectNotes(project.folder)
-      : readRemoteProjectNotes(connection.sshAlias!, project.folder)
-  })
+  ipcMain.handle('notes:list', (_event, projectId: string) =>
+    metadata.listNotes(projectId)
+  )
+  ipcMain.handle('notes:create', (_event, projectId: string, name: string) =>
+    metadata.createNote(projectId, name)
+  )
+  ipcMain.handle('notes:read', (_event, projectId: string, path: string) =>
+    metadata.readNote(projectId, path)
+  )
   ipcMain.handle(
     'notes:write',
-    (_event, projectId: string, content: string) => {
-      const project = store.getProject(projectId)
-      if (!project) throw new Error('Project not found.')
-      const connection = store.getConnection(project.connectionId)
-      if (!connection) throw new Error('Project connection not found.')
-      return connection.kind === 'local'
-        ? writeLocalProjectNotes(project.folder, content)
-        : writeRemoteProjectNotes(connection.sshAlias!, project.folder, content)
-    }
+    (_event, projectId: string, path: string, content: string) =>
+      metadata.writeNote(projectId, path, content)
   )
+  ipcMain.handle(
+    'notes:rename',
+    (_event, projectId: string, path: string, name: string) =>
+      metadata.renameNote(projectId, path, name)
+  )
+  ipcMain.handle('notes:delete', (_event, projectId: string, path: string) => {
+    metadata.deleteNote(projectId, path)
+  })
   ipcMain.handle('files:preview', (_event, projectId: string, relativePath: string) => {
     const project = store.getProject(projectId)
     if (!project) throw new Error('Project not found.')
@@ -418,11 +423,13 @@ if (!ownsSingleInstanceLock) {
       store.syncConnections(discoverSshAliases())
       conversations = new ConversationIndexer()
       remoteConversations = new RemoteConversationIndexer()
+      metadata = new ProjectMetadataService(store)
       terminals = new TerminalManager(
         store,
         () => mainWindow,
         conversations,
-        remoteConversations
+        remoteConversations,
+        metadata
       )
       latex = new LatexProjectService(store, terminals)
       portForwards = new PortForwardManager(store, () => {

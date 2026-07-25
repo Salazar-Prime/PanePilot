@@ -28,6 +28,7 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('projects:rename', projectId, name),
     archive: (projectId: string) => ipcRenderer.invoke('projects:archive', projectId),
     restore: (projectId: string) => ipcRenderer.invoke('projects:restore', projectId),
+    delete: (projectId: string) => ipcRenderer.invoke('projects:delete', projectId),
     updateRepository: (projectId: string, url: string | null) =>
       ipcRenderer.invoke('projects:update-repository', projectId, url),
     chooseFolder: () => ipcRenderer.invoke('projects:choose-folder'),
@@ -90,6 +91,7 @@ const api: ProjectConsoleApi = {
     }
   },
   actions: {
+    sync: (projectId: string) => ipcRenderer.invoke('actions:sync', projectId),
     create: (input: CreateProjectActionInput) =>
       ipcRenderer.invoke('actions:create', input),
     update: (input: UpdateProjectActionInput) =>
@@ -105,9 +107,17 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('project-qna:send-prompt', sessionId, prompt)
   },
   notes: {
-    read: (projectId: string) => ipcRenderer.invoke('notes:read', projectId),
-    write: (projectId: string, content: string) =>
-      ipcRenderer.invoke('notes:write', projectId, content)
+    list: (projectId: string) => ipcRenderer.invoke('notes:list', projectId),
+    create: (projectId: string, name: string) =>
+      ipcRenderer.invoke('notes:create', projectId, name),
+    read: (projectId: string, path: string) =>
+      ipcRenderer.invoke('notes:read', projectId, path),
+    write: (projectId: string, path: string, content: string) =>
+      ipcRenderer.invoke('notes:write', projectId, path, content),
+    rename: (projectId: string, path: string, name: string) =>
+      ipcRenderer.invoke('notes:rename', projectId, path, name),
+    delete: (projectId: string, path: string) =>
+      ipcRenderer.invoke('notes:delete', projectId, path)
   },
   files: {
     list: (projectId: string, relativePath = '.') =>

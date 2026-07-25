@@ -198,14 +198,25 @@ export function NewProjectDialog({
                 value={folder}
                 onChange={(event) => setFolder(event.target.value)}
                 placeholder={connection?.kind === 'ssh' ? '/home/you/project' : 'Choose a folder'}
-                readOnly={connection?.kind === 'ssh'}
                 autoFocus
               />
-              {connection?.kind === 'local' && (
-                <button type="button" className="secondary-button square" onClick={chooseFolder}>
-                  <FolderOpen size={17} />
-                </button>
-              )}
+              <button
+                type="button"
+                className="secondary-button square"
+                onClick={() =>
+                  connection?.kind === 'ssh'
+                    ? void browseRemote(folder.trim() || undefined)
+                    : void chooseFolder()
+                }
+                disabled={connection?.kind === 'ssh' && remoteLoading}
+                title={
+                  connection?.kind === 'ssh'
+                    ? 'Browse the entered remote path'
+                    : 'Choose a local folder'
+                }
+              >
+                <FolderOpen size={17} />
+              </button>
             </div>
           </label>
           {connection?.kind === 'ssh' && (
@@ -239,7 +250,10 @@ export function NewProjectDialog({
                   <p>This folder has no subfolders.</p>
                 )}
               </div>
-              <small>Open folders to browse. The path above will be used.</small>
+              <small>
+                Browse folders or type an absolute path above. The entered path
+                will be used when the project is created.
+              </small>
             </div>
           )}
 

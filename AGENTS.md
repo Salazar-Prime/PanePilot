@@ -51,10 +51,14 @@ These are owner-approved decisions and should be treated as product invariants u
 24. Every project has at most one project Q&A Codex session. It is a persistent tmux-backed agent session rendered as a top-level project capability, not as an ordinary terminal tab or sidebar terminal.
 25. SSH transport state is separate from terminal and agent lifecycle state. A dropped SSH client becomes reconnecting/offline; only a successful remote scan proving the exact tmux session is gone may complete the terminal.
 26. Files workspace navigation, preview, editor, and unsaved draft state survive switching project tabs in the current renderer lifetime. They are not persisted across application restarts.
-27. Every folder-backed project has Markdown notes stored in `.notes-panepilot` at the project root. The file is authoritative on the local or SSH host and is never mirrored into SQLite.
+27. Every folder-backed project has multiple Markdown notes stored under `.panepilot/notes/*.md`. The files are authoritative on the local or SSH host and are never mirrored into SQLite. A legacy `.notes-panepilot` file migrates into the notes folder.
 28. The SSH connection list can be refreshed explicitly from `~/.ssh/config` without restarting PanePilot.
 29. A new Codex terminal may optionally receive an exact Codex thread ID. PanePilot links that ID before creating tmux metadata and launches `codex resume` instead of creating a new thread.
 30. Project Q&A can be reset after confirmation. Reset closes the exact old backend session when present and deletes PanePilot’s Q&A terminal record/output, but never deletes the provider’s conversation archive.
+31. Project Action definitions are shared through `.panepilot/actions.json`. SQLite mirrors those definitions locally and remains authoritative only for each client’s latest Action run, saved output, and lifecycle state.
+32. Archived projects can be permanently removed from PanePilot after confirmation. This deletes their local SQLite workspace records but never deletes the project folder, `.panepilot` metadata, or provider conversation archives.
+33. Terminal context menus expose copyable exact-session tmux commands. `tmux show-options -t '=session-name'` is the supported command for inspecting every session-scoped `@panepilot_*` option.
+34. An SSH project folder may be browsed or typed directly. Creation verifies the path on the remote host and stores its canonical path.
 
 ## Agent lifecycle semantics
 
@@ -120,7 +124,8 @@ Every new capability that crosses the Electron boundary must be updated in all o
 - `src/main/remote-conversation-indexer.ts`: read-only, server-side normalization of Codex/Claude archives over SSH plus remote Codex session discovery.
 - `src/main/file-service.ts`: bounded local file listing and previews.
 - `src/main/remote-file-service.ts`: SSH-backed file listing and previews.
-- `src/renderer/src/components/NotesPanel.tsx`: project-root Markdown notes editor for local and SSH projects.
+- `src/main/project-metadata-service.ts`: local/SSH `.panepilot` Notes and shared Action-definition persistence.
+- `src/renderer/src/components/NotesPanel.tsx`: multi-note Markdown manager for local and SSH projects.
 - `src/main/ssh-config.ts`: SSH alias discovery.
 - `src/main/git.ts`: repository URL discovery.
 - `src/main/latex-project-service.ts`: LaTeX outline parsing, project settings, scoped chat launch, edit snapshots, and source diffs.
@@ -143,7 +148,7 @@ Core tables:
 - `connections`: local or SSH connection identities.
 - `projects`: base project identity, type, connection, folder, repository URL, aggregate state, and timestamps.
 - `terminal_sessions`: terminal profile, command, backend, tmux identity, provider session ID, legacy provider session name, lifecycle state, dangerous-mode flag, archive flag, and saved output.
-- `project_actions`: editable project-scoped command definitions and the terminal session containing only the latest run.
+- `project_actions`: local mirror of shared command definitions and the terminal session containing only that client’s latest run.
 - `activities`: project timeline entries.
 - `agent_events`: idempotently ingested provider lifecycle payloads.
 - `port_forwards`: saved loopback-only SSH forwarding configurations. Running processes are intentionally not persisted across app exits.
@@ -172,6 +177,7 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - A provider session ID discovered after launch is mirrored into the live tmux metadata. The PanePilot terminal UUID remains the primary identity because provider IDs are not available at tmux creation time.
 - Closing/detaching the renderer does not kill a persistent tmux session.
 - Action tmux sessions are intentionally ephemeral: they end when the command exits. PanePilot deletes the prior run row before rerunning so only the latest output is retained.
+- Action names, commands, and stable IDs are read from and written to `.panepilot/actions.json`. A client with legacy SQLite-only definitions exports them when the shared file does not yet exist.
 - A PTY fallback is used when tmux cannot be found or created.
 - Tmux preserves a still-running Codex process. A new Codex terminal includes `thread-id` in its session-local terminal title; PanePilot resolves the displayed reference against the project-scoped Codex archive and mirrors the full ID into `@panepilot_provider_session_id`.
 - A stopped Codex terminal restarts only with `codex resume <exact-id>`. Provider session names are retained only for migration compatibility and are never used as a resume target.
@@ -192,6 +198,7 @@ Archive and deletion rules:
 - Provider-owned conversation JSONL is never removed by terminal deletion.
 - Projects can be archived only when every terminal is `completed` or `error`.
 - Project archiving is reversible and does not delete terminals, activity, files, or provider archives.
+- An archived project can be permanently removed from the local PanePilot database. Cascading deletion removes its sessions, saved output, activity, and type-owned records while leaving the folder, `.panepilot`, and provider archives untouched.
 
 ## Remote Codex lifecycle snapshot
 
@@ -255,9 +262,9 @@ Known scaling limitation: search currently scans the in-memory parsed conversati
 
 - Local file operations are bounded to the project folder.
 - Remote file operations execute through SSH.
-- Choosing a folder for a new SSH project browses that host's filesystem, starts at the remote home directory, and stores the canonical remote path. It must never open the local native folder dialog.
+- Choosing a folder for a new SSH project browses that host's filesystem, starts at the remote home directory, and also permits direct path entry. Creation validates and stores the canonical remote path. It must never open the local native folder dialog.
 - File previews are truncated at 1 MB.
-- Project notes use the fixed project-root path `.notes-panepilot`, are UTF-8 Markdown text capped at 1 MB, and reject symlink targets. Both local and remote writes replace the file atomically.
+- Project notes are separate UTF-8 Markdown files under `.panepilot/notes`, each capped at 1 MB. The metadata and notes directories and note files reject symlink targets; local and remote writes replace files atomically.
 - The file preview toolbar can download the authoritative saved file through a native Save dialog. Local files are copied directly; remote files are streamed over SSH without applying the 1 MB Monaco preview limit.
 - File previews use a locally bundled Monaco editor with language detection. Editing requires an explicit Edit action and saving is bounded to existing files no larger than 1 MB.
 - Terminal links recognize project-contained path-like text and optional line/column suffixes. Clicking a link switches to Files, opens the authoritative file in Monaco, and reveals the requested line and column when present.

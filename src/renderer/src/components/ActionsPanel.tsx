@@ -3,6 +3,7 @@ import {
   Pencil,
   Play,
   Plus,
+  RefreshCw,
   RotateCcw,
   Square,
   Trash2,
@@ -25,6 +26,7 @@ export function ActionsPanel({ project, onChanged, onOpenFile }: Props) {
   )
   const [editing, setEditing] = useState<ProjectAction | 'new' | null>(null)
   const [busy, setBusy] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
   const selected =
     project.actions.find((action) => action.id === selectedId) ??
@@ -48,6 +50,23 @@ export function ActionsPanel({ project, onChanged, onOpenFile }: Props) {
     }
     setSelectedId(project.actions[0]?.id ?? null)
   }, [project.actions, selectedId])
+
+  useEffect(() => {
+    void syncActions()
+  }, [project.id])
+
+  async function syncActions() {
+    setSyncing(true)
+    setError('')
+    try {
+      await window.projectConsole.actions.sync(project.id)
+      await onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   async function perform(operation: () => Promise<unknown>) {
     setBusy(true)
@@ -92,14 +111,25 @@ export function ActionsPanel({ project, onChanged, onOpenFile }: Props) {
             <span className="eyebrow">PROJECT COMMANDS</span>
             <strong>Actions</strong>
           </div>
-          <button
-            className="icon-button"
-            title="New action"
-            onClick={() => setEditing('new')}
-          >
-            <Plus size={15} />
-          </button>
+          <div className="actions-list-heading-actions">
+            <button
+              className="icon-button"
+              title="Refresh shared Actions"
+              onClick={() => void syncActions()}
+              disabled={syncing}
+            >
+              <RefreshCw size={14} className={syncing ? 'spin' : ''} />
+            </button>
+            <button
+              className="icon-button"
+              title="New action"
+              onClick={() => setEditing('new')}
+            >
+              <Plus size={15} />
+            </button>
+          </div>
         </header>
+        {error && <p className="action-error">{error}</p>}
         <div className="actions-list-scroll">
           {project.actions.map((action) => {
             const actionSession = action.lastSessionId
@@ -179,7 +209,6 @@ export function ActionsPanel({ project, onChanged, onOpenFile }: Props) {
                 </button>
               </div>
             </header>
-            {error && <p className="action-error">{error}</p>}
             <div className="action-terminal">
               {session ? (
                 <ManagedTerminal

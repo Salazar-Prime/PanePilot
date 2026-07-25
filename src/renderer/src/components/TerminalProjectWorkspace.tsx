@@ -30,6 +30,7 @@ import {
   sortSessions,
   useSessionSort
 } from '../lib/sessionSort'
+import { tmuxOptionsCommand } from '../lib/tmuxCommands'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
 import { ActionsPanel } from './ActionsPanel'
 import { FilesPanel } from './FilesPanel'
@@ -56,6 +57,7 @@ type WorkspaceTab =
 
 export function TerminalProjectWorkspace({
   project,
+  connection,
   selectedSessionId,
   launchTerminalRequest,
   openSessionRequest,
@@ -454,6 +456,20 @@ export function TerminalProjectWorkspace({
                     >
                       <Clipboard size={14} />
                       Copy Codex thread ID
+                    </button>
+                  )}
+                  {session.tmuxName && (
+                    <button
+                      onClick={() =>
+                        run(
+                          window.projectConsole.system.copyText(
+                            tmuxOptionsCommand(connection, session.tmuxName!)
+                          )
+                        )
+                      }
+                    >
+                      <Clipboard size={14} />
+                      Copy tmux options command
                     </button>
                   )}
                   {!['completed', 'error'].includes(session.state) ? (
