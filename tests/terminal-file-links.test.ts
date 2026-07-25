@@ -39,4 +39,21 @@ describe('terminal file links', () => {
       normalizeTerminalFilePath('../other/secret.txt', projectFolder)
     ).toBeNull()
   })
+
+  it('links project directory paths for the Files explorer', () => {
+    expect(
+      parseTerminalFileLinks(
+        'Generated output in /Users/example/project/build/assets',
+        projectFolder
+      )
+    ).toEqual([
+      expect.objectContaining({
+        target: {
+          path: 'build/assets',
+          line: null,
+          column: null
+        }
+      })
+    ])
+  })
 })

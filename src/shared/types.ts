@@ -242,6 +242,16 @@ export interface FilePreview {
   content: string
   truncated: boolean
   binary: boolean
+  imageMimeType: string | null
+  imageDataUrl: string | null
+}
+
+export interface FileOpenResult {
+  kind: 'file' | 'directory'
+  path: string
+  directoryPath: string
+  entries: FileEntry[]
+  preview: FilePreview | null
 }
 
 export interface ProjectNoteSummary {
@@ -337,6 +347,7 @@ export interface ProjectConsoleApi {
     attach(sessionId: string, cols: number, rows: number): Promise<{ output: string }>
     retryAttach(sessionId: string, cols: number, rows: number): Promise<void>
     write(sessionId: string, data: string): Promise<void>
+    captureBuffer(sessionId: string): Promise<string>
     resize(sessionId: string, cols: number, rows: number): Promise<void>
     acknowledge(sessionId: string): Promise<void>
     resumeAgent(sessionId: string, dangerousModeConfirmed?: boolean): Promise<void>
@@ -377,6 +388,7 @@ export interface ProjectConsoleApi {
     list(projectId: string, relativePath?: string): Promise<FileEntry[]>
     search(projectId: string, query: string): Promise<FileEntry[]>
     preview(projectId: string, relativePath: string): Promise<FilePreview>
+    open(projectId: string, relativePath: string): Promise<FileOpenResult>
     save(projectId: string, relativePath: string, content: string): Promise<void>
     download(projectId: string, relativePath: string): Promise<boolean>
   }
@@ -406,6 +418,7 @@ export interface ProjectConsoleApi {
   }
   system: {
     copyText(text: string): Promise<void>
+    readText(): Promise<string>
     openProjectFolder(projectId: string): Promise<void>
     openExternal(url: string): Promise<void>
   }

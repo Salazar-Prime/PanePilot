@@ -59,6 +59,9 @@ const OUTPUT_RETRY_DELAY_MS = 500
 const OUTPUT_BUFFER_LIMIT = 512 * 1024
 const ACTION_COMPLETION_POLL_MS = 250
 const MAX_ACTION_CAPTURE_OUTPUT = 1024 * 1024
+const MAX_TERMINAL_CAPTURE_OUTPUT = 4 * 1024 * 1024
+const MAX_TERMINAL_INPUT_BYTES = 2 * 1024 * 1024
+const TERMINAL_INPUT_CHUNK_SIZE = 16 * 1024
 const CODEX_TMUX_TITLE_CONFIG =
   'tui.terminal_title=["activity","run-state","task-progress","thread-id"]'
 
@@ -105,6 +108,29 @@ interface ActionPaneSnapshot {
 
 function quote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+export function terminalInputChunks(
+  data: string,
+  chunkSize = TERMINAL_INPUT_CHUNK_SIZE
+): string[] {
+  if (!data) return []
+  const chunks: string[] = []
+  for (let start = 0; start < data.length; ) {
+    let end = Math.min(data.length, start + Math.max(1, chunkSize))
+    if (
+      end < data.length &&
+      data.charCodeAt(end - 1) >= 0xd800 &&
+      data.charCodeAt(end - 1) <= 0xdbff &&
+      data.charCodeAt(end) >= 0xdc00 &&
+      data.charCodeAt(end) <= 0xdfff
+    ) {
+      end = end - start === 1 ? end + 1 : end - 1
+    }
+    chunks.push(data.slice(start, end))
+    start = end
+  }
+  return chunks
 }
 
 function resolveTmux(): string | null {
@@ -793,7 +819,68 @@ export class TerminalManager {
   write(sessionId: string, data: string): void {
     const runtime = this.runtimes.get(sessionId)
     if (!runtime) throw new Error('Terminal is not attached.')
-    runtime.pty.write(data)
+    if (Buffer.byteLength(data, 'utf8') > MAX_TERMINAL_INPUT_BYTES) {
+      throw new Error('Terminal input is limited to 2 MB at a time.')
+    }
+    for (const chunk of terminalInputChunks(data)) runtime.pty.write(chunk)
+  }
+
+  async captureBuffer(sessionId: string): Promise<string> {
+    const session = this.requireSession(sessionId)
+    if (session.backend !== 'tmux' || !session.tmuxName) {
+      throw new Error('Full-buffer copy requires a tmux-backed terminal.')
+    }
+    const project = this.store.getProject(session.projectId)
+    const connection = project
+      ? this.store.getConnection(project.connectionId)
+      : null
+    if (!connection) throw new Error('The terminal project is unavailable.')
+    const tmuxPath = this.tmuxPathForConnection(connection)
+    if (!tmuxPath) throw new Error(`Tmux is unavailable on ${connection.name}.`)
+    const target = `=${session.tmuxName}:`
+    const args = ['capture-pane', '-p', '-J', '-S', '-', '-t', target]
+
+    if (connection.kind === 'local') {
+      const result = spawnSync(tmuxPath, args, {
+        encoding: 'utf8',
+        timeout: 5_000,
+        maxBuffer: MAX_TERMINAL_CAPTURE_OUTPUT
+      })
+      if (result.error || result.status !== 0) {
+        const detail = result.error?.message || result.stderr?.trim()
+        throw new Error(detail || `Could not capture tmux session “${session.tmuxName}”.`)
+      }
+      return result.stdout
+    }
+
+    try {
+      const result = await execFileAsync(
+        'ssh',
+        [
+          '-T',
+          '-o',
+          'BatchMode=yes',
+          '-o',
+          'ConnectTimeout=5',
+          connection.sshAlias ?? connection.name,
+          `${quote(tmuxPath)} ${args.map(quote).join(' ')}`
+        ],
+        {
+          encoding: 'utf8',
+          timeout: 10_000,
+          maxBuffer: MAX_TERMINAL_CAPTURE_OUTPUT
+        }
+      )
+      return result.stdout
+    } catch (error) {
+      const detail =
+        error instanceof Error && 'stderr' in error
+          ? String((error as Error & { stderr?: string }).stderr ?? '').trim()
+          : ''
+      throw new Error(
+        detail || `Could not capture tmux session “${session.tmuxName}” on ${connection.name}.`
+      )
+    }
   }
 
   sendPrompt(sessionId: string, prompt: string): void {
@@ -801,7 +888,7 @@ export class TerminalManager {
     if (!runtime) throw new Error('Open the chat before sending a message.')
     const cleaned = prompt.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim()
     if (!cleaned) throw new Error('Enter a message for the agent.')
-    runtime.pty.write(`\x1b[200~${cleaned}\x1b[201~\r`)
+    this.write(sessionId, `\x1b[200~${cleaned}\x1b[201~\r`)
     const latest = this.store.getSession(sessionId)
     if (latest && AGENT_PROFILES.has(latest.profile)) {
       this.changeState(latest, 'running', `${latest.name} is working.`)

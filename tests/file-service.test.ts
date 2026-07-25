@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  openLocalPath,
   previewLocalFile,
   searchLocalFiles,
   writeLocalFile
@@ -46,6 +47,38 @@ describe('local file editing', () => {
     expect(() => writeLocalFile(project, '../outside.txt', 'changed')).toThrow(
       'outside the project folder'
     )
+  })
+
+  it('returns a bounded data URL for supported image files', () => {
+    const root = mkdtempSync(join(tmpdir(), 'panepilot-images-'))
+    temporaryRoots.push(root)
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64'
+    )
+    writeFileSync(join(root, 'pixel.png'), png)
+
+    const preview = previewLocalFile(root, 'pixel.png')
+
+    expect(preview.binary).toBe(true)
+    expect(preview.imageMimeType).toBe('image/png')
+    expect(preview.imageDataUrl).toBe(`data:image/png;base64,${png.toString('base64')}`)
+  })
+
+  it('opens project directories with their file listing', () => {
+    const root = mkdtempSync(join(tmpdir(), 'panepilot-directory-links-'))
+    temporaryRoots.push(root)
+    mkdirSync(join(root, 'src'))
+    writeFileSync(join(root, 'src', 'index.ts'), 'export {}')
+
+    const result = openLocalPath(root, 'src')
+
+    expect(result.kind).toBe('directory')
+    expect(result.directoryPath).toBe('src')
+    expect(result.preview).toBeNull()
+    expect(result.entries.map((entry) => entry.path)).toEqual([
+      join('src', 'index.ts')
+    ])
   })
 })
 

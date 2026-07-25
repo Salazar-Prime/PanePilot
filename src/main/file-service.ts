@@ -1,19 +1,31 @@
 import {
   copyFileSync,
+  closeSync,
   lstatSync,
+  openSync,
   promises as fs,
-  readFileSync,
+  readSync,
   readdirSync,
   realpathSync,
   statSync,
   writeFileSync
 } from 'node:fs'
-import { relative, resolve, sep } from 'node:path'
-import type { FileEntry, FilePreview } from '../shared/types'
+import { dirname, extname, relative, resolve, sep } from 'node:path'
+import type { FileEntry, FileOpenResult, FilePreview } from '../shared/types'
 
 const PREVIEW_LIMIT = 1024 * 1024
 const SEARCH_RESULT_LIMIT = 200
 const SEARCH_SCAN_LIMIT = 20_000
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  '.avif': 'image/avif',
+  '.bmp': 'image/bmp',
+  '.gif': 'image/gif',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp'
+}
 
 function boundedPath(root: string, requested = '.'): string {
   const realRoot = realpathSync(root)
@@ -25,6 +37,7 @@ function boundedPath(root: string, requested = '.'): string {
 }
 
 export function listLocalFiles(root: string, requested = '.'): FileEntry[] {
+  const realRoot = realpathSync(root)
   const directory = boundedPath(root, requested)
   if (!statSync(directory).isDirectory()) throw new Error('The requested path is not a directory.')
 
@@ -33,12 +46,12 @@ export function listLocalFiles(root: string, requested = '.'): FileEntry[] {
     .flatMap((name): FileEntry[] => {
       const rawPath = resolve(directory, name)
       try {
-        const target = boundedPath(root, relative(root, rawPath))
+        const target = boundedPath(root, relative(realRoot, rawPath))
         const stat = lstatSync(target)
         return [
           {
             name,
-            path: relative(realpathSync(root), target) || '.',
+            path: relative(realRoot, target) || '.',
             kind: stat.isDirectory() ? 'directory' : 'file',
             size: stat.isFile() ? stat.size : null
           }
@@ -128,13 +141,51 @@ export function previewLocalFile(root: string, requested: string): FilePreview {
   const filePath = boundedPath(root, requested)
   const stat = statSync(filePath)
   if (!stat.isFile()) throw new Error('The requested path is not a file.')
-  const bytes = readFileSync(filePath).subarray(0, PREVIEW_LIMIT)
-  const binary = bytes.includes(0)
+  const buffer = Buffer.allocUnsafe(Math.min(stat.size, PREVIEW_LIMIT))
+  const descriptor = openSync(filePath, 'r')
+  let bytesRead = 0
+  try {
+    bytesRead = readSync(descriptor, buffer, 0, buffer.length, 0)
+  } finally {
+    closeSync(descriptor)
+  }
+  const bytes = buffer.subarray(0, bytesRead)
+  const imageMimeType = IMAGE_MIME_TYPES[extname(filePath).toLocaleLowerCase()] ?? null
+  const imageDataUrl =
+    imageMimeType && stat.size <= PREVIEW_LIMIT
+      ? `data:${imageMimeType};base64,${bytes.toString('base64')}`
+      : null
+  const binary = Boolean(imageMimeType) || bytes.includes(0)
   return {
     path: requested,
     content: binary ? '' : bytes.toString('utf8'),
     truncated: stat.size > PREVIEW_LIMIT,
-    binary
+    binary,
+    imageMimeType,
+    imageDataUrl
+  }
+}
+
+export function openLocalPath(root: string, requested: string): FileOpenResult {
+  const target = boundedPath(root, requested)
+  const stat = statSync(target)
+  if (stat.isDirectory()) {
+    return {
+      kind: 'directory',
+      path: requested,
+      directoryPath: requested,
+      entries: listLocalFiles(root, requested),
+      preview: null
+    }
+  }
+  if (!stat.isFile()) throw new Error('The requested path is not a file or directory.')
+  const directoryPath = dirname(requested) || '.'
+  return {
+    kind: 'file',
+    path: requested,
+    directoryPath,
+    entries: listLocalFiles(root, directoryPath),
+    preview: previewLocalFile(root, requested)
   }
 }
 

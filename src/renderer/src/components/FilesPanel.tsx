@@ -6,6 +6,7 @@ import {
   FileCode2,
   Folder,
   FolderOpen,
+  Image as ImageIcon,
   Pencil,
   RefreshCw,
   Save,
@@ -25,12 +26,17 @@ interface FilesPanelProps {
 interface FilesPanelSnapshot {
   path: string
   entries: FileEntry[]
-  preview: FilePreview | null
-  draft: string
-  editing: boolean
+  openFiles: OpenFileTab[]
+  activeFilePath: string | null
   loaded: boolean
   searchQuery: string
   searchResults: FileEntry[]
+}
+
+interface OpenFileTab {
+  preview: FilePreview
+  draft: string
+  editing: boolean
 }
 
 const filesPanelCache = new Map<string, FilesPanelSnapshot>()
@@ -56,11 +62,12 @@ function FilesPanelInstance({
     entries: uniqueEntries(cached?.entries ?? []),
     loaded: cached?.loaded ?? false
   }))
-  const [preview, setPreview] = useState<FilePreview | null>(
-    cached?.preview ?? null
+  const [openFiles, setOpenFiles] = useState<OpenFileTab[]>(
+    cached?.openFiles ?? []
   )
-  const [draft, setDraft] = useState(cached?.draft ?? '')
-  const [editing, setEditing] = useState(cached?.editing ?? false)
+  const [activeFilePath, setActiveFilePath] = useState<string | null>(
+    cached?.activeFilePath ?? cached?.openFiles.at(-1)?.preview.path ?? null
+  )
   const [searchQuery, setSearchQuery] = useState(cached?.searchQuery ?? '')
   const [searchResults, setSearchResults] = useState<FileEntry[]>(
     uniqueEntries(cached?.searchResults ?? [])
@@ -78,18 +85,24 @@ function FilesPanelInstance({
   const path = listing.path
   const entries = listing.entries
   const loaded = listing.loaded
+  const activeFile =
+    openFiles.find((file) => file.preview.path === activeFilePath) ?? null
+  const preview = activeFile?.preview ?? null
+  const draft = activeFile?.draft ?? ''
+  const editing = activeFile?.editing ?? false
 
-  function canLeaveEditor(): boolean {
-    return (
-      !editing ||
-      !preview ||
-      draft === preview.content ||
-      window.confirm('Discard your unsaved file changes?')
+  function updateOpenFile(
+    filePath: string,
+    update: (file: OpenFileTab) => OpenFileTab
+  ): void {
+    setOpenFiles((current) =>
+      current.map((file) =>
+        file.preview.path === filePath ? update(file) : file
+      )
     )
   }
 
   async function load(nextPath = path) {
-    if (!canLeaveEditor()) return
     const request = ++listingRequestRef.current
     setLoading(true)
     setError('')
@@ -104,10 +117,6 @@ function FilesPanelInstance({
         entries: uniqueEntries(nextEntries),
         loaded: true
       })
-      setPreview(null)
-      setDraft('')
-      setEditing(false)
-      pendingRevealRef.current = null
     } catch (caught) {
       if (request !== listingRequestRef.current) return
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -130,18 +139,16 @@ function FilesPanelInstance({
     filesPanelCache.set(project.id, {
       path,
       entries,
-      preview,
-      draft,
-      editing,
+      openFiles,
+      activeFilePath,
       loaded,
       searchQuery,
       searchResults
     })
   }, [
-    draft,
-    editing,
+    activeFilePath,
     listing,
-    preview,
+    openFiles,
     project.id,
     searchQuery,
     searchResults
@@ -183,19 +190,42 @@ function FilesPanelInstance({
   const searchingPaths = Boolean(searchQuery.trim())
   const displayedEntries = uniqueEntries(searchingPaths ? searchResults : entries)
 
-  async function openFile(
-    filePath: string,
-    openRequest: ProjectFileOpenRequest | null = null
-  ) {
-    if (!canLeaveEditor()) return
+  function addOpenFile(nextPreview: FilePreview): void {
+    setOpenFiles((current) => {
+      if (current.some((file) => file.preview.path === nextPreview.path)) {
+        return current
+      }
+      return [
+        ...current,
+        {
+          preview: nextPreview,
+          draft: nextPreview.content,
+          editing: false
+        }
+      ]
+    })
+    setActiveFilePath(nextPreview.path)
+    if (nextPreview.binary) editorRef.current = null
+  }
+
+  async function openFile(filePath: string) {
+    const existingFile = openFiles.find(
+      (file) => file.preview.path === filePath
+    )
+    if (existingFile) {
+      setActiveFilePath(filePath)
+      pendingRevealRef.current = null
+      return
+    }
     const listingRequest = ++listingRequestRef.current
     setLoading(true)
     setError('')
     try {
-      const parent =
-        filePath.split('/').slice(0, -1).join('/') || '.'
+      const parent = filePath.split('/').slice(0, -1).join('/') || '.'
       const [nextEntries, nextPreview] = await Promise.all([
-        window.projectConsole.files.list(project.id, parent),
+        parent === path
+          ? Promise.resolve(entries)
+          : window.projectConsole.files.list(project.id, parent),
         window.projectConsole.files.preview(project.id, filePath)
       ])
       if (listingRequest !== listingRequestRef.current) return
@@ -204,16 +234,70 @@ function FilesPanelInstance({
         entries: uniqueEntries(nextEntries),
         loaded: true
       })
-      setPreview(nextPreview)
-      setDraft(nextPreview.content)
-      setEditing(false)
-      pendingRevealRef.current = openRequest
-      if (nextPreview.binary) editorRef.current = null
+      pendingRevealRef.current = null
+      addOpenFile(nextPreview)
     } catch (caught) {
       if (listingRequest !== listingRequestRef.current) return
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
       if (listingRequest === listingRequestRef.current) setLoading(false)
+    }
+  }
+
+  async function openLinkedPath(openRequest: ProjectFileOpenRequest) {
+    const listingRequest = ++listingRequestRef.current
+    setLoading(true)
+    setError('')
+    try {
+      const result = await window.projectConsole.files.open(
+        project.id,
+        openRequest.path
+      )
+      if (listingRequest !== listingRequestRef.current) return
+      setSearchQuery('')
+      setListing({
+        path: result.directoryPath,
+        entries: uniqueEntries(result.entries),
+        loaded: true
+      })
+      if (result.kind === 'directory') {
+        pendingRevealRef.current = null
+        return
+      }
+      if (!result.preview) throw new Error('The file could not be previewed.')
+      pendingRevealRef.current = openRequest
+      addOpenFile(result.preview)
+    } catch (caught) {
+      if (listingRequest !== listingRequestRef.current) return
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      if (listingRequest === listingRequestRef.current) setLoading(false)
+    }
+  }
+
+  function closeFile(filePath: string): void {
+    const index = openFiles.findIndex(
+      (file) => file.preview.path === filePath
+    )
+    if (index < 0) return
+    const file = openFiles[index]
+    if (
+      file.editing &&
+      file.draft !== file.preview.content &&
+      !window.confirm('Discard your unsaved file changes?')
+    ) {
+      return
+    }
+    const remaining = openFiles.filter(
+      (candidate) => candidate.preview.path !== filePath
+    )
+    setOpenFiles(remaining)
+    if (activeFilePath === filePath) {
+      setActiveFilePath(
+        remaining[Math.min(index, remaining.length - 1)]?.preview.path ?? null
+      )
+      pendingRevealRef.current = null
+      editorRef.current = null
     }
   }
 
@@ -259,7 +343,7 @@ function FilesPanelInstance({
     ) {
       return
     }
-    void openFile(openFileRequest.path, openFileRequest)
+    void openLinkedPath(openFileRequest)
   }, [openFileRequest?.requestId])
 
   useEffect(() => {
@@ -271,12 +355,17 @@ function FilesPanelInstance({
 
   async function save() {
     if (!preview) return
+    const filePath = preview.path
+    const savedDraft = draft
     setSaving(true)
     setError('')
     try {
-      await window.projectConsole.files.save(project.id, preview.path, draft)
-      setPreview({ ...preview, content: draft })
-      setEditing(false)
+      await window.projectConsole.files.save(project.id, filePath, savedDraft)
+      updateOpenFile(filePath, (file) => ({
+        ...file,
+        preview: { ...file.preview, content: savedDraft },
+        editing: file.draft !== savedDraft
+      }))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
@@ -393,12 +482,63 @@ function FilesPanelInstance({
         )}
       </aside>
       <main className="file-preview">
+        {openFiles.length > 0 && (
+          <div className="file-preview-tabs" role="tablist" aria-label="Open files">
+            {openFiles.map((file) => {
+              const selected = file.preview.path === activeFilePath
+              const dirty = file.draft !== file.preview.content
+              return (
+                <div
+                  className={`file-preview-tab ${selected ? 'selected' : ''}`}
+                  key={file.preview.path}
+                >
+                  <button
+                    className="file-preview-tab-select"
+                    role="tab"
+                    aria-selected={selected}
+                    title={file.preview.path}
+                    onClick={() => {
+                      setActiveFilePath(file.preview.path)
+                      pendingRevealRef.current = null
+                    }}
+                  >
+                    {file.preview.imageMimeType ? (
+                      <ImageIcon size={13} />
+                    ) : (
+                      <FileCode2 size={13} />
+                    )}
+                    <span>{fileName(file.preview.path)}</span>
+                    {dirty && <i aria-label="Unsaved changes" />}
+                  </button>
+                  <button
+                    className="file-preview-tab-close"
+                    aria-label={`Close ${fileName(file.preview.path)}`}
+                    title="Close file"
+                    onClick={() => closeFile(file.preview.path)}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
         {preview ? (
           <>
             <div className="preview-header">
-              <FileCode2 size={16} />
+              {preview.imageMimeType ? (
+                <ImageIcon size={16} />
+              ) : (
+                <FileCode2 size={16} />
+              )}
               <span>{preview.path}</span>
-              {preview.truncated && <small>First 1 MB · editing disabled</small>}
+              {preview.truncated && (
+                <small>
+                  {preview.imageMimeType
+                    ? 'Image exceeds 1 MB · preview disabled'
+                    : 'First 1 MB · editing disabled'}
+                </small>
+              )}
               <div className="preview-actions">
                 <button
                   className="secondary-button"
@@ -416,8 +556,11 @@ function FilesPanelInstance({
                       <button
                         className="secondary-button"
                         onClick={() => {
-                          setDraft(preview.content)
-                          setEditing(false)
+                          updateOpenFile(preview.path, (file) => ({
+                            ...file,
+                            draft: file.preview.content,
+                            editing: false
+                          }))
                         }}
                         disabled={saving}
                       >
@@ -432,22 +575,47 @@ function FilesPanelInstance({
                       </button>
                     </>
                   ) : (
-                    <button className="secondary-button" onClick={() => setEditing(true)}>
+                    <button
+                      className="secondary-button"
+                      onClick={() =>
+                        updateOpenFile(preview.path, (file) => ({
+                          ...file,
+                          editing: true
+                        }))
+                      }
+                    >
                       <Pencil size={13} /> Edit
                     </button>
                   ))}
               </div>
             </div>
-            {preview.binary ? (
+            {preview.imageDataUrl ? (
+              <div className="file-image-preview">
+                <img
+                  src={preview.imageDataUrl}
+                  alt={fileName(preview.path)}
+                />
+              </div>
+            ) : preview.imageMimeType ? (
+              <div className="preview-empty">
+                This image is larger than the 1 MB preview limit. Download it to
+                view the full file.
+              </div>
+            ) : preview.binary ? (
               <div className="preview-empty">Binary files can’t be previewed.</div>
             ) : (
               <div className="file-editor-shell">
                 <Editor
-                  path={preview.path}
+                  path={`${project.id}/${preview.path}`}
                   language={languageForPath(preview.path)}
                   theme="vs-dark"
                   value={editing ? draft : preview.content}
-                  onChange={(value) => setDraft(value ?? '')}
+                  onChange={(value) =>
+                    updateOpenFile(preview.path, (file) => ({
+                      ...file,
+                      draft: value ?? ''
+                    }))
+                  }
                   onMount={(editor) => {
                     editorRef.current = editor
                     revealRequestedPosition(editor)
@@ -486,6 +654,10 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function fileName(path: string): string {
+  return path.split('/').at(-1) || path
 }
 
 function languageForPath(path: string): string {

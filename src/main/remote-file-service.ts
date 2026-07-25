@@ -5,6 +5,7 @@ import { basename, dirname, join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import type {
   FileEntry,
+  FileOpenResult,
   FilePreview,
   RemoteFolderListing
 } from '../shared/types'
@@ -76,13 +77,107 @@ if not os.path.isfile(target):
 size = os.path.getsize(target)
 with open(target, "rb") as handle:
     content = handle.read(1024 * 1024)
-binary = b"\0" in content
+image_mimes = {
+    ".avif": "image/avif",
+    ".bmp": "image/bmp",
+    ".gif": "image/gif",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+}
+image_mime = image_mimes.get(os.path.splitext(target)[1].lower())
+image_data = base64.b64encode(content).decode("ascii") if image_mime and size <= 1024 * 1024 else None
+binary = image_mime is not None or b"\0" in content
 print(json.dumps({
     "path": payload["relativePath"],
     "content": "" if binary else base64.b64encode(content).decode("ascii"),
     "truncated": size > 1024 * 1024,
     "binary": binary,
+    "imageMimeType": image_mime,
+    "imageDataUrl": None if image_data is None else "data:" + image_mime + ";base64," + image_data,
 }))
+`
+
+const OPEN_PATH_SCRIPT = String.raw`
+import base64, json, os, sys
+payload = json.load(sys.stdin)
+root = os.path.realpath(os.path.expanduser(payload["root"]))
+target = os.path.realpath(os.path.join(root, payload["relativePath"]))
+if os.path.commonpath([root, target]) != root:
+    raise RuntimeError("The requested path is outside the project folder.")
+
+def relative(path):
+    value = os.path.relpath(path, root).replace(os.sep, "/")
+    return "." if value == "." else value
+
+def list_entries(directory):
+    entries = []
+    for item in os.scandir(directory):
+        if item.name in (".git", "node_modules"):
+            continue
+        try:
+            real = os.path.realpath(item.path)
+            if os.path.commonpath([root, real]) != root:
+                continue
+            stat = item.stat(follow_symlinks=True)
+            is_dir = item.is_dir(follow_symlinks=True)
+            entries.append({
+                "name": item.name,
+                "path": relative(real),
+                "kind": "directory" if is_dir else "file",
+                "size": None if is_dir else stat.st_size,
+            })
+        except OSError:
+            pass
+    entries.sort(key=lambda item: (item["kind"] != "directory", item["name"].lower()))
+    return entries
+
+if os.path.isdir(target):
+    path = relative(target)
+    print(json.dumps({
+        "kind": "directory",
+        "path": path,
+        "directoryPath": path,
+        "entries": list_entries(target),
+        "preview": None,
+    }))
+elif os.path.isfile(target):
+    size = os.path.getsize(target)
+    with open(target, "rb") as handle:
+        content = handle.read(1024 * 1024)
+    image_mimes = {
+        ".avif": "image/avif",
+        ".bmp": "image/bmp",
+        ".gif": "image/gif",
+        ".jpeg": "image/jpeg",
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+        ".svg": "image/svg+xml",
+        ".webp": "image/webp",
+    }
+    image_mime = image_mimes.get(os.path.splitext(target)[1].lower())
+    image_data = base64.b64encode(content).decode("ascii") if image_mime and size <= 1024 * 1024 else None
+    binary = image_mime is not None or b"\0" in content
+    path = relative(target)
+    directory = os.path.dirname(target)
+    print(json.dumps({
+        "kind": "file",
+        "path": path,
+        "directoryPath": relative(directory),
+        "entries": list_entries(directory),
+        "preview": {
+            "path": path,
+            "content": "" if binary else base64.b64encode(content).decode("ascii"),
+            "truncated": size > 1024 * 1024,
+            "binary": binary,
+            "imageMimeType": image_mime,
+            "imageDataUrl": None if image_data is None else "data:" + image_mime + ";base64," + image_data,
+        },
+    }))
+else:
+    raise RuntimeError("The requested path is not a file or directory.")
 `
 
 const SEARCH_FILES_SCRIPT = String.raw`
@@ -390,6 +485,26 @@ export async function previewRemoteFileAsync(
     preview.content = Buffer.from(preview.content, 'base64').toString('utf8')
   }
   return preview
+}
+
+export async function openRemotePath(
+  sshAlias: string,
+  root: string,
+  relativePath: string
+): Promise<FileOpenResult> {
+  const result = await runRemotePythonAsync<FileOpenResult>(
+    sshAlias,
+    OPEN_PATH_SCRIPT,
+    { root, relativePath },
+    8 * 1024 * 1024
+  )
+  if (result.preview && !result.preview.binary) {
+    result.preview.content = Buffer.from(
+      result.preview.content,
+      'base64'
+    ).toString('utf8')
+  }
+  return result
 }
 
 export function writeRemoteFile(

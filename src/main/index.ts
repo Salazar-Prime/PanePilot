@@ -22,6 +22,7 @@ import { ConversationIndexer } from './conversation-indexer'
 import {
   downloadLocalFile,
   listLocalFiles,
+  openLocalPath,
   previewLocalFile,
   searchLocalFiles,
   writeLocalFile
@@ -36,6 +37,7 @@ import {
   downloadRemoteFile,
   listRemoteFilesAsync,
   listRemoteFolders,
+  openRemotePath,
   previewRemoteFileAsync,
   searchRemoteFiles,
   writeRemoteFileAsync
@@ -185,6 +187,9 @@ function registerIpc(): void {
     (_event, sessionId: string, cols: number, rows: number) =>
       terminals.retryAttach(sessionId, cols, rows)
   )
+  ipcMain.handle('terminals:capture-buffer', (_event, sessionId: string) =>
+    terminals.captureBuffer(sessionId)
+  )
 
   ipcMain.handle('latex:get-workspace', (_event, projectId: string) =>
     latex.getWorkspace(projectId)
@@ -302,6 +307,15 @@ function registerIpc(): void {
       ? previewLocalFile(project.folder, relativePath)
       : previewRemoteFileAsync(connection.sshAlias!, project.folder, relativePath)
   })
+  ipcMain.handle('files:open', async (_event, projectId: string, relativePath: string) => {
+    const project = store.getProject(projectId)
+    if (!project) throw new Error('Project not found.')
+    const connection = store.getConnection(project.connectionId)
+    if (!connection) throw new Error('Project connection not found.')
+    return connection.kind === 'local'
+      ? openLocalPath(project.folder, relativePath)
+      : openRemotePath(connection.sshAlias!, project.folder, relativePath)
+  })
   ipcMain.handle(
     'files:save',
     async (_event, projectId: string, relativePath: string, content: string) => {
@@ -369,6 +383,7 @@ function registerIpc(): void {
   ipcMain.handle('system:copy-text', (_event, text: string) => {
     clipboard.writeText(text)
   })
+  ipcMain.handle('system:read-text', () => clipboard.readText())
   ipcMain.handle('system:open-project-folder', async (_event, projectId: string) => {
     const project = store.getProject(projectId)
     if (!project) throw new Error('Project not found.')

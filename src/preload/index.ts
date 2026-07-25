@@ -44,6 +44,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('terminals:retry-attach', sessionId, cols, rows),
     write: (sessionId: string, data: string) =>
       ipcRenderer.invoke('terminals:write', sessionId, data),
+    captureBuffer: (sessionId: string) =>
+      ipcRenderer.invoke('terminals:capture-buffer', sessionId),
     resize: (sessionId: string, cols: number, rows: number) =>
       ipcRenderer.invoke('terminals:resize', sessionId, cols, rows),
     acknowledge: (sessionId: string) => ipcRenderer.invoke('terminals:acknowledge', sessionId),
@@ -128,6 +130,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('files:search', projectId, query),
     preview: (projectId: string, relativePath: string) =>
       ipcRenderer.invoke('files:preview', projectId, relativePath),
+    open: (projectId: string, relativePath: string) =>
+      ipcRenderer.invoke('files:open', projectId, relativePath),
     save: (projectId: string, relativePath: string, content: string) =>
       ipcRenderer.invoke('files:save', projectId, relativePath, content),
     download: (projectId: string, relativePath: string) =>
@@ -175,6 +179,7 @@ const api: ProjectConsoleApi = {
   },
   system: {
     copyText: (text: string) => ipcRenderer.invoke('system:copy-text', text),
+    readText: () => ipcRenderer.invoke('system:read-text'),
     openProjectFolder: (projectId: string) =>
       ipcRenderer.invoke('system:open-project-folder', projectId),
     openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url)

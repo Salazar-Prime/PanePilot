@@ -652,6 +652,16 @@ select:focus-visible {
   background: #252a34;
 }
 
+.popover-menu button:disabled {
+  color: #555d69;
+  background: transparent;
+  cursor: default;
+}
+
+.terminal-clipboard-menu {
+  width: 184px;
+}
+
 .danger-text {
   color: #ef8291 !important;
 }
@@ -1306,6 +1316,93 @@ select:focus-visible {
   background: #090b10;
 }
 
+.file-preview-tabs {
+  display: flex;
+  min-height: 32px;
+  flex: 0 0 32px;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid #222630;
+  background: #0a0c11;
+  scrollbar-width: thin;
+}
+
+.file-preview-tab {
+  display: flex;
+  min-width: 116px;
+  max-width: 210px;
+  align-items: stretch;
+  border-right: 1px solid #20242d;
+  border-top: 2px solid transparent;
+  color: #737b88;
+  background: #0c0e13;
+}
+
+.file-preview-tab.selected {
+  border-top-color: #7888d8;
+  color: #d2d6df;
+  background: #11141b;
+}
+
+.file-preview-tab-select,
+.file-preview-tab-close {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  color: inherit;
+  border: 0;
+  background: transparent;
+}
+
+.file-preview-tab-select {
+  min-width: 0;
+  flex: 1;
+  gap: 6px;
+  padding-left: 9px;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 9px;
+}
+
+.file-preview-tab-select svg {
+  flex: 0 0 auto;
+  color: #6974a4;
+}
+
+.file-preview-tab-select span {
+  min-width: 0;
+  overflow: hidden;
+  flex: 1;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview-tab-select i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #d5a15e;
+}
+
+.file-preview-tab-close {
+  width: 25px;
+  flex: 0 0 25px;
+  justify-content: center;
+  opacity: 0;
+}
+
+.file-preview-tab:hover .file-preview-tab-close,
+.file-preview-tab.selected .file-preview-tab-close {
+  opacity: 1;
+}
+
+.file-preview-tab-close:hover {
+  color: #f0f1f5;
+  background: #252a34;
+}
+
 .preview-header {
   flex: 0 0 40px;
   gap: 8px;
@@ -1348,6 +1445,32 @@ select:focus-visible {
   flex: 1;
 }
 
+.file-image-preview {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  place-items: center;
+  background:
+    linear-gradient(45deg, #10131a 25%, transparent 25%),
+    linear-gradient(-45deg, #10131a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #10131a 75%),
+    linear-gradient(-45deg, transparent 75%, #10131a 75%),
+    #0b0d12;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+
+.file-image-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 3px;
+  box-shadow: 0 12px 38px rgb(0 0 0 / 38%);
+}
+
 .file-error {
   padding: 9px 12px;
   color: #ef9aa6;
@@ -1361,7 +1484,10 @@ select:focus-visible {
 
 .preview-empty {
   height: calc(100% - 1px);
+  padding: 24px;
   color: #555d6b;
+  font-size: 10px;
+  line-height: 1.5;
 }
 
 .preview-empty p {
