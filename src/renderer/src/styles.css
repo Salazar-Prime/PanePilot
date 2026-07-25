@@ -576,6 +576,8 @@ select:focus-visible {
 
 .tab-reconnect-button {
   margin-right: 0;
+  color: #9eabf2;
+  opacity: 1;
 }
 
 .terminal-tab:hover .tab-menu-button,
@@ -2296,6 +2298,11 @@ select:focus-visible {
 .sidebar-hover-action:hover {
   color: #d6dae3;
   background: #2a2f39;
+}
+
+.sidebar-reconnect-action {
+  color: #9eabf2;
+  opacity: 1;
 }
 
 .pinned-indicator {

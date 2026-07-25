@@ -298,6 +298,11 @@ export function App() {
     await refresh()
   }
 
+  async function reconnectSession(projectId: string, session: TerminalSession) {
+    await window.projectConsole.terminals.retryAttach(session.id, 100, 30)
+    await selectSession(projectId, session.id)
+  }
+
   async function togglePin(session: TerminalSession) {
     await window.projectConsole.terminals.setPinned(session.id, !session.pinned)
     await refresh()
@@ -904,6 +909,23 @@ export function App() {
                                   <small className="attention-badge">!</small>
                                 )}
                               </button>
+                              {session.backend === 'tmux' &&
+                                session.tmuxName &&
+                                !['completed', 'error'].includes(session.state) && (
+                                  <button
+                                    className="sidebar-hover-action sidebar-reconnect-action"
+                                    aria-label={`Reconnect ${session.name} to tmux`}
+                                    title="Reconnect to tmux"
+                                    onClick={() =>
+                                      void reconnectSession(
+                                        candidate.id,
+                                        session
+                                      ).catch(showError)
+                                    }
+                                  >
+                                    <RefreshCw size={11} />
+                                  </button>
+                                )}
                               <button
                                 className="sidebar-hover-action"
                                 title="Rename terminal and tmux session"
