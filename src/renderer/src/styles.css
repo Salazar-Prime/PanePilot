@@ -656,11 +656,28 @@ select:focus-visible {
   color: #ef8291 !important;
 }
 
-.terminal-surface {
+.terminal-surface-cache {
+  position: relative;
   min-height: 0;
   flex: 1;
-  padding: 9px 5px 5px 11px;
+  overflow: hidden;
   background: #090b10;
+}
+
+.terminal-surface {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  padding: 9px 5px 5px 11px;
+  visibility: hidden;
+  background: #090b10;
+  pointer-events: none;
+}
+
+.terminal-surface.active {
+  z-index: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 .terminal-host {
@@ -1183,6 +1200,48 @@ select:focus-visible {
   color: #4f5663;
 }
 
+.file-search {
+  display: flex;
+  height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  gap: 7px;
+  margin: 7px 7px 1px;
+  padding: 0 9px;
+  color: #626b79;
+  border: 1px solid #292f39;
+  border-radius: 7px;
+  background: #090b10;
+}
+
+.file-search input {
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  color: #cbd0d9;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 10px;
+}
+
+.file-search button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  place-items: center;
+  color: #737c89;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+}
+
+.file-search button:hover {
+  color: #cbd0d9;
+  background: #1b1f28;
+}
+
 .file-list {
   min-height: 0;
   flex: 1;
@@ -1228,6 +1287,14 @@ select:focus-visible {
 .file-row small {
   color: #555d6b;
   font-size: 8px;
+}
+
+.file-search-empty {
+  padding: 22px 10px;
+  color: #5f6876;
+  font-size: 9px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .file-preview {

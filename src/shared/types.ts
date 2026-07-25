@@ -373,6 +373,7 @@ export interface ProjectConsoleApi {
   }
   files: {
     list(projectId: string, relativePath?: string): Promise<FileEntry[]>
+    search(projectId: string, query: string): Promise<FileEntry[]>
     preview(projectId: string, relativePath: string): Promise<FilePreview>
     save(projectId: string, relativePath: string, content: string): Promise<void>
     download(projectId: string, relativePath: string): Promise<boolean>

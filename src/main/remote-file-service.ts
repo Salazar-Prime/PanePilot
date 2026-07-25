@@ -10,6 +10,8 @@ import type {
 } from '../shared/types'
 
 const MAX_FILE_BYTES = 1024 * 1024
+const SEARCH_RESULT_LIMIT = 200
+const SEARCH_SCAN_LIMIT = 20_000
 
 const LIST_FOLDERS_SCRIPT = String.raw`
 import json, os, sys
@@ -81,6 +83,45 @@ print(json.dumps({
     "truncated": size > 1024 * 1024,
     "binary": binary,
 }))
+`
+
+const SEARCH_FILES_SCRIPT = String.raw`
+import json, os, sys
+payload = json.load(sys.stdin)
+root = os.path.realpath(os.path.expanduser(payload["root"]))
+query = (payload.get("query") or "").strip().lower()
+max_results = int(payload.get("maxResults", 200))
+max_scanned = int(payload.get("maxScanned", 20000))
+if not os.path.isdir(root):
+    raise RuntimeError("The remote project folder does not exist.")
+results = []
+scanned = 0
+for directory, directories, filenames in os.walk(root, followlinks=False):
+    directories[:] = sorted(
+        name for name in directories
+        if name not in (".git", "node_modules")
+    )
+    names = [(name, "directory") for name in directories]
+    names.extend((name, "file") for name in sorted(filenames))
+    for name, kind in names:
+        if scanned >= max_scanned or len(results) >= max_results:
+            break
+        scanned += 1
+        path = os.path.realpath(os.path.join(directory, name))
+        if os.path.commonpath([root, path]) != root:
+            continue
+        relative = os.path.relpath(path, root).replace(os.sep, "/")
+        if query not in relative.lower():
+            continue
+        try:
+            size = None if kind == "directory" else os.path.getsize(path)
+        except OSError:
+            continue
+        results.append({"name": name, "path": relative, "kind": kind, "size": size})
+    if scanned >= max_scanned or len(results) >= max_results:
+        break
+results.sort(key=lambda item: (item["kind"] != "directory", item["path"].lower()))
+print(json.dumps(results, separators=(",", ":")))
 `
 
 const WRITE_FILE_SCRIPT = String.raw`
@@ -209,6 +250,79 @@ function runRemotePython<T>(
   }
 }
 
+function runRemotePythonAsync<T>(
+  sshAlias: string,
+  script: string,
+  payload: Record<string, unknown>,
+  maxBuffer = 4 * 1024 * 1024
+): Promise<T> {
+  const encodedScript = Buffer.from(script, 'utf8').toString('base64')
+  const loader = `import base64;exec(base64.b64decode('${encodedScript}'))`
+  const command = `python3 -c ${quote(loader)}`
+
+  return new Promise<T>((resolve, reject) => {
+    const child = spawn(
+      'ssh',
+      ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', sshAlias, command],
+      { stdio: ['pipe', 'pipe', 'pipe'] }
+    )
+    const stdout: Buffer[] = []
+    let stdoutLength = 0
+    let stderr = ''
+    let settled = false
+    const timer = setTimeout(() => {
+      child.kill()
+      finish(new Error(`Timed out connecting to ${sshAlias}.`))
+    }, 15_000)
+
+    function finish(error?: Error, value?: T): void {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (error) reject(error)
+      else resolve(value as T)
+    }
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdoutLength += chunk.length
+      if (stdoutLength > maxBuffer) {
+        child.kill()
+        finish(new Error(`The response from ${sshAlias} was too large.`))
+        return
+      }
+      stdout.push(chunk)
+    })
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => {
+      stderr = `${stderr}${chunk}`.slice(-64 * 1024)
+    })
+    child.once('error', (error) => finish(error))
+    child.once('close', (code) => {
+      if (settled) return
+      if (code !== 0) {
+        const detail = stderr.trim().split(/\r?\n/).at(-1)
+        finish(
+          new Error(
+            detail ||
+              `Could not browse ${sshAlias}. Make sure SSH key authentication is available.`
+          )
+        )
+        return
+      }
+      try {
+        finish(undefined, JSON.parse(Buffer.concat(stdout).toString('utf8')) as T)
+      } catch {
+        finish(new Error(`The response from ${sshAlias} was not valid JSON.`))
+      }
+    })
+    child.stdin.on('error', () => {
+      // A remote validation or SSH failure can close stdin before the payload
+      // finishes. The process close handler reports the useful error.
+    })
+    child.stdin.end(JSON.stringify(payload))
+  })
+}
+
 export function listRemoteFolders(
   sshAlias: string,
   path?: string
@@ -224,6 +338,31 @@ export function listRemoteFiles(
   return runRemotePython<FileEntry[]>(sshAlias, LIST_FILES_SCRIPT, { root, relativePath })
 }
 
+export function listRemoteFilesAsync(
+  sshAlias: string,
+  root: string,
+  relativePath = '.'
+): Promise<FileEntry[]> {
+  return runRemotePythonAsync<FileEntry[]>(sshAlias, LIST_FILES_SCRIPT, {
+    root,
+    relativePath
+  })
+}
+
+export function searchRemoteFiles(
+  sshAlias: string,
+  root: string,
+  query: string
+): Promise<FileEntry[]> {
+  if (!query.trim()) return Promise.resolve([])
+  return runRemotePythonAsync<FileEntry[]>(sshAlias, SEARCH_FILES_SCRIPT, {
+    root,
+    query,
+    maxResults: SEARCH_RESULT_LIMIT,
+    maxScanned: SEARCH_SCAN_LIMIT
+  })
+}
+
 export function previewRemoteFile(
   sshAlias: string,
   root: string,
@@ -234,6 +373,22 @@ export function previewRemoteFile(
     relativePath
   })
   if (!preview.binary) preview.content = Buffer.from(preview.content, 'base64').toString('utf8')
+  return preview
+}
+
+export async function previewRemoteFileAsync(
+  sshAlias: string,
+  root: string,
+  relativePath: string
+): Promise<FilePreview> {
+  const preview = await runRemotePythonAsync<FilePreview>(
+    sshAlias,
+    PREVIEW_FILE_SCRIPT,
+    { root, relativePath }
+  )
+  if (!preview.binary) {
+    preview.content = Buffer.from(preview.content, 'base64').toString('utf8')
+  }
   return preview
 }
 
@@ -251,6 +406,22 @@ export function writeRemoteFile(
     relativePath,
     content
   })
+}
+
+export async function writeRemoteFileAsync(
+  sshAlias: string,
+  root: string,
+  relativePath: string,
+  content: string
+): Promise<void> {
+  if (Buffer.byteLength(content, 'utf8') > MAX_FILE_BYTES) {
+    throw new Error('PanePilot only edits files up to 1 MB.')
+  }
+  await runRemotePythonAsync<Record<string, never>>(
+    sshAlias,
+    WRITE_FILE_SCRIPT,
+    { root, relativePath, content }
+  )
 }
 
 export async function downloadRemoteFile(

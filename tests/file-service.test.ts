@@ -8,7 +8,11 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { previewLocalFile, writeLocalFile } from '../src/main/file-service'
+import {
+  previewLocalFile,
+  searchLocalFiles,
+  writeLocalFile
+} from '../src/main/file-service'
 
 const temporaryRoots: string[] = []
 
@@ -42,5 +46,24 @@ describe('local file editing', () => {
     expect(() => writeLocalFile(project, '../outside.txt', 'changed')).toThrow(
       'outside the project folder'
     )
+  })
+})
+
+describe('local file search', () => {
+  it('finds matching project paths while ignoring dependency and Git folders', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'panepilot-search-'))
+    temporaryRoots.push(root)
+    mkdirSync(join(root, 'src', 'components'), { recursive: true })
+    mkdirSync(join(root, 'node_modules', 'matching-package'), { recursive: true })
+    mkdirSync(join(root, '.git'), { recursive: true })
+    writeFileSync(join(root, 'src', 'components', 'FilesPanel.tsx'), 'export {}')
+    writeFileSync(join(root, 'node_modules', 'matching-package', 'index.js'), '')
+    writeFileSync(join(root, '.git', 'matching-config'), '')
+
+    const results = await searchLocalFiles(root, 'filespanel')
+
+    expect(results.map((entry) => entry.path)).toEqual([
+      join('src', 'components', 'FilesPanel.tsx')
+    ])
   })
 })

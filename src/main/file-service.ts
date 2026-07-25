@@ -1,6 +1,7 @@
 import {
   copyFileSync,
   lstatSync,
+  promises as fs,
   readFileSync,
   readdirSync,
   realpathSync,
@@ -11,6 +12,8 @@ import { relative, resolve, sep } from 'node:path'
 import type { FileEntry, FilePreview } from '../shared/types'
 
 const PREVIEW_LIMIT = 1024 * 1024
+const SEARCH_RESULT_LIMIT = 200
+const SEARCH_SCAN_LIMIT = 20_000
 
 function boundedPath(root: string, requested = '.'): string {
   const realRoot = realpathSync(root)
@@ -48,6 +51,77 @@ export function listLocalFiles(root: string, requested = '.'): FileEntry[] {
       if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1
       return a.name.localeCompare(b.name)
     })
+}
+
+export async function searchLocalFiles(
+  root: string,
+  rawQuery: string
+): Promise<FileEntry[]> {
+  const query = rawQuery.trim().toLocaleLowerCase()
+  if (!query) return []
+  const realRoot = await fs.realpath(root)
+  const results: FileEntry[] = []
+  const directories = [realRoot]
+  const visited = new Set<string>()
+  let scanned = 0
+
+  while (
+    directories.length > 0 &&
+    results.length < SEARCH_RESULT_LIMIT &&
+    scanned < SEARCH_SCAN_LIMIT
+  ) {
+    const directory = directories.shift()!
+    if (visited.has(directory)) continue
+    visited.add(directory)
+    let entries
+    try {
+      entries = await fs.readdir(directory, { withFileTypes: true })
+    } catch {
+      continue
+    }
+
+    for (const entry of entries) {
+      if (
+        scanned >= SEARCH_SCAN_LIMIT ||
+        results.length >= SEARCH_RESULT_LIMIT
+      ) {
+        break
+      }
+      if (entry.name === '.git' || entry.name === 'node_modules') continue
+      scanned += 1
+      const unresolved = resolve(directory, entry.name)
+      let target: string
+      try {
+        target = await fs.realpath(unresolved)
+      } catch {
+        continue
+      }
+      if (target !== realRoot && !target.startsWith(`${realRoot}${sep}`)) continue
+      const projectPath = relative(realRoot, target)
+      let stat
+      try {
+        stat = await fs.stat(target)
+      } catch {
+        continue
+      }
+      const kind = stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : null
+      if (!kind) continue
+      if (projectPath.toLocaleLowerCase().includes(query)) {
+        results.push({
+          name: entry.name,
+          path: projectPath,
+          kind,
+          size: kind === 'file' ? stat.size : null
+        })
+      }
+      if (kind === 'directory' && !visited.has(target)) directories.push(target)
+    }
+  }
+
+  return results.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1
+    return a.path.localeCompare(b.path)
+  })
 }
 
 export function previewLocalFile(root: string, requested: string): FilePreview {

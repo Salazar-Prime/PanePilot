@@ -122,6 +122,8 @@ const api: ProjectConsoleApi = {
   files: {
     list: (projectId: string, relativePath = '.') =>
       ipcRenderer.invoke('files:list', projectId, relativePath),
+    search: (projectId: string, query: string) =>
+      ipcRenderer.invoke('files:search', projectId, query),
     preview: (projectId: string, relativePath: string) =>
       ipcRenderer.invoke('files:preview', projectId, relativePath),
     save: (projectId: string, relativePath: string, content: string) =>

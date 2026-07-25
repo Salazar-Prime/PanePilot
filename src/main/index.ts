@@ -23,6 +23,7 @@ import {
   downloadLocalFile,
   listLocalFiles,
   previewLocalFile,
+  searchLocalFiles,
   writeLocalFile
 } from './file-service'
 import { LatexProjectService } from './latex-project-service'
@@ -33,10 +34,11 @@ import { projectTypeServices } from './project-type-services'
 import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import {
   downloadRemoteFile,
-  listRemoteFiles,
+  listRemoteFilesAsync,
   listRemoteFolders,
-  previewRemoteFile,
-  writeRemoteFile
+  previewRemoteFileAsync,
+  searchRemoteFiles,
+  writeRemoteFileAsync
 } from './remote-file-service'
 import { discoverSshAliases } from './ssh-config'
 import { Store } from './store'
@@ -243,14 +245,24 @@ function registerIpc(): void {
     terminals.delete(sessionId)
   )
 
-  ipcMain.handle('files:list', (_event, projectId: string, relativePath = '.') => {
+  ipcMain.handle('files:list', async (_event, projectId: string, relativePath = '.') => {
     const project = store.getProject(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
     return connection.kind === 'local'
       ? listLocalFiles(project.folder, relativePath)
-      : listRemoteFiles(connection.sshAlias!, project.folder, relativePath)
+      : listRemoteFilesAsync(connection.sshAlias!, project.folder, relativePath)
+  })
+
+  ipcMain.handle('files:search', async (_event, projectId: string, query: string) => {
+    const project = store.getProject(projectId)
+    if (!project) throw new Error('Project not found.')
+    const connection = store.getConnection(project.connectionId)
+    if (!connection) throw new Error('Project connection not found.')
+    return connection.kind === 'local'
+      ? searchLocalFiles(project.folder, query)
+      : searchRemoteFiles(connection.sshAlias!, project.folder, query)
   })
 
   ipcMain.handle('notes:list', (_event, projectId: string) =>
@@ -275,18 +287,18 @@ function registerIpc(): void {
   ipcMain.handle('notes:delete', (_event, projectId: string, path: string) => {
     metadata.deleteNote(projectId, path)
   })
-  ipcMain.handle('files:preview', (_event, projectId: string, relativePath: string) => {
+  ipcMain.handle('files:preview', async (_event, projectId: string, relativePath: string) => {
     const project = store.getProject(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
     return connection.kind === 'local'
       ? previewLocalFile(project.folder, relativePath)
-      : previewRemoteFile(connection.sshAlias!, project.folder, relativePath)
+      : previewRemoteFileAsync(connection.sshAlias!, project.folder, relativePath)
   })
   ipcMain.handle(
     'files:save',
-    (_event, projectId: string, relativePath: string, content: string) => {
+    async (_event, projectId: string, relativePath: string, content: string) => {
       const project = store.getProject(projectId)
       if (!project) throw new Error('Project not found.')
       const connection = store.getConnection(project.connectionId)
@@ -294,7 +306,12 @@ function registerIpc(): void {
       if (connection.kind === 'local') {
         writeLocalFile(project.folder, relativePath, content)
       } else {
-        writeRemoteFile(connection.sshAlias!, project.folder, relativePath, content)
+        await writeRemoteFileAsync(
+          connection.sshAlias!,
+          project.folder,
+          relativePath,
+          content
+        )
       }
     }
   )

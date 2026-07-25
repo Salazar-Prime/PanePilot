@@ -9,32 +9,63 @@ import {
   Pencil,
   RefreshCw,
   Save,
+  Search,
   X
 } from 'lucide-react'
 import type { FileEntry, FilePreview, Project } from '@shared/types'
 import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
 import { Editor, monaco } from '../lib/monaco'
 
-export function FilesPanel({
-  project,
-  initialPath = '.',
-  openFileRequest = null
-}: {
+interface FilesPanelProps {
   project: Project
   initialPath?: string
   openFileRequest?: ProjectFileOpenRequest | null
-}) {
-  const [path, setPath] = useState(initialPath)
-  const [entries, setEntries] = useState<FileEntry[]>([])
-  const [preview, setPreview] = useState<FilePreview | null>(null)
-  const [draft, setDraft] = useState('')
-  const [editing, setEditing] = useState(false)
+}
+
+interface FilesPanelSnapshot {
+  path: string
+  entries: FileEntry[]
+  preview: FilePreview | null
+  draft: string
+  editing: boolean
+  loaded: boolean
+  searchQuery: string
+  searchResults: FileEntry[]
+}
+
+const filesPanelCache = new Map<string, FilesPanelSnapshot>()
+
+export function FilesPanel(props: FilesPanelProps) {
+  return <FilesPanelInstance key={props.project.id} {...props} />
+}
+
+function FilesPanelInstance({
+  project,
+  initialPath = '.',
+  openFileRequest = null
+}: FilesPanelProps) {
+  const cached = filesPanelCache.get(project.id)
+  const [path, setPath] = useState(cached?.path ?? initialPath)
+  const [entries, setEntries] = useState<FileEntry[]>(cached?.entries ?? [])
+  const [preview, setPreview] = useState<FilePreview | null>(
+    cached?.preview ?? null
+  )
+  const [draft, setDraft] = useState(cached?.draft ?? '')
+  const [editing, setEditing] = useState(cached?.editing ?? false)
+  const [loaded, setLoaded] = useState(cached?.loaded ?? false)
+  const [searchQuery, setSearchQuery] = useState(cached?.searchQuery ?? '')
+  const [searchResults, setSearchResults] = useState<FileEntry[]>(
+    cached?.searchResults ?? []
+  )
+  const [searching, setSearching] = useState(false)
+  const [searchRevision, setSearchRevision] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const pendingRevealRef = useRef<ProjectFileOpenRequest | null>(null)
+  const initialPathRef = useRef(initialPath)
 
   function canLeaveEditor(): boolean {
     return (
@@ -55,6 +86,7 @@ export function FilesPanel({
       setPreview(null)
       setDraft('')
       setEditing(false)
+      setLoaded(true)
       pendingRevealRef.current = null
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -64,14 +96,73 @@ export function FilesPanel({
   }
 
   useEffect(() => {
-    setPath(initialPath)
-    setPreview(null)
-    setEditing(false)
-    pendingRevealRef.current = null
+    if (!loaded) void load(initialPath)
+  }, [])
+
+  useEffect(() => {
+    if (initialPathRef.current === initialPath) return
+    initialPathRef.current = initialPath
     void load(initialPath)
-  }, [project.id, initialPath])
+  }, [initialPath])
+
+  useEffect(() => {
+    filesPanelCache.set(project.id, {
+      path,
+      entries,
+      preview,
+      draft,
+      editing,
+      loaded,
+      searchQuery,
+      searchResults
+    })
+  }, [
+    draft,
+    editing,
+    entries,
+    loaded,
+    path,
+    preview,
+    project.id,
+    searchQuery,
+    searchResults
+  ])
+
+  useEffect(() => {
+    const query = searchQuery.trim()
+    if (!query) {
+      setSearching(false)
+      setSearchResults([])
+      setError('')
+      return
+    }
+    let active = true
+    const timer = window.setTimeout(() => {
+      setSearching(true)
+      setError('')
+      void window.projectConsole.files
+        .search(project.id, query)
+        .then((results) => {
+          if (active) setSearchResults(results)
+        })
+        .catch((caught) => {
+          if (active) {
+            setError(caught instanceof Error ? caught.message : String(caught))
+          }
+        })
+        .finally(() => {
+          if (active) setSearching(false)
+        })
+    }, 220)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [project.id, searchQuery, searchRevision])
 
   const pathParts = path === '.' ? [] : path.split('/')
+  const searchingPaths = Boolean(searchQuery.trim())
+  const displayedEntries = searchingPaths ? searchResults : entries
 
   async function openFile(
     filePath: string,
@@ -103,10 +194,15 @@ export function FilesPanel({
 
   async function openEntry(entry: FileEntry) {
     if (entry.kind === 'directory') {
-      await load(entry.path)
+      await navigate(entry.path)
       return
     }
     await openFile(entry.path)
+  }
+
+  async function navigate(nextPath: string) {
+    setSearchQuery('')
+    await load(nextPath)
   }
 
   function revealRequestedPosition(
@@ -181,22 +277,55 @@ export function FilesPanel({
       <aside className="file-browser">
         <div className="file-browser-header">
           <div className="breadcrumbs">
-            <button onClick={() => void load('.')}>
+            <button onClick={() => void navigate('.')}>
               <FolderOpen size={14} />
               {project.name}
             </button>
             {pathParts.map((part, index) => (
               <span key={`${part}-${index}`}>
                 <ChevronRight size={13} />
-                <button onClick={() => void load(pathParts.slice(0, index + 1).join('/'))}>
+                <button
+                  onClick={() =>
+                    void navigate(pathParts.slice(0, index + 1).join('/'))
+                  }
+                >
                   {part}
                 </button>
               </span>
             ))}
           </div>
-          <button className="icon-button" onClick={() => void load()} aria-label="Refresh files">
-            <RefreshCw size={15} className={loading ? 'spin' : ''} />
+          <button
+            className="icon-button"
+            onClick={() => {
+              if (searchingPaths) {
+                setSearchRevision((current) => current + 1)
+              } else {
+                void load()
+              }
+            }}
+            aria-label={searchingPaths ? 'Refresh file search' : 'Refresh files'}
+          >
+            <RefreshCw size={15} className={loading || searching ? 'spin' : ''} />
           </button>
+        </div>
+        <div className="file-search">
+          <Search size={14} />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search project paths"
+            aria-label="Search project files"
+          />
+          {searching ? (
+            <RefreshCw className="spin" size={13} />
+          ) : searchQuery ? (
+            <button
+              onClick={() => setSearchQuery('')}
+              aria-label="Clear file search"
+            >
+              <X size={13} />
+            </button>
+          ) : null}
         </div>
         {error ? (
           <div className="file-error">
@@ -204,29 +333,34 @@ export function FilesPanel({
           </div>
         ) : (
           <div className="file-list">
-            {path !== '.' && (
+            {path !== '.' && !searchingPaths && (
               <button
                 className="file-row"
                 onClick={() => {
                   const parent = path.split('/').slice(0, -1).join('/') || '.'
-                  void load(parent)
+                  void navigate(parent)
                 }}
               >
                 <Folder size={16} />
                 <span>..</span>
               </button>
             )}
-            {entries.map((entry) => (
+            {displayedEntries.map((entry) => (
               <button
                 key={entry.path}
                 className={`file-row ${preview?.path === entry.path ? 'selected' : ''}`}
                 onClick={() => void openEntry(entry)}
               >
                 {entry.kind === 'directory' ? <Folder size={16} /> : <File size={16} />}
-                <span>{entry.name}</span>
+                <span>{searchingPaths ? entry.path : entry.name}</span>
                 {entry.size != null && <small>{formatBytes(entry.size)}</small>}
               </button>
             ))}
+            {searchingPaths && !searching && displayedEntries.length === 0 && (
+              <div className="file-search-empty">
+                No project paths match “{searchQuery.trim()}”.
+              </div>
+            )}
           </div>
         )}
       </aside>

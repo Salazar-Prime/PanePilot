@@ -13,6 +13,7 @@ import {
 
 interface Props {
   session: TerminalSession
+  active?: boolean
   retainOutputOnExit?: boolean
   projectFolder?: string
   onOpenFile?(target: TerminalFileTarget): void
@@ -20,11 +21,16 @@ interface Props {
 
 export function ManagedTerminal({
   session,
+  active = true,
   retainOutputOnExit = false,
   projectFolder,
   onOpenFile
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const terminalRef = useRef<Terminal | null>(null)
+  const fitRef = useRef<FitAddon | null>(null)
+  const activeRef = useRef(active)
+  activeRef.current = active
   const dimensionsRef = useRef({ cols: 100, rows: 30 })
   const onOpenFileRef = useRef(onOpenFile)
   onOpenFileRef.current = onOpenFile
@@ -85,6 +91,8 @@ export function ManagedTerminal({
     const fit = new FitAddon()
     terminal.loadAddon(fit)
     terminal.open(host)
+    terminalRef.current = terminal
+    fitRef.current = fit
     fit.fit()
     dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
     const linkDisposable =
@@ -108,6 +116,8 @@ export function ManagedTerminal({
       return () => {
         resizeObserver.disconnect()
         linkDisposable?.dispose()
+        if (terminalRef.current === terminal) terminalRef.current = null
+        if (fitRef.current === fit) fitRef.current = null
         terminal.dispose()
       }
     }
@@ -134,7 +144,7 @@ export function ManagedTerminal({
       .then(({ output }) => {
         terminal.write(output, () => {
           replaying = false
-          terminal.focus()
+          if (activeRef.current) terminal.focus()
         })
       })
       .catch((error) => {
@@ -162,9 +172,29 @@ export function ManagedTerminal({
       removeTransportListener()
       dataDisposable.dispose()
       linkDisposable?.dispose()
+      if (terminalRef.current === terminal) terminalRef.current = null
+      if (fitRef.current === fit) fitRef.current = null
       terminal.dispose()
     }
   }, [session.id, terminalEnded, retainedOutput, projectFolder])
+
+  useEffect(() => {
+    if (!active) return
+    const frame = window.requestAnimationFrame(() => {
+      const terminal = terminalRef.current
+      const fit = fitRef.current
+      if (!terminal || !fit) return
+      fit.fit()
+      dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
+      void window.projectConsole.terminals.resize(
+        session.id,
+        terminal.cols,
+        terminal.rows
+      )
+      terminal.focus()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [active, session.id])
 
   async function retry() {
     setTransport((current) => ({
