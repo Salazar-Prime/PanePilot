@@ -35,6 +35,12 @@ interface FilesPanelSnapshot {
 
 const filesPanelCache = new Map<string, FilesPanelSnapshot>()
 
+function uniqueEntries(entries: FileEntry[]): FileEntry[] {
+  const unique = new Map<string, FileEntry>()
+  for (const entry of entries) unique.set(entry.path, entry)
+  return [...unique.values()]
+}
+
 export function FilesPanel(props: FilesPanelProps) {
   return <FilesPanelInstance key={props.project.id} {...props} />
 }
@@ -45,17 +51,19 @@ function FilesPanelInstance({
   openFileRequest = null
 }: FilesPanelProps) {
   const cached = filesPanelCache.get(project.id)
-  const [path, setPath] = useState(cached?.path ?? initialPath)
-  const [entries, setEntries] = useState<FileEntry[]>(cached?.entries ?? [])
+  const [listing, setListing] = useState(() => ({
+    path: cached?.path ?? initialPath,
+    entries: uniqueEntries(cached?.entries ?? []),
+    loaded: cached?.loaded ?? false
+  }))
   const [preview, setPreview] = useState<FilePreview | null>(
     cached?.preview ?? null
   )
   const [draft, setDraft] = useState(cached?.draft ?? '')
   const [editing, setEditing] = useState(cached?.editing ?? false)
-  const [loaded, setLoaded] = useState(cached?.loaded ?? false)
   const [searchQuery, setSearchQuery] = useState(cached?.searchQuery ?? '')
   const [searchResults, setSearchResults] = useState<FileEntry[]>(
-    cached?.searchResults ?? []
+    uniqueEntries(cached?.searchResults ?? [])
   )
   const [searching, setSearching] = useState(false)
   const [searchRevision, setSearchRevision] = useState(0)
@@ -66,6 +74,10 @@ function FilesPanelInstance({
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const pendingRevealRef = useRef<ProjectFileOpenRequest | null>(null)
   const initialPathRef = useRef(initialPath)
+  const listingRequestRef = useRef(0)
+  const path = listing.path
+  const entries = listing.entries
+  const loaded = listing.loaded
 
   function canLeaveEditor(): boolean {
     return (
@@ -78,20 +90,29 @@ function FilesPanelInstance({
 
   async function load(nextPath = path) {
     if (!canLeaveEditor()) return
+    const request = ++listingRequestRef.current
     setLoading(true)
     setError('')
     try {
-      setEntries(await window.projectConsole.files.list(project.id, nextPath))
-      setPath(nextPath)
+      const nextEntries = await window.projectConsole.files.list(
+        project.id,
+        nextPath
+      )
+      if (request !== listingRequestRef.current) return
+      setListing({
+        path: nextPath,
+        entries: uniqueEntries(nextEntries),
+        loaded: true
+      })
       setPreview(null)
       setDraft('')
       setEditing(false)
-      setLoaded(true)
       pendingRevealRef.current = null
     } catch (caught) {
+      if (request !== listingRequestRef.current) return
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
-      setLoading(false)
+      if (request === listingRequestRef.current) setLoading(false)
     }
   }
 
@@ -119,9 +140,7 @@ function FilesPanelInstance({
   }, [
     draft,
     editing,
-    entries,
-    loaded,
-    path,
+    listing,
     preview,
     project.id,
     searchQuery,
@@ -143,7 +162,7 @@ function FilesPanelInstance({
       void window.projectConsole.files
         .search(project.id, query)
         .then((results) => {
-          if (active) setSearchResults(results)
+          if (active) setSearchResults(uniqueEntries(results))
         })
         .catch((caught) => {
           if (active) {
@@ -166,9 +185,10 @@ function FilesPanelInstance({
 
   async function openFile(
     filePath: string,
-    request: ProjectFileOpenRequest | null = null
+    openRequest: ProjectFileOpenRequest | null = null
   ) {
     if (!canLeaveEditor()) return
+    const listingRequest = ++listingRequestRef.current
     setLoading(true)
     setError('')
     try {
@@ -178,17 +198,22 @@ function FilesPanelInstance({
         window.projectConsole.files.list(project.id, parent),
         window.projectConsole.files.preview(project.id, filePath)
       ])
-      setEntries(nextEntries)
-      setPath(parent)
+      if (listingRequest !== listingRequestRef.current) return
+      setListing({
+        path: parent,
+        entries: uniqueEntries(nextEntries),
+        loaded: true
+      })
       setPreview(nextPreview)
       setDraft(nextPreview.content)
       setEditing(false)
-      pendingRevealRef.current = request
+      pendingRevealRef.current = openRequest
       if (nextPreview.binary) editorRef.current = null
     } catch (caught) {
+      if (listingRequest !== listingRequestRef.current) return
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
-      setLoading(false)
+      if (listingRequest === listingRequestRef.current) setLoading(false)
     }
   }
 
@@ -332,7 +357,10 @@ function FilesPanelInstance({
             <p>{error}</p>
           </div>
         ) : (
-          <div className="file-list">
+          <div
+            className="file-list"
+            key={`${project.id}:${path}:${searchQuery.trim()}`}
+          >
             {path !== '.' && !searchingPaths && (
               <button
                 className="file-row"
