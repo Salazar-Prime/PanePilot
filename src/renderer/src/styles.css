@@ -895,6 +895,108 @@ select:focus-visible {
   width: 100%;
 }
 
+.workspace-panel-cache > .notes-panel {
+  width: 100%;
+}
+
+.notes-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: #090b10;
+}
+
+.notes-header {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 13px;
+  border-bottom: 1px solid #232832;
+  background: #0d1016;
+}
+
+.notes-header > div:first-child {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  color: #7889df;
+}
+
+.notes-header > div:first-child > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.notes-header strong {
+  color: #d7dbe4;
+  font-size: 11px;
+}
+
+.notes-header small {
+  overflow: hidden;
+  color: #697280;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.notes-actions > span {
+  margin-right: 3px;
+  color: #66707e;
+  font-size: 8px;
+}
+
+.notes-actions > span.notes-dirty {
+  color: #d1a265;
+}
+
+.notes-actions .primary-button,
+.notes-actions .secondary-button {
+  height: 29px;
+  padding: 0 10px;
+  font-size: 9px;
+}
+
+.notes-editor-shell {
+  min-height: 0;
+  flex: 1;
+}
+
+.notes-error {
+  padding: 8px 13px;
+  color: #ef9aa6;
+  border-bottom: 1px solid #512a33;
+  background: #241419;
+  font-size: 9px;
+}
+
+.notes-footer {
+  display: flex;
+  min-height: 29px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 13px;
+  color: #555f6d;
+  border-top: 1px solid #222730;
+  background: #0d1016;
+  font-size: 8px;
+}
+
 .file-browser {
   display: flex;
   min-width: 0;
@@ -1660,6 +1762,18 @@ select:focus-visible {
   color: #4e5562;
 }
 
+.launcher-modal .field > small {
+  color: #626b78;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.launcher-modal .field > small code {
+  color: #8d9be2;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 8px;
+}
+
 .form-help {
   margin: -4px 0 14px;
   color: #777f8d;
@@ -2075,7 +2189,8 @@ select:focus-visible {
 }
 
 .archived-projects-sidebar,
-.new-project-sidebar {
+.new-project-sidebar,
+.refresh-connections-sidebar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2088,7 +2203,8 @@ select:focus-visible {
 }
 
 .archived-projects-sidebar span,
-.new-project-sidebar span {
+.new-project-sidebar span,
+.refresh-connections-sidebar span {
   flex: 1;
 }
 
@@ -2099,6 +2215,7 @@ select:focus-visible {
 
 .archived-projects-sidebar:hover,
 .new-project-sidebar:hover,
+.refresh-connections-sidebar:hover,
 .archived-projects-sidebar.selected {
   color: #cbd0dc;
   background: #13161d;
@@ -3732,6 +3849,19 @@ button.type-switcher {
   min-width: 0;
   align-items: center;
   gap: 9px;
+}
+
+.project-qna-pane > header > .project-qna-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+.project-qna-heading-actions .primary-button,
+.project-qna-heading-actions .secondary-button {
+  height: 29px;
+  padding: 0 10px;
+  font-size: 9px;
 }
 
 .project-qna-pane > header span {

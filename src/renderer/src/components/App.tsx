@@ -20,6 +20,7 @@ import {
   Pin,
   PinOff,
   Plus,
+  RefreshCw,
   Server,
   Settings,
   Sparkles,
@@ -85,12 +86,24 @@ export function App() {
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
   const [sessionSort] = useSessionSort()
   const [loading, setLoading] = useState(true)
+  const [refreshingConnections, setRefreshingConnections] = useState(false)
   const [error, setError] = useState('')
 
   const refresh = useCallback(async () => {
     const nextProjects = await window.projectConsole.projects.list()
     setProjects(nextProjects)
   }, [])
+
+  async function refreshSshConnections() {
+    setRefreshingConnections(true)
+    try {
+      setConnections(await window.projectConsole.connections.refresh())
+    } catch (caught) {
+      showError(caught)
+    } finally {
+      setRefreshingConnections(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -901,6 +914,20 @@ export function App() {
           })}
         </div>
         <div className="sidebar-footer-actions">
+          <button
+            className="refresh-connections-sidebar"
+            onClick={() => void refreshSshConnections()}
+            disabled={refreshingConnections}
+            title="Re-read SSH hosts from ~/.ssh/config"
+          >
+            <RefreshCw
+              size={15}
+              className={refreshingConnections ? 'spin' : ''}
+            />
+            <span>
+              {refreshingConnections ? 'Refreshing SSH hosts…' : 'Refresh SSH hosts'}
+            </span>
+          </button>
           <button
             className={`archived-projects-sidebar ${
               showArchivedProjects ? 'selected' : ''

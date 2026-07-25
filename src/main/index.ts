@@ -23,6 +23,8 @@ import {
   downloadLocalFile,
   listLocalFiles,
   previewLocalFile,
+  readLocalProjectNotes,
+  writeLocalProjectNotes,
   writeLocalFile
 } from './file-service'
 import { LatexProjectService } from './latex-project-service'
@@ -35,6 +37,8 @@ import {
   listRemoteFiles,
   listRemoteFolders,
   previewRemoteFile,
+  readRemoteProjectNotes,
+  writeRemoteProjectNotes,
   writeRemoteFile
 } from './remote-file-service'
 import { discoverSshAliases } from './ssh-config'
@@ -85,6 +89,10 @@ function createWindow(): void {
 
 function registerIpc(): void {
   ipcMain.handle('connections:list', () => store.listConnections())
+  ipcMain.handle('connections:refresh', () => {
+    store.syncConnections(discoverSshAliases())
+    return store.listConnections()
+  })
   ipcMain.handle('connections:test', (_event, connectionId: string) => {
     const connection = store.getConnection(connectionId)
     if (!connection || connection.kind !== 'ssh' || !connection.sshAlias) {
@@ -149,6 +157,9 @@ function registerIpc(): void {
   ipcMain.handle('project-qna:start', (_event, projectId: string) =>
     terminals.startProjectQna(projectId)
   )
+  ipcMain.handle('project-qna:reset', (_event, projectId: string) => {
+    terminals.resetProjectQna(projectId)
+  })
   ipcMain.handle(
     'project-qna:send-prompt',
     (_event, sessionId: string, prompt: string) => {
@@ -238,6 +249,28 @@ function registerIpc(): void {
       ? listLocalFiles(project.folder, relativePath)
       : listRemoteFiles(connection.sshAlias!, project.folder, relativePath)
   })
+
+  ipcMain.handle('notes:read', (_event, projectId: string) => {
+    const project = store.getProject(projectId)
+    if (!project) throw new Error('Project not found.')
+    const connection = store.getConnection(project.connectionId)
+    if (!connection) throw new Error('Project connection not found.')
+    return connection.kind === 'local'
+      ? readLocalProjectNotes(project.folder)
+      : readRemoteProjectNotes(connection.sshAlias!, project.folder)
+  })
+  ipcMain.handle(
+    'notes:write',
+    (_event, projectId: string, content: string) => {
+      const project = store.getProject(projectId)
+      if (!project) throw new Error('Project not found.')
+      const connection = store.getConnection(project.connectionId)
+      if (!connection) throw new Error('Project connection not found.')
+      return connection.kind === 'local'
+        ? writeLocalProjectNotes(project.folder, content)
+        : writeRemoteProjectNotes(connection.sshAlias!, project.folder, content)
+    }
+  )
   ipcMain.handle('files:preview', (_event, projectId: string, relativePath: string) => {
     const project = store.getProject(projectId)
     if (!project) throw new Error('Project not found.')

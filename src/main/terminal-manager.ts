@@ -24,6 +24,7 @@ import {
   codexStateFromPaneTitle,
   codexThreadReferenceFromPaneTitle
 } from './codex-pane-status'
+import { normalizeCodexThreadId } from './codex-thread-id'
 import { ConversationIndexer } from './conversation-indexer'
 import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import { acknowledgedAgentState, ScreenActivityDetector } from './screen-activity-detector'
@@ -361,6 +362,14 @@ export class TerminalManager {
     )
   }
 
+  resetProjectQna(projectId: string): void {
+    const project = this.store.getProject(projectId)
+    if (!project || project.archived) throw new Error('Choose an active project.')
+    const existing = this.store.getProjectQnaSession(projectId)
+    if (!existing) return
+    this.delete(existing.id)
+  }
+
   private startSession(
     input: StartTerminalInput,
     kind: TerminalSessionKind,
@@ -373,6 +382,23 @@ export class TerminalManager {
     if (!connection) throw new Error('Project connection not found.')
     if (input.profile === 'custom' && !input.customCommand?.trim()) {
       throw new Error('Enter a custom command.')
+    }
+    if (input.codexThreadId && input.profile !== 'codex') {
+      throw new Error('A Codex thread ID can only be used with the Codex profile.')
+    }
+    const codexThreadId =
+      input.profile === 'codex'
+        ? normalizeCodexThreadId(input.codexThreadId)
+        : null
+    if (
+      codexThreadId &&
+      this.store
+        .listClaimedProviderSessionIds(connection.id)
+        .has(codexThreadId)
+    ) {
+      throw new Error(
+        'That Codex thread is already linked to another terminal on this connection.'
+      )
     }
 
     const tmuxAvailable =
@@ -411,7 +437,7 @@ export class TerminalManager {
       }
     }
     const tmuxName = tmuxAvailable ? sessionName : null
-    const session = this.store.createSession({
+    const createdSession = this.store.createSession({
       projectId: input.projectId,
       kind,
       name: sessionName,
@@ -422,6 +448,14 @@ export class TerminalManager {
       tmuxName,
       dangerousMode: input.dangerousMode
     })
+    if (codexThreadId) {
+      this.store.setSessionProviderId(
+        createdSession.id,
+        'codex',
+        codexThreadId
+      )
+    }
+    const session = this.requireSession(createdSession.id)
     try {
       onPersist?.(session)
       this.launch(
@@ -430,7 +464,8 @@ export class TerminalManager {
         connection,
         input.cols ?? 100,
         input.rows ?? 30,
-        true
+        true,
+        Boolean(codexThreadId)
       )
     } catch (error) {
       this.changeState(
@@ -903,7 +938,19 @@ export class TerminalManager {
     const outputWasClosed = runtime?.outputClosed ?? false
     if (runtime) runtime.outputClosed = true
     try {
-      if (!['completed', 'error'].includes(session.state)) {
+      const project = this.store.getProject(session.projectId)
+      const connection = project
+        ? this.store.getConnection(project.connectionId)
+        : null
+      const liveTmuxSession =
+        session.backend === 'tmux' &&
+        session.tmuxName != null &&
+        connection != null &&
+        this.tmuxSessionExists(connection, session.tmuxName)
+      if (
+        !['completed', 'error'].includes(session.state) ||
+        liveTmuxSession
+      ) {
         this.terminateSession(session)
       }
       this.cancelReconnect(sessionId)

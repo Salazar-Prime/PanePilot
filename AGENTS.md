@@ -51,6 +51,10 @@ These are owner-approved decisions and should be treated as product invariants u
 24. Every project has at most one project Q&A Codex session. It is a persistent tmux-backed agent session rendered as a top-level project capability, not as an ordinary terminal tab or sidebar terminal.
 25. SSH transport state is separate from terminal and agent lifecycle state. A dropped SSH client becomes reconnecting/offline; only a successful remote scan proving the exact tmux session is gone may complete the terminal.
 26. Files workspace navigation, preview, editor, and unsaved draft state survive switching project tabs in the current renderer lifetime. They are not persisted across application restarts.
+27. Every folder-backed project has Markdown notes stored in `.notes-panepilot` at the project root. The file is authoritative on the local or SSH host and is never mirrored into SQLite.
+28. The SSH connection list can be refreshed explicitly from `~/.ssh/config` without restarting PanePilot.
+29. A new Codex terminal may optionally receive an exact Codex thread ID. PanePilot links that ID before creating tmux metadata and launches `codex resume` instead of creating a new thread.
+30. Project Q&A can be reset after confirmation. Reset closes the exact old backend session when present and deletes PanePilot’s Q&A terminal record/output, but never deletes the provider’s conversation archive.
 
 ## Agent lifecycle semantics
 
@@ -116,6 +120,7 @@ Every new capability that crosses the Electron boundary must be updated in all o
 - `src/main/remote-conversation-indexer.ts`: read-only, server-side normalization of Codex/Claude archives over SSH plus remote Codex session discovery.
 - `src/main/file-service.ts`: bounded local file listing and previews.
 - `src/main/remote-file-service.ts`: SSH-backed file listing and previews.
+- `src/renderer/src/components/NotesPanel.tsx`: project-root Markdown notes editor for local and SSH projects.
 - `src/main/ssh-config.ts`: SSH alias discovery.
 - `src/main/git.ts`: repository URL discovery.
 - `src/main/latex-project-service.ts`: LaTeX outline parsing, project settings, scoped chat launch, edit snapshots, and source diffs.
@@ -170,6 +175,7 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - A PTY fallback is used when tmux cannot be found or created.
 - Tmux preserves a still-running Codex process. A new Codex terminal includes `thread-id` in its session-local terminal title; PanePilot resolves the displayed reference against the project-scoped Codex archive and mirrors the full ID into `@panepilot_provider_session_id`.
 - A stopped Codex terminal restarts only with `codex resume <exact-id>`. Provider session names are retained only for migration compatibility and are never used as a resume target.
+- When the user supplies an exact Codex thread ID at creation, PanePilot validates and links it before launch, mirrors it into tmux metadata, and starts with `codex resume <exact-id>`.
 - Provider session discovery reads Codex `session_meta` archive records and does not depend on lifecycle hooks. Existing unlinked Codex terminals are reconciled on startup when their archives are available.
 - Stopping an Action or agent capability, and deleting any live tmux-backed terminal, must directly kill the exact tmux session and verify that it is gone before marking it `completed` or removing it. Do not simulate tmux prefix keystrokes through the terminal UI.
 - Local tmux resolution checks PATH plus common Homebrew/system locations.
@@ -251,6 +257,7 @@ Known scaling limitation: search currently scans the in-memory parsed conversati
 - Remote file operations execute through SSH.
 - Choosing a folder for a new SSH project browses that host's filesystem, starts at the remote home directory, and stores the canonical remote path. It must never open the local native folder dialog.
 - File previews are truncated at 1 MB.
+- Project notes use the fixed project-root path `.notes-panepilot`, are UTF-8 Markdown text capped at 1 MB, and reject symlink targets. Both local and remote writes replace the file atomically.
 - The file preview toolbar can download the authoritative saved file through a native Save dialog. Local files are copied directly; remote files are streamed over SSH without applying the 1 MB Monaco preview limit.
 - File previews use a locally bundled Monaco editor with language detection. Editing requires an explicit Edit action and saving is bounded to existing files no larger than 1 MB.
 - Terminal links recognize project-contained path-like text and optional line/column suffixes. Clicking a link switches to Files, opens the authoritative file in Monaco, and reveals the requested line and column when present.

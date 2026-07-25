@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   MessageCircleQuestion,
+  RefreshCw,
   RotateCcw,
   Send,
   Sparkles
@@ -70,6 +71,27 @@ export function ProjectQnaPane({
     }
   }
 
+  async function reset() {
+    if (
+      !window.confirm(
+        'Reset this project Q&A connection? PanePilot will close its old tmux session if it still exists and remove the saved terminal output. The Codex conversation archive will not be deleted.'
+      )
+    ) {
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await window.projectConsole.projectQna.reset(project.id)
+      setMessage('')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      await onChanged()
+      setBusy(false)
+    }
+  }
+
   if (!session) {
     return (
       <div className="project-qna-empty capability-empty">
@@ -100,15 +122,25 @@ export function ProjectQnaPane({
             <small>Codex · project guidance for {project.name}</small>
           </span>
         </div>
-        {stopped && (
+        <div className="project-qna-heading-actions">
           <button
-            className="primary-button"
-            onClick={() => void start()}
+            className="secondary-button"
+            onClick={() => void reset()}
             disabled={busy}
+            title="Discard this PanePilot Q&A attachment and start fresh"
           >
-            <RotateCcw size={13} /> {busy ? 'Resuming…' : 'Resume Q&A'}
+            <RefreshCw size={13} /> Reset Q&amp;A
           </button>
-        )}
+          {stopped && (
+            <button
+              className="primary-button"
+              onClick={() => void start()}
+              disabled={busy}
+            >
+              <RotateCcw size={13} /> {busy ? 'Resuming…' : 'Resume Q&A'}
+            </button>
+          )}
+        </div>
       </header>
       {error && <p className="action-error">{error}</p>}
       <div className="project-qna-terminal">

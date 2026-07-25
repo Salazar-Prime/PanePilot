@@ -111,6 +111,7 @@ export interface StartTerminalInput {
   projectId: string
   name?: string
   profile: LaunchProfile
+  codexThreadId?: string
   customCommand?: string
   dangerousMode: boolean
   cols?: number
@@ -242,6 +243,12 @@ export interface FilePreview {
   binary: boolean
 }
 
+export interface ProjectNotes {
+  path: '.notes-panepilot'
+  content: string
+  exists: boolean
+}
+
 export type ConversationProvider = 'codex' | 'claude'
 
 export interface ConversationMessage {
@@ -305,6 +312,7 @@ export interface CreatePortForwardInput {
 export interface ProjectConsoleApi {
   connections: {
     list(): Promise<Connection[]>
+    refresh(): Promise<Connection[]>
     test(connectionId: string): Promise<ConnectionTestResult>
   }
   projects: {
@@ -346,7 +354,12 @@ export interface ProjectConsoleApi {
   }
   projectQna: {
     start(projectId: string): Promise<TerminalSession>
+    reset(projectId: string): Promise<void>
     sendPrompt(sessionId: string, prompt: string): Promise<void>
+  }
+  notes: {
+    read(projectId: string): Promise<ProjectNotes>
+    write(projectId: string, content: string): Promise<ProjectNotes>
   }
   files: {
     list(projectId: string, relativePath?: string): Promise<FileEntry[]>

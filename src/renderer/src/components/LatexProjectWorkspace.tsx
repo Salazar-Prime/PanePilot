@@ -27,12 +27,14 @@ import { HistoryPanel } from './HistoryPanel'
 import { LatexAgentPane } from './LatexAgentPane'
 import { LatexChatLauncher } from './LatexChatLauncher'
 import { LatexManuscript } from './LatexManuscript'
+import { NotesPanel } from './NotesPanel'
 import { ProjectQnaPane } from './ProjectQnaPane'
 
 type WorkspaceTab =
   | 'manuscript'
   | 'actions'
   | 'qna'
+  | 'notes'
   | 'files'
   | 'chats'
   | 'activity'
@@ -221,6 +223,9 @@ export function LatexProjectWorkspace({
         <button className={tab === 'qna' ? 'active' : ''} onClick={() => setTab('qna')}>
           <MessageCircleQuestion size={15} /> Project Q&amp;A
         </button>
+        <button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>
+          <FileText size={15} /> Notes
+        </button>
         <button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>
           <Files size={15} /> Files
         </button>
@@ -274,6 +279,12 @@ export function LatexProjectWorkspace({
           />
         </div>
       )}
+      <div
+        className={`workspace-panel-cache ${tab === 'notes' ? 'active' : ''}`}
+        aria-hidden={tab !== 'notes'}
+      >
+        <NotesPanel key={project.id} project={project} />
+      </div>
       <div
         className={`workspace-panel-cache ${tab === 'files' ? 'active' : ''}`}
         aria-hidden={tab !== 'files'}

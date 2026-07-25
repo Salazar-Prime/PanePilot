@@ -536,6 +536,24 @@ export class Store {
       for (const alias of sshAliases) {
         upsert.run(`ssh:${alias}`, 'ssh', alias, alias)
       }
+      const configured = new Set(sshAliases.map((alias) => `ssh:${alias}`))
+      const stored = this.db
+        .prepare(`SELECT id FROM connections WHERE kind = 'ssh'`)
+        .all() as Array<{ id: string }>
+      const removeUnused = this.db.prepare(`
+        DELETE FROM connections
+        WHERE id = ?
+          AND kind = 'ssh'
+          AND NOT EXISTS (
+            SELECT 1 FROM projects WHERE connection_id = connections.id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM port_forwards WHERE connection_id = connections.id
+          )
+      `)
+      for (const connection of stored) {
+        if (!configured.has(connection.id)) removeUnused.run(connection.id)
+      }
     })
   }
 

@@ -115,6 +115,38 @@ describe('project actions and Q&A persistence', () => {
     }
   })
 
+  it('resets a stopped project Q&A attachment without touching provider archives', () => {
+    const { store, project } = createStoreAndProject()
+    const manager = new TerminalManager(
+      store,
+      () => null,
+      new ConversationIndexer(),
+      new RemoteConversationIndexer()
+    )
+    try {
+      const qna = store.createSession({
+        projectId: project.id,
+        kind: 'project-qna',
+        name: 'Q&A · Project',
+        profile: 'codex',
+        providerSessionName: null,
+        customCommand: null,
+        backend: 'pty',
+        tmuxName: null,
+        dangerousMode: false
+      })
+      store.setSessionState(qna.id, 'error')
+
+      manager.resetProjectQna(project.id)
+
+      expect(store.getProjectQnaSession(project.id)).toBeNull()
+      expect(store.getSession(qna.id)).toBeNull()
+    } finally {
+      manager.shutdown()
+      store.close()
+    }
+  })
+
   it('migrates legacy custom terminals into editable Actions', () => {
     const { store, project } = createStoreAndProject()
     const legacy = store.createSession({

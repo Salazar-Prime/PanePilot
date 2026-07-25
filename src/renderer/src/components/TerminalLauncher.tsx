@@ -22,6 +22,7 @@ interface Props {
 export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
   const [profile, setProfile] = useState<LaunchProfile>('codex')
   const [name, setName] = useState('')
+  const [codexThreadId, setCodexThreadId] = useState('')
   const [dangerousMode, setDangerousMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -44,6 +45,8 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
         projectId,
         name: name.trim() || undefined,
         profile,
+        codexThreadId:
+          profile === 'codex' ? codexThreadId.trim() || undefined : undefined,
         dangerousMode: isAgent && dangerousMode
       })
       onClose()
@@ -101,6 +104,23 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
               )
             })}
           </div>
+          {profile === 'codex' && (
+            <label className="field">
+              <span>Existing Codex thread ID <small>Optional</small></span>
+              <input
+                value={codexThreadId}
+                onChange={(event) => setCodexThreadId(event.target.value)}
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              <small>
+                Paste an exact thread ID to run <code>codex resume</code> instead
+                of creating a new conversation.
+              </small>
+            </label>
+          )}
           {isAgent && (
             <label className={`danger-option ${dangerousMode ? 'enabled' : ''}`}>
               <input

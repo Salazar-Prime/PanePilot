@@ -27,6 +27,7 @@ export interface ProjectTypeDefinition {
     | 'actions'
     | 'project-qna'
     | 'context'
+    | 'notes'
   >
   Workspace: ComponentType<ProjectWorkspaceProps>
   createFields: Array<
@@ -43,6 +44,7 @@ export const projectTypeRegistry: Record<ProjectType, ProjectTypeDefinition> = {
       'terminal',
       'actions',
       'project-qna',
+      'notes',
       'files',
       'repository',
       'agent-history'
@@ -59,6 +61,7 @@ export const projectTypeRegistry: Record<ProjectType, ProjectTypeDefinition> = {
       'agent-chat',
       'actions',
       'project-qna',
+      'notes',
       'context',
       'files',
       'repository',

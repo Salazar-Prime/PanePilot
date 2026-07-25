@@ -18,6 +18,7 @@ import type {
 const api: ProjectConsoleApi = {
   connections: {
     list: () => ipcRenderer.invoke('connections:list'),
+    refresh: () => ipcRenderer.invoke('connections:refresh'),
     test: (connectionId: string) => ipcRenderer.invoke('connections:test', connectionId)
   },
   projects: {
@@ -99,8 +100,14 @@ const api: ProjectConsoleApi = {
   },
   projectQna: {
     start: (projectId: string) => ipcRenderer.invoke('project-qna:start', projectId),
+    reset: (projectId: string) => ipcRenderer.invoke('project-qna:reset', projectId),
     sendPrompt: (sessionId: string, prompt: string) =>
       ipcRenderer.invoke('project-qna:send-prompt', sessionId, prompt)
+  },
+  notes: {
+    read: (projectId: string) => ipcRenderer.invoke('notes:read', projectId),
+    write: (projectId: string, content: string) =>
+      ipcRenderer.invoke('notes:write', projectId, content)
   },
   files: {
     list: (projectId: string, relativePath = '.') =>
