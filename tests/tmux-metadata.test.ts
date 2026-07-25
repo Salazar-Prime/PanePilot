@@ -43,7 +43,8 @@ function metadata(
 
 function tmuxListLine(
   value: PanePilotTmuxMetadata,
-  name = 'Codex 1'
+  name = 'Codex 1',
+  separator = TMUX_FIELD_SEPARATOR
 ): string {
   const encoded = encodePanePilotTmuxMetadata(value)
   return [
@@ -54,7 +55,7 @@ function tmuxListLine(
     'codex',
     '0',
     ...PANEPILOT_TMUX_OPTION_KEYS.map((key) => encoded[key] ?? '')
-  ].join(TMUX_FIELD_SEPARATOR)
+  ].join(separator)
 }
 
 describe('PanePilot tmux metadata', () => {
@@ -81,6 +82,15 @@ describe('PanePilot tmux metadata', () => {
         paneDead: false,
         metadata: value
       }
+    ])
+  })
+
+  it('parses raw field separators emitted by older tmux versions', () => {
+    expect(parseTmuxSessionList(tmuxListLine(metadata(), 'Codex 1', '\u001f'))).toEqual([
+      expect.objectContaining({
+        name: 'Codex 1',
+        metadata: metadata()
+      })
     ])
   })
 

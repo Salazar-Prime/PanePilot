@@ -61,8 +61,24 @@ describe('terminal tmux reconnect', () => {
         }
         expect(tmuxId).not.toBe('')
 
-        manager.retryAttach(session.id, 100, 30)
+        await manager.retryAttach(session.id, 100, 30)
 
+        expect(
+          spawnSync(
+            'tmux',
+            ['display-message', '-p', '-t', `=${name}:`, '#{session_id}'],
+            { encoding: 'utf8' }
+          ).stdout.trim()
+        ).toBe(tmuxId)
+
+        store.setSessionState(
+          session.id,
+          'completed',
+          `${session.name} is no longer running in tmux.`
+        )
+        await manager.retryAttach(session.id, 100, 30)
+
+        expect(store.getSession(session.id)?.state).toBe('idle')
         expect(
           spawnSync(
             'tmux',

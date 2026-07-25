@@ -313,13 +313,6 @@ export function App() {
   }
 
   async function reconnectSession(projectId: string, session: TerminalSession) {
-    const owner = projects.find((candidate) => candidate.id === projectId)
-    if (
-      owner &&
-      ['completed', 'error'].includes(session.state)
-    ) {
-      await window.projectConsole.terminals.discover(owner.connectionId)
-    }
     await window.projectConsole.terminals.retryAttach(session.id, 100, 30)
     await selectSession(projectId, session.id)
   }

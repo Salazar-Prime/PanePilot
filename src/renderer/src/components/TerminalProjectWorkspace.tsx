@@ -188,9 +188,6 @@ export function TerminalProjectWorkspace({
     setMenu(null)
     setTab('terminal')
     onSelectSession(session.id)
-    if (['completed', 'error'].includes(session.state)) {
-      await window.projectConsole.terminals.discover(project.connectionId)
-    }
     await window.projectConsole.terminals.retryAttach(session.id, 100, 30)
     await onChanged()
   }

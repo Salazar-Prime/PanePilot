@@ -398,7 +398,9 @@ export function parseTmuxSessionList(output: string): ListedTmuxSession[] {
     .filter(Boolean)
     .slice(0, 1_000)
     .flatMap((line): ListedTmuxSession[] => {
-      const fields = line.split(TMUX_FIELD_SEPARATOR)
+      const fields = line.includes(TMUX_FORMAT_FIELD_SEPARATOR)
+        ? line.split(TMUX_FORMAT_FIELD_SEPARATOR)
+        : line.split(TMUX_FIELD_SEPARATOR)
       if (fields.length !== expectedFields) return []
       const [
         tmuxId,

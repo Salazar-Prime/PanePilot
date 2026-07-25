@@ -684,14 +684,31 @@ export class TerminalManager {
     return { output: this.store.getSession(sessionId)?.output ?? '' }
   }
 
-  retryAttach(sessionId: string, cols: number, rows: number): void {
-    const session = this.requireSession(sessionId)
-    if (['completed', 'error'].includes(session.state)) {
-      throw new Error('This terminal is no longer running.')
-    }
+  async retryAttach(sessionId: string, cols: number, rows: number): Promise<void> {
+    let session = this.requireSession(sessionId)
     const project = this.store.getProject(session.projectId)
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (!project || !connection) throw new Error('The terminal project is unavailable.')
+
+    if (
+      ['completed', 'error'].includes(session.state) &&
+      session.backend === 'tmux' &&
+      session.tmuxName
+    ) {
+      if (connection.kind === 'ssh') {
+        await this.reconcileRemoteSessions(connection.id)
+      } else if (this.tmuxSessionExists(connection, session.tmuxName)) {
+        this.store.setSessionState(
+          session.id,
+          'idle',
+          `Rediscovered running tmux session ${session.tmuxName}`
+        )
+      }
+      session = this.requireSession(sessionId)
+    }
+    if (['completed', 'error'].includes(session.state)) {
+      throw new Error('This terminal is no longer running in tmux.')
+    }
 
     if (session.backend !== 'tmux' || !session.tmuxName) {
       if (this.runtimes.has(sessionId)) {

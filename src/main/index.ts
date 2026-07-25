@@ -180,9 +180,8 @@ function registerIpc(): void {
   )
   ipcMain.handle(
     'terminals:retry-attach',
-    (_event, sessionId: string, cols: number, rows: number) => {
+    (_event, sessionId: string, cols: number, rows: number) =>
       terminals.retryAttach(sessionId, cols, rows)
-    }
   )
 
   ipcMain.handle('latex:get-workspace', (_event, projectId: string) =>
