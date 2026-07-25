@@ -181,7 +181,7 @@ function FilesPanelInstance({
 
   const pathParts = path === '.' ? [] : path.split('/')
   const searchingPaths = Boolean(searchQuery.trim())
-  const displayedEntries = searchingPaths ? searchResults : entries
+  const displayedEntries = uniqueEntries(searchingPaths ? searchResults : entries)
 
   async function openFile(
     filePath: string,
