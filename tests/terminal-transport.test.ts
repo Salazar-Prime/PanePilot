@@ -17,6 +17,7 @@ const session: TerminalSession = {
   dangerousMode: false,
   archived: false,
   pinned: false,
+  flagged: false,
   output: '',
   latexChat: null,
   createdAt: '2026-07-25T00:00:00.000Z',

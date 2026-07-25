@@ -234,6 +234,12 @@ function registerIpc(): void {
   ipcMain.handle('terminals:set-pinned', (_event, sessionId: string, pinned: boolean) => {
     terminals.setPinned(sessionId, pinned)
   })
+  ipcMain.handle(
+    'terminals:set-flagged',
+    (_event, sessionId: string, flagged: boolean) => {
+      terminals.setFlagged(sessionId, flagged)
+    }
+  )
   ipcMain.handle('terminals:stop', (_event, sessionId: string) => terminals.stop(sessionId))
   ipcMain.handle('terminals:archive', (_event, sessionId: string) =>
     terminals.archive(sessionId)

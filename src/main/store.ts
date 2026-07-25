@@ -114,6 +114,7 @@ type SessionRow = {
   dangerous_mode: number
   archived: number
   pinned: number
+  flagged: number
   output: string
   created_at: string
   updated_at: string
@@ -272,6 +273,7 @@ function mapSession(
     dangerousMode: Boolean(row.dangerous_mode),
     archived: Boolean(row.archived),
     pinned: Boolean(row.pinned),
+    flagged: Boolean(row.flagged),
     output: row.output,
     latexChat,
     createdAt: row.created_at,
@@ -354,6 +356,7 @@ export class Store {
         tmux_metadata_version INTEGER NOT NULL DEFAULT 0,
         archived INTEGER NOT NULL DEFAULT 0,
         pinned INTEGER NOT NULL DEFAULT 0,
+        flagged INTEGER NOT NULL DEFAULT 0,
         output TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -456,6 +459,7 @@ export class Store {
       'INTEGER NOT NULL DEFAULT 0'
     )
     this.ensureColumn('terminal_sessions', 'pinned', 'INTEGER NOT NULL DEFAULT 0')
+    this.ensureColumn('terminal_sessions', 'flagged', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('activities', 'session_id', 'TEXT')
     this.ensureColumn('activities', 'message', `TEXT NOT NULL DEFAULT ''`)
 
@@ -522,7 +526,7 @@ export class Store {
         ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 8;
+      PRAGMA user_version = 9;
     `)
   }
 
@@ -1024,7 +1028,7 @@ export class Store {
           `SELECT id, project_id, session_kind, name, profile,
                   provider_session_id, provider_session_name,
                   custom_command, backend, tmux_name, state,
-                  dangerous_mode, archived, pinned, output, created_at, updated_at
+                  dangerous_mode, archived, pinned, flagged, output, created_at, updated_at
            FROM terminal_sessions WHERE project_id = ? ORDER BY created_at`
         )
         .all(row.id) as SessionRow[]
@@ -1714,7 +1718,7 @@ export class Store {
         `SELECT id, project_id, session_kind, name, profile,
                 provider_session_id, provider_session_name,
                 custom_command, backend, tmux_name, state,
-                dangerous_mode, archived, pinned, output, created_at, updated_at
+                dangerous_mode, archived, pinned, flagged, output, created_at, updated_at
          FROM terminal_sessions WHERE id = ?`
       )
       .get(id) as SessionRow | undefined
@@ -1847,6 +1851,20 @@ export class Store {
       id,
       pinned ? 'terminal-pinned' : 'terminal-unpinned',
       `${pinned ? 'Pinned' : 'Unpinned'} ${session.name}`
+    )
+  }
+
+  setSessionFlagged(id: string, flagged: boolean): void {
+    const session = this.requireSession(id)
+    if (session.flagged === flagged) return
+    this.db
+      .prepare('UPDATE terminal_sessions SET flagged = ?, updated_at = ? WHERE id = ?')
+      .run(flagged ? 1 : 0, now(), id)
+    this.addActivity(
+      session.projectId,
+      id,
+      flagged ? 'terminal-flagged' : 'terminal-unflagged',
+      `${flagged ? 'Flagged' : 'Unflagged'} ${session.name}`
     )
   }
 

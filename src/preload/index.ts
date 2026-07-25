@@ -57,6 +57,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('terminals:rename', sessionId, name),
     setPinned: (sessionId: string, pinned: boolean) =>
       ipcRenderer.invoke('terminals:set-pinned', sessionId, pinned),
+    setFlagged: (sessionId: string, flagged: boolean) =>
+      ipcRenderer.invoke('terminals:set-flagged', sessionId, flagged),
     stop: (sessionId: string) => ipcRenderer.invoke('terminals:stop', sessionId),
     archive: (sessionId: string) => ipcRenderer.invoke('terminals:archive', sessionId),
     restore: (sessionId: string) => ipcRenderer.invoke('terminals:restore', sessionId),

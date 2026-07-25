@@ -5,6 +5,7 @@ import {
   Clipboard,
   FileText,
   Files,
+  Flag,
   History,
   MessageCircleQuestion,
   MessageSquareText,
@@ -230,6 +231,15 @@ export function TerminalProjectWorkspace({
   async function togglePin(session: TerminalSession) {
     setMenu(null)
     await window.projectConsole.terminals.setPinned(session.id, !session.pinned)
+    await onChanged()
+  }
+
+  async function toggleFlag(session: TerminalSession) {
+    setMenu(null)
+    await window.projectConsole.terminals.setFlagged(
+      session.id,
+      !session.flagged
+    )
     await onChanged()
   }
 
@@ -540,6 +550,13 @@ export function TerminalProjectWorkspace({
                   <button onClick={() => run(togglePin(session))}>
                     {session.pinned ? <PinOff size={14} /> : <Pin size={14} />}
                     {session.pinned ? 'Unpin' : 'Pin'}
+                  </button>
+                  <button onClick={() => run(toggleFlag(session))}>
+                    <Flag
+                      size={14}
+                      fill={session.flagged ? 'currentColor' : 'none'}
+                    />
+                    {session.flagged ? 'Remove flag' : 'Flag for later'}
                   </button>
                   {providerSessionReference && (
                     <button

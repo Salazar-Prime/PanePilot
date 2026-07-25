@@ -2371,6 +2371,16 @@ select:focus-visible {
   opacity: 1;
 }
 
+.sidebar-flag-action.flagged {
+  color: #e2aa63;
+  opacity: 1;
+}
+
+.sidebar-flag-action.flagged:hover {
+  color: #f2c07d;
+  background: #332719;
+}
+
 .pinned-indicator {
   flex: 0 0 auto;
   color: #8fa1f2;

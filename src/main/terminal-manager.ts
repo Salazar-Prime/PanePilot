@@ -950,6 +950,10 @@ export class TerminalManager {
     this.store.setSessionPinned(sessionId, pinned)
   }
 
+  setFlagged(sessionId: string, flagged: boolean): void {
+    this.store.setSessionFlagged(sessionId, flagged)
+  }
+
   stop(sessionId: string): void {
     const session = this.requireSession(sessionId)
     if (session.kind === 'terminal') {

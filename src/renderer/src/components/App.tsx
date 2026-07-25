@@ -9,6 +9,7 @@ import {
   Clipboard,
   ExternalLink,
   FileText,
+  Flag,
   FolderOpen,
   Github,
   Laptop,
@@ -322,6 +323,14 @@ export function App() {
     await refresh()
   }
 
+  async function toggleFlag(session: TerminalSession) {
+    await window.projectConsole.terminals.setFlagged(
+      session.id,
+      !session.flagged
+    )
+    await refresh()
+  }
+
   async function stopSession(session: TerminalSession) {
     const detachesOnly = session.kind === 'terminal'
     if (
@@ -564,6 +573,17 @@ export function App() {
         label: session.pinned ? 'Unpin terminal' : 'Pin terminal',
         icon: session.pinned ? <PinOff size={14} /> : <Pin size={14} />,
         action: () => togglePin(session)
+      },
+      {
+        id: 'flag',
+        label: session.flagged ? 'Remove flag' : 'Flag for later',
+        icon: (
+          <Flag
+            size={14}
+            fill={session.flagged ? 'currentColor' : 'none'}
+          />
+        ),
+        action: () => toggleFlag(session)
       },
       ...(session.tmuxName
         ? [
@@ -943,13 +963,28 @@ export function App() {
                                   </button>
                                 )}
                               <button
-                                className="sidebar-hover-action"
-                                title="Rename terminal and tmux session"
+                                className={`sidebar-hover-action sidebar-flag-action ${
+                                  session.flagged ? 'flagged' : ''
+                                }`}
+                                title={
+                                  session.flagged
+                                    ? 'Remove flag'
+                                    : 'Flag terminal for later'
+                                }
+                                aria-label={
+                                  session.flagged
+                                    ? `Remove flag from ${session.name}`
+                                    : `Flag ${session.name} for later`
+                                }
+                                aria-pressed={session.flagged}
                                 onClick={() =>
-                                  void promptRenameSession(session).catch(showError)
+                                  void toggleFlag(session).catch(showError)
                                 }
                               >
-                                <Pencil size={11} />
+                                <Flag
+                                  size={11}
+                                  fill={session.flagged ? 'currentColor' : 'none'}
+                                />
                               </button>
                             </div>
                           ))}

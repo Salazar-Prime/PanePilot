@@ -23,6 +23,7 @@ function session(
     dangerousMode: false,
     archived: false,
     pinned,
+    flagged: false,
     output: '',
     latexChat: null,
     createdAt,

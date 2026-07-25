@@ -45,6 +45,7 @@ export interface TerminalSession {
   dangerousMode: boolean
   archived: boolean
   pinned: boolean
+  flagged: boolean
   output: string
   latexChat: LatexChatAttachment | null
   createdAt: string
@@ -341,6 +342,7 @@ export interface ProjectConsoleApi {
     resumeAgent(sessionId: string, dangerousModeConfirmed?: boolean): Promise<void>
     rename(sessionId: string, name: string): Promise<void>
     setPinned(sessionId: string, pinned: boolean): Promise<void>
+    setFlagged(sessionId: string, flagged: boolean): Promise<void>
     stop(sessionId: string): Promise<void>
     archive(sessionId: string): Promise<void>
     restore(sessionId: string): Promise<void>
