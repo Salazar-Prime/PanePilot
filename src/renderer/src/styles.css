@@ -577,7 +577,6 @@ select:focus-visible {
 .tab-reconnect-button {
   margin-right: 0;
   color: #9eabf2;
-  opacity: 1;
 }
 
 .terminal-tab:hover .tab-menu-button,

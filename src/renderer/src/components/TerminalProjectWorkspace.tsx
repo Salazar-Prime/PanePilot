@@ -31,6 +31,7 @@ import {
   sortSessions,
   useSessionSort
 } from '../lib/sessionSort'
+import { shouldOfferTmuxReconnect } from '../lib/terminalTransport'
 import { tmuxOptionsCommand } from '../lib/tmuxCommands'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
 import { ActionsPanel } from './ActionsPanel'
@@ -62,6 +63,7 @@ export function TerminalProjectWorkspace({
   selectedSessionId,
   launchTerminalRequest,
   openSessionRequest,
+  terminalTransportStates,
   onSelectSession,
   onChanged
 }: ProjectWorkspaceProps) {
@@ -186,7 +188,11 @@ export function TerminalProjectWorkspace({
     setMenu(null)
     setTab('terminal')
     onSelectSession(session.id)
+    if (['completed', 'error'].includes(session.state)) {
+      await window.projectConsole.terminals.discover(project.connectionId)
+    }
     await window.projectConsole.terminals.retryAttach(session.id, 100, 30)
+    await onChanged()
   }
 
   async function archive(session: TerminalSession) {
@@ -300,9 +306,11 @@ export function TerminalProjectWorkspace({
                     <span>{session.name}</span>
                     {session.dangerousMode && <small className="unsafe-badge">unsafe</small>}
                   </button>
-                  {session.backend === 'tmux' &&
-                    session.tmuxName &&
-                    !['completed', 'error'].includes(session.state) && (
+                  {shouldOfferTmuxReconnect(
+                    project,
+                    session,
+                    terminalTransportStates[session.id]
+                  ) && (
                       <button
                         className="tab-reconnect-button"
                         aria-label={`Reconnect ${session.name} to tmux`}

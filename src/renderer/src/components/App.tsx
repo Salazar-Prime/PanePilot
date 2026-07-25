@@ -34,10 +34,12 @@ import type {
   CreateProjectInput,
   Project,
   ProjectType,
-  TerminalSession
+  TerminalSession,
+  TerminalTransportState
 } from '@shared/types'
 import { isAttentionState } from '../lib/status'
 import { sortSessions, useSessionSort } from '../lib/sessionSort'
+import { shouldOfferTmuxReconnect } from '../lib/terminalTransport'
 import { tmuxAttachCommand, tmuxOptionsCommand } from '../lib/tmuxCommands'
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
@@ -71,6 +73,9 @@ function isSidebarSession(session: TerminalSession): boolean {
 export function App() {
   const [connections, setConnections] = useState<Connection[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [terminalTransportStates, setTerminalTransportStates] = useState<
+    Record<string, TerminalTransportState>
+  >({})
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -127,10 +132,19 @@ export function App() {
     const removeMetadataListener = window.projectConsole.terminals.onMetadata(() => {
       void refresh()
     })
+    const removeTransportListener = window.projectConsole.terminals.onTransport(
+      (event) => {
+        setTerminalTransportStates((current) => ({
+          ...current,
+          [event.sessionId]: event.state
+        }))
+      }
+    )
     return () => {
       active = false
       removeStateListener()
       removeMetadataListener()
+      removeTransportListener()
     }
   }, [refresh])
 
@@ -299,6 +313,13 @@ export function App() {
   }
 
   async function reconnectSession(projectId: string, session: TerminalSession) {
+    const owner = projects.find((candidate) => candidate.id === projectId)
+    if (
+      owner &&
+      ['completed', 'error'].includes(session.state)
+    ) {
+      await window.projectConsole.terminals.discover(owner.connectionId)
+    }
     await window.projectConsole.terminals.retryAttach(session.id, 100, 30)
     await selectSession(projectId, session.id)
   }
@@ -909,9 +930,11 @@ export function App() {
                                   <small className="attention-badge">!</small>
                                 )}
                               </button>
-                              {session.backend === 'tmux' &&
-                                session.tmuxName &&
-                                !['completed', 'error'].includes(session.state) && (
+                              {shouldOfferTmuxReconnect(
+                                candidate,
+                                session,
+                                terminalTransportStates[session.id]
+                              ) && (
                                   <button
                                     className="sidebar-hover-action sidebar-reconnect-action"
                                     aria-label={`Reconnect ${session.name} to tmux`}
@@ -1011,6 +1034,7 @@ export function App() {
             selectedSessionId={selectedSessionId}
             launchTerminalRequest={launchTerminalRequest}
             openSessionRequest={openSessionRequest}
+            terminalTransportStates={terminalTransportStates}
             onSelectSession={setSelectedSessionId}
             onChanged={refresh}
           />

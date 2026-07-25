@@ -1,5 +1,10 @@
 import type { ComponentType } from 'react'
-import type { Connection, Project, ProjectType } from '@shared/types'
+import type {
+  Connection,
+  Project,
+  ProjectType,
+  TerminalTransportState
+} from '@shared/types'
 import { LatexProjectWorkspace } from './components/LatexProjectWorkspace'
 import { TerminalProjectWorkspace } from './components/TerminalProjectWorkspace'
 
@@ -9,6 +14,7 @@ export interface ProjectWorkspaceProps {
   selectedSessionId: string | null
   launchTerminalRequest: number
   openSessionRequest: number
+  terminalTransportStates: Record<string, TerminalTransportState>
   onSelectSession(id: string): void
   onChanged(): Promise<void>
 }
