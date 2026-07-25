@@ -380,7 +380,7 @@ export class Store {
 
       CREATE TABLE IF NOT EXISTS agent_events (
         id TEXT PRIMARY KEY,
-        terminal_session_id TEXT NOT NULL REFERENCES terminal_sessions(id),
+        terminal_session_id TEXT NOT NULL REFERENCES terminal_sessions(id) ON DELETE CASCADE,
         provider TEXT NOT NULL,
         payload TEXT NOT NULL,
         received_at TEXT NOT NULL
@@ -435,6 +435,7 @@ export class Store {
       );
     `)
 
+    this.ensureAgentEventDeleteCascade()
     this.ensureColumn('connections', 'ssh_alias', 'TEXT')
     this.ensureColumn('projects', 'created_at', `TEXT NOT NULL DEFAULT ''`)
     this.ensureColumn('projects', 'archived', 'INTEGER NOT NULL DEFAULT 0')
@@ -521,8 +522,44 @@ export class Store {
         ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 7;
+      PRAGMA user_version = 8;
     `)
+  }
+
+  private ensureAgentEventDeleteCascade(): void {
+    const foreignKeys = this.db
+      .prepare('PRAGMA foreign_key_list(agent_events)')
+      .all() as Array<{
+      table: string
+      from: string
+      on_delete: string
+    }>
+    const cascadesWithTerminal = foreignKeys.some(
+      (foreignKey) =>
+        foreignKey.table === 'terminal_sessions' &&
+        foreignKey.from === 'terminal_session_id' &&
+        foreignKey.on_delete.toUpperCase() === 'CASCADE'
+    )
+    if (cascadesWithTerminal) return
+
+    this.inTransaction(() => {
+      this.db.exec(`
+        CREATE TABLE agent_events_with_delete_cascade (
+          id TEXT PRIMARY KEY,
+          terminal_session_id TEXT NOT NULL
+            REFERENCES terminal_sessions(id) ON DELETE CASCADE,
+          provider TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          received_at TEXT NOT NULL
+        );
+        INSERT INTO agent_events_with_delete_cascade
+          (id, terminal_session_id, provider, payload, received_at)
+        SELECT id, terminal_session_id, provider, payload, received_at
+        FROM agent_events;
+        DROP TABLE agent_events;
+        ALTER TABLE agent_events_with_delete_cascade RENAME TO agent_events;
+      `)
+    })
   }
 
   private tableColumns(table: string): Set<string> {

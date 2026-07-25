@@ -29,6 +29,8 @@ export function ManagedTerminal({
   const onOpenFileRef = useRef(onOpenFile)
   onOpenFileRef.current = onOpenFile
   const terminalEnded = ['completed', 'error'].includes(session.state)
+  const retainedOutput =
+    retainOutputOnExit && terminalEnded ? session.output : null
   const [transport, setTransport] = useState<TerminalTransportEvent>({
     sessionId: session.id,
     state: 'attached',
@@ -94,6 +96,22 @@ export function ManagedTerminal({
           )
         : null
 
+    if (retainedOutput !== null) {
+      if (retainedOutput) {
+        terminal.write(retainedOutput, () => terminal.scrollToBottom())
+      }
+      const resizeObserver = new ResizeObserver(() => {
+        fit.fit()
+        dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
+      })
+      resizeObserver.observe(host)
+      return () => {
+        resizeObserver.disconnect()
+        linkDisposable?.dispose()
+        terminal.dispose()
+      }
+    }
+
     let replaying = true
     let writable = !terminalEnded
     const dataDisposable = terminal.onData((data) => {
@@ -146,7 +164,7 @@ export function ManagedTerminal({
       linkDisposable?.dispose()
       terminal.dispose()
     }
-  }, [session.id, terminalEnded, projectFolder])
+  }, [session.id, terminalEnded, retainedOutput, projectFolder])
 
   async function retry() {
     setTransport((current) => ({
