@@ -1,7 +1,7 @@
 {
   "name": "project-console",
   "productName": "PanePilot",
-  "version": "0.2.0-rc.1",
+  "version": "0.3.0",
   "private": true,
   "description": "PanePilot desktop control center for local and remote agent projects",
   "author": "Salazar-Prime",

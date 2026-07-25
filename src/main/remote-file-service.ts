@@ -1,4 +1,8 @@
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { createWriteStream, renameSync, unlinkSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import type { FileEntry, FilePreview, RemoteFolderListing } from '../shared/types'
 
 const MAX_FILE_BYTES = 1024 * 1024
@@ -90,6 +94,23 @@ if len(content) > 1024 * 1024:
 with open(target, "wb") as handle:
     handle.write(content)
 print("{}")
+`
+
+const DOWNLOAD_FILE_SCRIPT = String.raw`
+import json, os, sys
+payload = json.load(sys.stdin)
+root = os.path.realpath(os.path.expanduser(payload["root"]))
+target = os.path.realpath(os.path.join(root, payload["relativePath"]))
+if os.path.commonpath([root, target]) != root:
+    raise RuntimeError("The requested path is outside the project folder.")
+if not os.path.isfile(target):
+    raise RuntimeError("The requested path is not a file.")
+with open(target, "rb") as handle:
+    while True:
+        chunk = handle.read(1024 * 1024)
+        if not chunk:
+            break
+        sys.stdout.buffer.write(chunk)
 `
 
 const READ_TEXT_FILES_SCRIPT = String.raw`
@@ -226,6 +247,64 @@ export function writeRemoteFile(
     relativePath,
     content
   })
+}
+
+export async function downloadRemoteFile(
+  sshAlias: string,
+  root: string,
+  relativePath: string,
+  destination: string
+): Promise<void> {
+  const encodedScript = Buffer.from(DOWNLOAD_FILE_SCRIPT, 'utf8').toString('base64')
+  const loader = `import base64;exec(base64.b64decode('${encodedScript}'))`
+  const command = `python3 -c ${quote(loader)}`
+  const temporaryPath = join(
+    dirname(destination),
+    `.${basename(destination)}.${randomUUID()}.panepilot-download`
+  )
+  const child = spawn(
+    'ssh',
+    ['-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', sshAlias, command],
+    { stdio: ['pipe', 'pipe', 'pipe'] }
+  )
+  let stderr = ''
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', (chunk: string) => {
+    stderr = `${stderr}${chunk}`.slice(-64 * 1024)
+  })
+  child.stdin.on('error', () => {
+    // A remote validation or SSH failure can close stdin before the payload
+    // finishes. The process exit below reports the useful error.
+  })
+  child.stdin.end(JSON.stringify({ root, relativePath }))
+
+  try {
+    const output = createWriteStream(temporaryPath, { flags: 'wx' })
+    const exitCode = new Promise<number>((resolve, reject) => {
+      child.once('error', reject)
+      child.once('close', (code) => resolve(code ?? 1))
+    })
+    const [, code] = await Promise.all([
+      pipeline(child.stdout, output),
+      exitCode
+    ])
+    if (code !== 0) {
+      const detail = stderr.trim().split(/\r?\n/).at(-1)
+      throw new Error(
+        detail ||
+          `Could not download from ${sshAlias}. Make sure SSH key authentication is available.`
+      )
+    }
+    renameSync(temporaryPath, destination)
+  } catch (error) {
+    child.kill()
+    try {
+      unlinkSync(temporaryPath)
+    } catch {
+      // The temporary output may not have been created yet.
+    }
+    throw error
+  }
 }
 
 export function readRemoteTextFiles(

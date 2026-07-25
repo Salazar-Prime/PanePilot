@@ -8,6 +8,7 @@ export interface ProjectWorkspaceProps {
   connection: Connection | undefined
   selectedSessionId: string | null
   launchTerminalRequest: number
+  openSessionRequest: number
   onSelectSession(id: string): void
   onChanged(): Promise<void>
 }

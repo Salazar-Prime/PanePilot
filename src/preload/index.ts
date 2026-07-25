@@ -108,7 +108,9 @@ const api: ProjectConsoleApi = {
     preview: (projectId: string, relativePath: string) =>
       ipcRenderer.invoke('files:preview', projectId, relativePath),
     save: (projectId: string, relativePath: string, content: string) =>
-      ipcRenderer.invoke('files:save', projectId, relativePath, content)
+      ipcRenderer.invoke('files:save', projectId, relativePath, content),
+    download: (projectId: string, relativePath: string) =>
+      ipcRenderer.invoke('files:download', projectId, relativePath)
   },
   remoteFolders: {
     list: (connectionId: string, path?: string) =>

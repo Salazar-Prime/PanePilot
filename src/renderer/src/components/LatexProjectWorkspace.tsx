@@ -15,6 +15,10 @@ import type {
   LatexWorkspace,
   StartLatexChatInput
 } from '@shared/types'
+import type {
+  ProjectFileOpenRequest,
+  TerminalFileTarget
+} from '../lib/terminalFileLinks'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
 import { ActionsPanel } from './ActionsPanel'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
@@ -37,6 +41,7 @@ export function LatexProjectWorkspace({
   project,
   selectedSessionId,
   launchTerminalRequest,
+  openSessionRequest,
   onSelectSession,
   onChanged
 }: ProjectWorkspaceProps) {
@@ -45,6 +50,8 @@ export function LatexProjectWorkspace({
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [showLauncher, setShowLauncher] = useState(false)
   const [filesInitialPath, setFilesInitialPath] = useState('.')
+  const [openFileRequest, setOpenFileRequest] =
+    useState<ProjectFileOpenRequest | null>(null)
   const [changes, setChanges] = useState<LatexChangeSet | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -93,6 +100,7 @@ export function LatexProjectWorkspace({
     setWorkspace(null)
     setChanges(null)
     setSelectedSectionId(null)
+    setOpenFileRequest(null)
     void loadWorkspace()
   }, [project.id, loadWorkspace])
 
@@ -111,6 +119,10 @@ export function LatexProjectWorkspace({
   useEffect(() => {
     if (launchTerminalRequest > 0) setShowLauncher(true)
   }, [launchTerminalRequest])
+
+  useEffect(() => {
+    if (openSessionRequest > 0) setTab('manuscript')
+  }, [openSessionRequest])
 
   const refreshChanges = useCallback(async () => {
     if (!activeSession?.latexChat || activeSession.latexChat.mode !== 'edit') {
@@ -133,9 +145,9 @@ export function LatexProjectWorkspace({
 
   async function startChat(input: StartLatexChatInput) {
     const session = await window.projectConsole.latex.startChat(input)
-    onSelectSession(session.id)
-    setTab('manuscript')
     await onChanged()
+    setTab('manuscript')
+    onSelectSession(session.id)
   }
 
   async function clearChanges() {
@@ -147,6 +159,15 @@ export function LatexProjectWorkspace({
   function openContext() {
     if (!workspace) return
     setFilesInitialPath(workspace.details.contextFolder)
+    setTab('files')
+  }
+
+  function openFile(target: TerminalFileTarget) {
+    setOpenFileRequest((current) => ({
+      ...target,
+      projectId: project.id,
+      requestId: (current?.requestId ?? 0) + 1
+    }))
     setTab('files')
   }
 
@@ -238,6 +259,7 @@ export function LatexProjectWorkspace({
             sessions={sessions}
             archivedSessions={archivedSessions}
             sections={workspace.sections}
+            projectFolder={project.folder}
             activeSessionId={activeSession?.id ?? null}
             onSelectSession={(id) => {
               onSelectSession(id)
@@ -248,6 +270,7 @@ export function LatexProjectWorkspace({
             onPromptSent={() => {
               window.setTimeout(() => void refreshChanges(), 700)
             }}
+            onOpenFile={openFile}
           />
         </div>
       )}
@@ -259,10 +282,23 @@ export function LatexProjectWorkspace({
           key={`${project.id}:${filesInitialPath}`}
           project={project}
           initialPath={filesInitialPath}
+          openFileRequest={openFileRequest}
         />
       </div>
-      {tab === 'actions' && <ActionsPanel project={project} onChanged={onChanged} />}
-      {tab === 'qna' && <ProjectQnaPane project={project} onChanged={onChanged} />}
+      {tab === 'actions' && (
+        <ActionsPanel
+          project={project}
+          onChanged={onChanged}
+          onOpenFile={openFile}
+        />
+      )}
+      {tab === 'qna' && (
+        <ProjectQnaPane
+          project={project}
+          onChanged={onChanged}
+          onOpenFile={openFile}
+        />
+      )}
       {tab === 'chats' && <ChatHistoryPanel project={project} />}
       {tab === 'activity' && <HistoryPanel project={project} />}
 

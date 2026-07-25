@@ -27,6 +27,7 @@ interface RemoteCodexSession {
   id: string
   workingDirectory: string
   startedAt: string
+  name?: string | null
 }
 
 interface RemoteScanResult {
@@ -221,6 +222,23 @@ params = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
 project_folder = os.path.normpath(os.path.expanduser(params["folder"]))
 sessions = []
 root = os.path.expanduser("~/.codex/sessions")
+session_names = {}
+index_path = os.path.expanduser("~/.codex/session_index.jsonl")
+
+if os.path.isfile(index_path):
+    try:
+        with open(index_path, "r", encoding="utf-8", errors="replace") as source:
+            for line in source:
+                try:
+                    record = json.loads(line)
+                except Exception:
+                    continue
+                session_id = record.get("id")
+                session_name = record.get("thread_name")
+                if isinstance(session_id, str) and isinstance(session_name, str):
+                    session_names[session_id] = session_name
+    except Exception:
+        pass
 
 if os.path.isdir(root):
     for directory, _, filenames in os.walk(root):
@@ -245,6 +263,7 @@ if os.path.isdir(root):
                 sessions.append({
                     "id": session_id,
                     "workingDirectory": working_directory,
+                    "name": session_names.get(session_id),
                     "startedAt": (
                         payload.get("timestamp")
                         or record.get("timestamp")
@@ -418,23 +437,28 @@ export class RemoteConversationIndexer {
     alias: string,
     projectFolder: string,
     terminalCreatedAt: string,
-    excludedIds: Set<string>
+    excludedIds: Set<string>,
+    providerSessionHint: string | null = null
   ): Promise<string | null> {
     const sessions = await this.listCodexSessions(alias, projectFolder)
     const terminalTime = Date.parse(terminalCreatedAt)
     const earliest = Number.isFinite(terminalTime) ? terminalTime - 10_000 : 0
-    return (
-      sessions
-        .filter((session) => {
-          const startedAt = Date.parse(session.startedAt)
-          return !excludedIds.has(session.id) && (!Number.isFinite(startedAt) || startedAt >= earliest)
-        })
-        .sort((a, b) => {
-          const aTime = Date.parse(a.startedAt)
-          const bTime = Date.parse(b.startedAt)
-          return Math.abs(aTime - terminalTime) - Math.abs(bTime - terminalTime)
-        })[0]?.id ?? null
-    )
+    const candidates = sessions.filter((session) => {
+      const startedAt = Date.parse(session.startedAt)
+      return (
+        !excludedIds.has(session.id) &&
+        (!Number.isFinite(startedAt) || startedAt >= earliest)
+      )
+    })
+    const exact = providerSessionHint
+      ? candidates.find(
+          (session) =>
+            session.id === providerSessionHint ||
+            session.id.startsWith(providerSessionHint) ||
+            session.name === providerSessionHint
+        )
+      : null
+    return exact?.id ?? null
   }
 
   async findProviderSessionId(
@@ -442,14 +466,16 @@ export class RemoteConversationIndexer {
     alias: string,
     projectFolder: string,
     terminalCreatedAt: string,
-    excludedIds: Set<string>
+    excludedIds: Set<string>,
+    providerSessionHint: string | null = null
   ): Promise<string | null> {
     if (provider === 'codex') {
       return this.findCodexSessionId(
         alias,
         projectFolder,
         terminalCreatedAt,
-        excludedIds
+        excludedIds,
+        providerSessionHint
       )
     }
     const terminalTime = Date.parse(terminalCreatedAt)

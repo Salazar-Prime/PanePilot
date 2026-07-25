@@ -19,6 +19,10 @@ import {
   Trash2
 } from 'lucide-react'
 import type { TerminalSession } from '@shared/types'
+import type {
+  ProjectFileOpenRequest,
+  TerminalFileTarget
+} from '../lib/terminalFileLinks'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
 import {
   sessionSortOptions,
@@ -51,12 +55,15 @@ export function TerminalProjectWorkspace({
   project,
   selectedSessionId,
   launchTerminalRequest,
+  openSessionRequest,
   onSelectSession,
   onChanged
 }: ProjectWorkspaceProps) {
   const [tab, setTab] = useState<WorkspaceTab>('terminal')
   const [showLauncher, setShowLauncher] = useState(false)
   const [showArchivedSessions, setShowArchivedSessions] = useState(false)
+  const [openFileRequest, setOpenFileRequest] =
+    useState<ProjectFileOpenRequest | null>(null)
   const [sessionSort, setSessionSort] = useSessionSort()
   const [renameTarget, setRenameTarget] = useState<TerminalSession | null>(null)
   const [menu, setMenu] = useState<{ sessionId: string; top: number; left: number } | null>(
@@ -93,6 +100,14 @@ export function TerminalProjectWorkspace({
   }, [launchTerminalRequest])
 
   useEffect(() => {
+    if (openSessionRequest > 0) setTab('terminal')
+  }, [openSessionRequest])
+
+  useEffect(() => {
+    setOpenFileRequest(null)
+  }, [project.id])
+
+  useEffect(() => {
     if (!menu) return
     function closeMenu(event: MouseEvent) {
       const target = event.target as HTMLElement
@@ -118,9 +133,18 @@ export function TerminalProjectWorkspace({
 
   async function startTerminal(input: Parameters<typeof window.projectConsole.terminals.start>[0]) {
     const session = await window.projectConsole.terminals.start(input)
+    await onChanged()
     setTab('terminal')
     onSelectSession(session.id)
-    await onChanged()
+  }
+
+  function openFile(target: TerminalFileTarget) {
+    setOpenFileRequest((current) => ({
+      ...target,
+      projectId: project.id,
+      requestId: (current?.requestId ?? 0) + 1
+    }))
+    setTab('files')
   }
 
   async function rename(session: TerminalSession) {
@@ -140,9 +164,14 @@ export function TerminalProjectWorkspace({
     await onChanged()
   }
 
-  async function stop(session: TerminalSession) {
+  async function detach(session: TerminalSession) {
     setMenu(null)
-    if (!window.confirm(`Stop “${session.name}”? Its saved output will be kept.`)) return
+    if (
+      !window.confirm(
+        `Detach “${session.name}”? Its tmux session will keep running.`
+      )
+    )
+      return
     await window.projectConsole.terminals.stop(session.id)
     await onChanged()
   }
@@ -181,7 +210,7 @@ export function TerminalProjectWorkspace({
   async function permanentlyDelete(session: TerminalSession) {
     if (
       !window.confirm(
-        `Permanently delete “${session.name}” and its saved terminal output? Agent conversation archives will not be deleted.`
+        `Close and permanently delete “${session.name}” and its saved terminal output? Agent conversation archives will not be deleted.`
       )
     )
       return
@@ -313,7 +342,11 @@ export function TerminalProjectWorkspace({
 
           {activeSession ? (
             <div className="terminal-surface">
-              <ManagedTerminal session={activeSession} />
+              <ManagedTerminal
+                session={activeSession}
+                projectFolder={project.folder}
+                onOpenFile={openFile}
+              />
             </div>
           ) : (
             <div className="terminal-empty">
@@ -352,13 +385,28 @@ export function TerminalProjectWorkspace({
           )}
         </section>
       )}
-      {tab === 'actions' && <ActionsPanel project={project} onChanged={onChanged} />}
-      {tab === 'qna' && <ProjectQnaPane project={project} onChanged={onChanged} />}
+      {tab === 'actions' && (
+        <ActionsPanel
+          project={project}
+          onChanged={onChanged}
+          onOpenFile={openFile}
+        />
+      )}
+      {tab === 'qna' && (
+        <ProjectQnaPane
+          project={project}
+          onChanged={onChanged}
+          onOpenFile={openFile}
+        />
+      )}
       <div
         className={`workspace-panel-cache ${tab === 'files' ? 'active' : ''}`}
         aria-hidden={tab !== 'files'}
       >
-        <FilesPanel project={project} />
+        <FilesPanel
+          project={project}
+          openFileRequest={openFileRequest}
+        />
       </div>
       {tab === 'chats' && <ChatHistoryPanel project={project} />}
       {tab === 'history' && <HistoryPanel project={project} />}
@@ -371,8 +419,7 @@ export function TerminalProjectWorkspace({
             {(() => {
               const session = visibleSessions.find((item) => item.id === menu.sessionId)
               if (!session) return null
-              const providerSessionReference =
-                session.providerSessionId ?? session.providerSessionName
+              const providerSessionReference = session.providerSessionId
               return (
                 <>
                   <button onClick={() => run(rename(session))}>
@@ -393,14 +440,12 @@ export function TerminalProjectWorkspace({
                       }
                     >
                       <Clipboard size={14} />
-                      {session.providerSessionId
-                        ? 'Copy Codex session ID'
-                        : 'Copy Codex session name'}
+                      Copy Codex thread ID
                     </button>
                   )}
                   {!['completed', 'error'].includes(session.state) ? (
-                    <button className="danger-text" onClick={() => run(stop(session))}>
-                      <Square size={13} /> Stop
+                    <button onClick={() => run(detach(session))}>
+                      <Square size={13} /> Detach
                     </button>
                   ) : (
                     <>
@@ -414,14 +459,14 @@ export function TerminalProjectWorkspace({
                       <button onClick={() => run(archive(session))}>
                         <Archive size={14} /> Archive
                       </button>
-                      <button
-                        className="danger-text"
-                        onClick={() => run(permanentlyDelete(session))}
-                      >
-                        <Trash2 size={14} /> Delete
-                      </button>
                     </>
                   )}
+                  <button
+                    className="danger-text"
+                    onClick={() => run(permanentlyDelete(session))}
+                  >
+                    <Trash2 size={14} /> Delete
+                  </button>
                 </>
               )
             })()}
@@ -484,8 +529,8 @@ export function TerminalProjectWorkspace({
                     <strong>{session.name}</strong>
                     <span>
                       {terminalProfileLabel(session.profile)} · {session.backend}
-                      {(session.providerSessionId ?? session.providerSessionName) &&
-                        ` · ${(session.providerSessionId ?? session.providerSessionName)!.slice(0, 18)}…`}
+                      {session.providerSessionId &&
+                        ` · ${session.providerSessionId.slice(0, 18)}…`}
                     </span>
                   </div>
                   <button onClick={() => run(rename(session))}>

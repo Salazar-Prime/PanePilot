@@ -543,8 +543,7 @@ export class LatexProjectService {
       })
       void this.terminals.syncSessionMetadata(session.id, true)
     } catch (error) {
-      this.terminals.stop(session.id)
-      this.store.deleteSession(session.id)
+      this.terminals.delete(session.id)
       throw error
     }
     return this.store.getSession(session.id)!

@@ -35,7 +35,7 @@ These are owner-approved decisions and should be treated as product invariants u
 8. Persistent terminals use tmux when available. A plain PTY is the fallback.
 9. User-created terminal launch profiles are login shell, Codex, and Claude Code. Reusable custom commands are project Actions, not ordinary terminal tabs.
 10. Dangerous permission bypass is per terminal, off by default, visibly marked, and confirmed before launch. It must never become a silent global default.
-11. Terminal rename is non-destructive. Archive hides a stopped terminal but preserves its saved output. Permanent deletion requires a stopped terminal and confirmation.
+11. Terminal rename is non-destructive. Detaching an ordinary terminal leaves its tmux session running. Archive hides a stopped terminal but preserves its saved output. Confirmed deletion closes the exact live terminal session when necessary, then removes its saved output.
 12. Deleting a terminal does not delete the provider's Codex or Claude conversation archive.
 13. Local Codex and Claude archives are indexed read-only and are searchable across full message text.
 14. File-looking terminal output should be clickable. Files can also be browsed and previewed in the UI.
@@ -45,7 +45,7 @@ These are owner-approved decisions and should be treated as product invariants u
 18. Terminal pinning is persisted. Pinned terminals remain first while the remaining terminals follow the user's selected sort order.
 19. Projects can be archived only after all of their terminals stop. Archived projects have a separate library view and do not contribute to live status counts.
 20. SSH port forwards are explicit, bind to `127.0.0.1`, use `ExitOnForwardFailure`, and stop when PanePilot exits.
-21. A new Codex terminal receives a stable, unique provider session name before launch. PanePilot applies it with `/rename` when the Codex composer becomes ready, then attaches the provider's actual session ID when archive metadata appears. Resume uses the exact provider ID when known and the unique provider name only during the pre-ID window.
+21. A new Codex terminal exposes Codex's `thread-id` in its tmux pane title. PanePilot resolves that collision-resistant title reference against the project-scoped Codex archive, stores the full provider thread ID in SQLite, and mirrors it into live tmux metadata. PanePilot never uses `/rename` for identity and resumes only with the exact provider thread ID.
 22. PanePilot-owned tmux sessions carry versioned session-scoped `@panepilot_*` metadata. On an SSH connection, live tagged sessions are discovered with one-shot tmux commands and reconciled into the local database by stable terminal UUID and canonical project folder. This enables another PanePilot machine to attach without a remote daemon. Tmux is authoritative for live-session presence; SQLite remains authoritative for durable local workspace state.
 23. A project Action is an editable name and shell command. Each invocation replaces the prior saved run with a fresh ephemeral tmux session; the latest output remains visible, and xterm input remains available while the command is running.
 24. Every project has at most one project Q&A Codex session. It is a persistent tmux-backed agent session rendered as a top-level project capability, not as an ordinary terminal tab or sidebar terminal.
@@ -137,7 +137,7 @@ Core tables:
 
 - `connections`: local or SSH connection identities.
 - `projects`: base project identity, type, connection, folder, repository URL, aggregate state, and timestamps.
-- `terminal_sessions`: terminal profile, command, backend, tmux identity, provider session name and ID, lifecycle state, dangerous-mode flag, archive flag, and saved output.
+- `terminal_sessions`: terminal profile, command, backend, tmux identity, provider session ID, legacy provider session name, lifecycle state, dangerous-mode flag, archive flag, and saved output.
 - `project_actions`: editable project-scoped command definitions and the terminal session containing only the latest run.
 - `activities`: project timeline entries.
 - `agent_events`: idempotently ingested provider lifecycle payloads.
@@ -160,6 +160,7 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - Session metadata also distinguishes ordinary terminals, Action runs, project Q&A, and LaTeX chats. A live Action includes its bounded definition so another PanePilot client can reconcile it without exposing the run as a normal terminal.
 - Remote discovery lists only the selected SSH user's default tmux server. Tagged sessions whose canonical project folder matches exactly are imported or refreshed in local SQLite; untagged sessions are ignored unless they match a legacy local terminal record, in which case PanePilot adopts them by adding metadata.
 - Another local PanePilot installation may attach to the same discovered session. Normal attachment does not detach an existing tmux client.
+- Detaching an ordinary terminal closes only PanePilot's current tmux client. The tmux session and its process remain live and can be reattached from the same or another PanePilot client.
 - Discovery uses bounded `BatchMode` SSH calls and no remote daemon, registry, or background service. Offline hosts leave the locally cached workspace untouched.
 - Remote terminal SSH clients use server keepalives. Electron resume forces attached remote clients through exact-ID tmux verification and bounded reconnect backoff.
 - PanePilot-managed Codex launches mirror `activity`, `run-state`, and `task-progress` into the tmux pane title. Discovery reads that shared snapshot so another laptop can recover current Codex state without consuming events.
@@ -167,10 +168,10 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - Closing/detaching the renderer does not kill a persistent tmux session.
 - Action tmux sessions are intentionally ephemeral: they end when the command exits. PanePilot deletes the prior run row before rerunning so only the latest output is retained.
 - A PTY fallback is used when tmux cannot be found or created.
-- Tmux preserves a still-running Codex process. A new Codex terminal persists `provider_session_name` before spawn and applies it through `/rename` once the TUI composer is ready; Codex has no create-time name flag. `provider_session_id` is linked from archive metadata after the first spawn.
-- A stopped Codex terminal restarts with `codex resume <exact-id>` when the ID is known, or its unique provider session name while ID discovery is still pending.
+- Tmux preserves a still-running Codex process. A new Codex terminal includes `thread-id` in its session-local terminal title; PanePilot resolves the displayed reference against the project-scoped Codex archive and mirrors the full ID into `@panepilot_provider_session_id`.
+- A stopped Codex terminal restarts only with `codex resume <exact-id>`. Provider session names are retained only for migration compatibility and are never used as a resume target.
 - Provider session discovery reads Codex `session_meta` archive records and does not depend on lifecycle hooks. Existing unlinked Codex terminals are reconciled on startup when their archives are available.
-- Stopping a tmux-backed terminal must directly kill the exact tmux session and verify that it is gone before marking the terminal `completed`. Do not simulate tmux prefix keystrokes through the terminal UI.
+- Stopping an Action or agent capability, and deleting any live tmux-backed terminal, must directly kill the exact tmux session and verify that it is gone before marking it `completed` or removing it. Do not simulate tmux prefix keystrokes through the terminal UI.
 - Local tmux resolution checks PATH plus common Homebrew/system locations.
 - Custom hook environment variables must be passed through the pane's initial `env` command. A pre-existing tmux server does not automatically import arbitrary client variables.
 - Saved terminal output is capped in SQLite.
@@ -179,9 +180,9 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 
 Archive and deletion rules:
 
-- Only `completed` or `error` terminals can be archived or deleted.
+- Only `completed` or `error` terminals can be archived.
 - Archived terminals are hidden from normal tabs/sidebar lists but can be restored.
-- Permanent deletion removes saved terminal output and associated ingested hook events.
+- Permanent deletion first closes an active terminal's exact backend session, then removes saved terminal output and associated ingested hook events.
 - Provider-owned conversation JSONL is never removed by terminal deletion.
 - Projects can be archived only when every terminal is `completed` or `error`.
 - Project archiving is reversible and does not delete terminals, activity, files, or provider archives.
@@ -194,6 +195,7 @@ Managed Codex launches receive a session-local terminal-title override for:
 - `activity`
 - `run-state`
 - `task-progress`
+- `thread-id`
 
 Codex keeps these values current in the tmux pane. Remote discovery reads the pane
 title beside the versioned PanePilot tmux options. `Working` or `Thinking` maps to
@@ -249,8 +251,9 @@ Known scaling limitation: search currently scans the in-memory parsed conversati
 - Remote file operations execute through SSH.
 - Choosing a folder for a new SSH project browses that host's filesystem, starts at the remote home directory, and stores the canonical remote path. It must never open the local native folder dialog.
 - File previews are truncated at 1 MB.
+- The file preview toolbar can download the authoritative saved file through a native Save dialog. Local files are copied directly; remote files are streamed over SSH without applying the 1 MB Monaco preview limit.
 - File previews use a locally bundled Monaco editor with language detection. Editing requires an explicit Edit action and saving is bounded to existing files no larger than 1 MB.
-- Terminal links recognize path-like text and optional line/column suffixes.
+- Terminal links recognize project-contained path-like text and optional line/column suffixes. Clicking a link switches to Files, opens the authoritative file in Monaco, and reveals the requested line and column when present.
 - Relative terminal links resolve against the project folder.
 - Repository URLs are currently auto-discovered only for local projects.
 - The project context menu opens the repository when one is available.

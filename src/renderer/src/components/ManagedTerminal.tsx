@@ -6,10 +6,29 @@ import type {
   TerminalSession,
   TerminalTransportEvent
 } from '@shared/types'
+import {
+  terminalFileLinkProvider,
+  type TerminalFileTarget
+} from '../lib/terminalFileLinks'
 
-export function ManagedTerminal({ session }: { session: TerminalSession }) {
+interface Props {
+  session: TerminalSession
+  retainOutputOnExit?: boolean
+  projectFolder?: string
+  onOpenFile?(target: TerminalFileTarget): void
+}
+
+export function ManagedTerminal({
+  session,
+  retainOutputOnExit = false,
+  projectFolder,
+  onOpenFile
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const dimensionsRef = useRef({ cols: 100, rows: 30 })
+  const onOpenFileRef = useRef(onOpenFile)
+  onOpenFileRef.current = onOpenFile
+  const terminalEnded = ['completed', 'error'].includes(session.state)
   const [transport, setTransport] = useState<TerminalTransportEvent>({
     sessionId: session.id,
     state: 'attached',
@@ -28,8 +47,9 @@ export function ManagedTerminal({ session }: { session: TerminalSession }) {
     })
 
     const terminal = new Terminal({
-      cursorBlink: true,
+      cursorBlink: !terminalEnded,
       cursorStyle: 'bar',
+      disableStdin: terminalEnded,
       fontFamily: '"SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace',
       fontSize: 13,
       lineHeight: 1.32,
@@ -65,9 +85,17 @@ export function ManagedTerminal({ session }: { session: TerminalSession }) {
     terminal.open(host)
     fit.fit()
     dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
+    const linkDisposable =
+      projectFolder && onOpenFileRef.current
+        ? terminal.registerLinkProvider(
+            terminalFileLinkProvider(terminal, projectFolder, (target) => {
+              onOpenFileRef.current?.(target)
+            })
+          )
+        : null
 
     let replaying = true
-    let writable = true
+    let writable = !terminalEnded
     const dataDisposable = terminal.onData((data) => {
       if (!replaying && writable) {
         void window.projectConsole.terminals.write(session.id, data)
@@ -79,7 +107,7 @@ export function ManagedTerminal({ session }: { session: TerminalSession }) {
     const removeTransportListener =
       window.projectConsole.terminals.onTransport((event) => {
         if (event.sessionId !== session.id) return
-        writable = event.state === 'attached'
+        writable = !terminalEnded && event.state === 'attached'
         setTransport(event)
       })
 
@@ -115,9 +143,10 @@ export function ManagedTerminal({ session }: { session: TerminalSession }) {
       removeDataListener()
       removeTransportListener()
       dataDisposable.dispose()
+      linkDisposable?.dispose()
       terminal.dispose()
     }
-  }, [session.id])
+  }, [session.id, terminalEnded, projectFolder])
 
   async function retry() {
     setTransport((current) => ({
@@ -141,7 +170,12 @@ export function ManagedTerminal({ session }: { session: TerminalSession }) {
     }
   }
 
-  const interrupted = transport.state !== 'attached'
+  const interrupted =
+    transport.state !== 'attached' &&
+    !(
+      retainOutputOnExit &&
+      (terminalEnded || transport.state === 'detached')
+    )
 
   return (
     <div className="managed-terminal">
@@ -166,11 +200,10 @@ export function ManagedTerminal({ session }: { session: TerminalSession }) {
             </strong>
             <small>{transport.message ?? 'Input is paused until tmux reconnects.'}</small>
           </span>
-          {transport.state !== 'detached' && (
-            <button onClick={() => void retry()}>
-              <RefreshCw size={12} /> Retry now
-            </button>
-          )}
+          <button onClick={() => void retry()}>
+            <RefreshCw size={12} />{' '}
+            {transport.state === 'detached' ? 'Reattach' : 'Retry now'}
+          </button>
         </div>
       )}
     </div>

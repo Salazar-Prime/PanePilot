@@ -352,6 +352,7 @@ export interface ProjectConsoleApi {
     list(projectId: string, relativePath?: string): Promise<FileEntry[]>
     preview(projectId: string, relativePath: string): Promise<FilePreview>
     save(projectId: string, relativePath: string, content: string): Promise<void>
+    download(projectId: string, relativePath: string): Promise<boolean>
   }
   remoteFolders: {
     list(connectionId: string, path?: string): Promise<RemoteFolderListing>

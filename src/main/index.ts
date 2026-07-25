@@ -1,4 +1,4 @@
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import {
   app,
   BrowserWindow,
@@ -19,13 +19,19 @@ import type {
   UpdateProjectActionInput
 } from '../shared/types'
 import { ConversationIndexer } from './conversation-indexer'
-import { listLocalFiles, previewLocalFile, writeLocalFile } from './file-service'
+import {
+  downloadLocalFile,
+  listLocalFiles,
+  previewLocalFile,
+  writeLocalFile
+} from './file-service'
 import { LatexProjectService } from './latex-project-service'
 import { normalizeOptionalWebUrl } from './latex-paths'
 import { PortForwardManager, testSshConnection } from './port-forward-manager'
 import { projectTypeServices } from './project-type-services'
 import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import {
+  downloadRemoteFile,
   listRemoteFiles,
   listRemoteFolders,
   previewRemoteFile,
@@ -46,6 +52,7 @@ let latex: LatexProjectService
 // Keep the existing application-data identity when the packaged product name is PanePilot.
 app.setName('PanePilot')
 app.setPath('userData', join(app.getPath('appData'), 'project-console'))
+const ownsSingleInstanceLock = app.requestSingleInstanceLock()
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -254,6 +261,31 @@ function registerIpc(): void {
       }
     }
   )
+  ipcMain.handle(
+    'files:download',
+    async (_event, projectId: string, relativePath: string) => {
+      const project = store.getProject(projectId)
+      if (!project) throw new Error('Project not found.')
+      const connection = store.getConnection(project.connectionId)
+      if (!connection) throw new Error('Project connection not found.')
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Download project file',
+        defaultPath: join(app.getPath('downloads'), basename(relativePath))
+      })
+      if (result.canceled || !result.filePath) return false
+      if (connection.kind === 'local') {
+        downloadLocalFile(project.folder, relativePath, result.filePath)
+      } else {
+        await downloadRemoteFile(
+          connection.sshAlias!,
+          project.folder,
+          relativePath,
+          result.filePath
+        )
+      }
+      return true
+    }
+  )
 
   ipcMain.handle('port-forwards:list', (_event, connectionId: string) => {
     const connection = store.getConnection(connectionId)
@@ -336,43 +368,54 @@ function registerIpc(): void {
   )
 }
 
-app
-  .whenReady()
-  .then(() => {
-    store = new Store(app.getPath('userData'))
-    store.syncConnections(discoverSshAliases())
-    conversations = new ConversationIndexer()
-    remoteConversations = new RemoteConversationIndexer()
-    terminals = new TerminalManager(
-      store,
-      () => mainWindow,
-      conversations,
-      remoteConversations
-    )
-    latex = new LatexProjectService(store, terminals)
-    portForwards = new PortForwardManager(store, () => {
-      mainWindow?.webContents.send('port-forward:changed')
-    })
-    registerIpc()
-    createWindow()
-    powerMonitor.on('resume', () => {
-      terminals.reconnectAfterWake()
-    })
-    void terminals
-      .reconcileRemoteSessions()
-      .catch(() => 0)
-      .then(() => terminals.discoverSavedProviderSessions())
+if (!ownsSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
 
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  app
+    .whenReady()
+    .then(() => {
+      store = new Store(app.getPath('userData'))
+      store.syncConnections(discoverSshAliases())
+      conversations = new ConversationIndexer()
+      remoteConversations = new RemoteConversationIndexer()
+      terminals = new TerminalManager(
+        store,
+        () => mainWindow,
+        conversations,
+        remoteConversations
+      )
+      latex = new LatexProjectService(store, terminals)
+      portForwards = new PortForwardManager(store, () => {
+        mainWindow?.webContents.send('port-forward:changed')
+      })
+      registerIpc()
+      createWindow()
+      powerMonitor.on('resume', () => {
+        terminals.reconnectAfterWake()
+      })
+      void terminals
+        .reconcileRemoteSessions()
+        .catch(() => 0)
+        .then(() => terminals.discoverSavedProviderSessions())
+
+      app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      })
     })
-  })
-  .catch((error: unknown) => {
-    const message = error instanceof Error ? error.stack || error.message : String(error)
-    console.error(message)
-    dialog.showErrorBox('PanePilot could not start', message)
-    app.quit()
-  })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.stack || error.message : String(error)
+      console.error(message)
+      dialog.showErrorBox('PanePilot could not start', message)
+      app.quit()
+    })
+}
 
 app.on('before-quit', () => {
   terminals?.shutdown()

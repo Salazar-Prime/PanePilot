@@ -1,4 +1,5 @@
 import {
+  copyFileSync,
   lstatSync,
   readFileSync,
   readdirSync,
@@ -70,4 +71,16 @@ export function writeLocalFile(root: string, requested: string, content: string)
     throw new Error('PanePilot only edits files up to 1 MB.')
   }
   writeFileSync(filePath, content, 'utf8')
+}
+
+export function downloadLocalFile(
+  root: string,
+  requested: string,
+  destination: string
+): void {
+  const filePath = boundedPath(root, requested)
+  if (!statSync(filePath).isFile()) {
+    throw new Error('The requested path is not a file.')
+  }
+  copyFileSync(filePath, destination)
 }

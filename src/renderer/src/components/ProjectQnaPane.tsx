@@ -8,13 +8,16 @@ import {
 import type { Project } from '@shared/types'
 import { ManagedTerminal } from './ManagedTerminal'
 import { StatusDot } from './StatusDot'
+import type { TerminalFileTarget } from '../lib/terminalFileLinks'
 
 export function ProjectQnaPane({
   project,
-  onChanged
+  onChanged,
+  onOpenFile
 }: {
   project: Project
   onChanged(): Promise<void>
+  onOpenFile?(target: TerminalFileTarget): void
 }) {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -109,7 +112,11 @@ export function ProjectQnaPane({
       </header>
       {error && <p className="action-error">{error}</p>}
       <div className="project-qna-terminal">
-        <ManagedTerminal session={session} />
+        <ManagedTerminal
+          session={session}
+          projectFolder={project.folder}
+          onOpenFile={onOpenFile}
+        />
       </div>
       {!stopped && (
         <div className="project-qna-composer">

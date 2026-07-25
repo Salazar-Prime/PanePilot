@@ -11,13 +11,15 @@ import {
 import type { Project, ProjectAction } from '@shared/types'
 import { ManagedTerminal } from './ManagedTerminal'
 import { StatusDot } from './StatusDot'
+import type { TerminalFileTarget } from '../lib/terminalFileLinks'
 
 interface Props {
   project: Project
   onChanged(): Promise<void>
+  onOpenFile?(target: TerminalFileTarget): void
 }
 
-export function ActionsPanel({ project, onChanged }: Props) {
+export function ActionsPanel({ project, onChanged, onOpenFile }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(
     project.actions[0]?.id ?? null
   )
@@ -180,7 +182,12 @@ export function ActionsPanel({ project, onChanged }: Props) {
             {error && <p className="action-error">{error}</p>}
             <div className="action-terminal">
               {session ? (
-                <ManagedTerminal session={session} />
+                <ManagedTerminal
+                  session={session}
+                  retainOutputOnExit
+                  projectFolder={project.folder}
+                  onOpenFile={onOpenFile}
+                />
               ) : (
                 <div className="capability-empty">
                   <Play size={32} />
@@ -197,7 +204,9 @@ export function ActionsPanel({ project, onChanged }: Props) {
                 {running
                   ? 'Running — type in the output pane if the command asks for input.'
                   : session
-                    ? 'Run finished. Running again replaces this output.'
+                    ? session.state === 'error'
+                      ? 'Run failed. Its output is retained until you run it again.'
+                      : 'Run finished. Running again replaces this output.'
                     : 'The run finishes when the command exits.'}
               </span>
             </footer>

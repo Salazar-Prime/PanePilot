@@ -5,9 +5,10 @@ import cssWorker from 'monaco-editor/language/css/css.worker.js?worker'
 import htmlWorker from 'monaco-editor/language/html/html.worker.js?worker'
 import jsonWorker from 'monaco-editor/language/json/json.worker.js?worker'
 import tsWorker from 'monaco-editor/language/typescript/ts.worker.js?worker'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ChevronRight,
+  Download,
   File,
   FileCode2,
   Folder,
@@ -18,6 +19,7 @@ import {
   X
 } from 'lucide-react'
 import type { FileEntry, FilePreview, Project } from '@shared/types'
+import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
 
 loader.config({ monaco })
 self.MonacoEnvironment = {
@@ -32,10 +34,12 @@ self.MonacoEnvironment = {
 
 export function FilesPanel({
   project,
-  initialPath = '.'
+  initialPath = '.',
+  openFileRequest = null
 }: {
   project: Project
   initialPath?: string
+  openFileRequest?: ProjectFileOpenRequest | null
 }) {
   const [path, setPath] = useState(initialPath)
   const [entries, setEntries] = useState<FileEntry[]>([])
@@ -45,6 +49,9 @@ export function FilesPanel({
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
+  const pendingRevealRef = useRef<ProjectFileOpenRequest | null>(null)
 
   function canLeaveEditor(): boolean {
     return (
@@ -65,6 +72,7 @@ export function FilesPanel({
       setPreview(null)
       setDraft('')
       setEditing(false)
+      pendingRevealRef.current = null
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
@@ -76,27 +84,86 @@ export function FilesPanel({
     setPath(initialPath)
     setPreview(null)
     setEditing(false)
+    pendingRevealRef.current = null
     void load(initialPath)
   }, [project.id, initialPath])
 
   const pathParts = path === '.' ? [] : path.split('/')
+
+  async function openFile(
+    filePath: string,
+    request: ProjectFileOpenRequest | null = null
+  ) {
+    if (!canLeaveEditor()) return
+    setLoading(true)
+    setError('')
+    try {
+      const parent =
+        filePath.split('/').slice(0, -1).join('/') || '.'
+      const [nextEntries, nextPreview] = await Promise.all([
+        window.projectConsole.files.list(project.id, parent),
+        window.projectConsole.files.preview(project.id, filePath)
+      ])
+      setEntries(nextEntries)
+      setPath(parent)
+      setPreview(nextPreview)
+      setDraft(nextPreview.content)
+      setEditing(false)
+      pendingRevealRef.current = request
+      if (nextPreview.binary) editorRef.current = null
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function openEntry(entry: FileEntry) {
     if (entry.kind === 'directory') {
       await load(entry.path)
       return
     }
-    if (!canLeaveEditor()) return
-    setError('')
-    try {
-      const nextPreview = await window.projectConsole.files.preview(project.id, entry.path)
-      setPreview(nextPreview)
-      setDraft(nextPreview.content)
-      setEditing(false)
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught))
-    }
+    await openFile(entry.path)
   }
+
+  function revealRequestedPosition(
+    editor = editorRef.current
+  ): void {
+    const request = pendingRevealRef.current
+    if (
+      !editor ||
+      !request ||
+      !preview ||
+      request.path !== preview.path ||
+      request.line == null
+    ) {
+      return
+    }
+    const position = {
+      lineNumber: Math.max(1, request.line),
+      column: Math.max(1, request.column ?? 1)
+    }
+    editor.setPosition(position)
+    editor.revealPositionInCenter(position)
+    editor.focus()
+  }
+
+  useEffect(() => {
+    if (
+      !openFileRequest ||
+      openFileRequest.projectId !== project.id
+    ) {
+      return
+    }
+    void openFile(openFileRequest.path, openFileRequest)
+  }, [openFileRequest?.requestId])
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      revealRequestedPosition()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [preview?.path, openFileRequest?.requestId])
 
   async function save() {
     if (!preview) return
@@ -110,6 +177,19 @@ export function FilesPanel({
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function download() {
+    if (!preview) return
+    setDownloading(true)
+    setError('')
+    try {
+      await window.projectConsole.files.download(project.id, preview.path)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -174,9 +254,19 @@ export function FilesPanel({
               <FileCode2 size={16} />
               <span>{preview.path}</span>
               {preview.truncated && <small>First 1 MB · editing disabled</small>}
-              {!preview.binary && !preview.truncated && (
-                <div className="preview-actions">
-                  {editing ? (
+              <div className="preview-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => void download()}
+                  disabled={downloading}
+                  title="Download the saved project file"
+                >
+                  <Download size={13} />{' '}
+                  {downloading ? 'Downloading…' : 'Download'}
+                </button>
+                {!preview.binary &&
+                  !preview.truncated &&
+                  (editing ? (
                     <>
                       <button
                         className="secondary-button"
@@ -200,9 +290,8 @@ export function FilesPanel({
                     <button className="secondary-button" onClick={() => setEditing(true)}>
                       <Pencil size={13} /> Edit
                     </button>
-                  )}
-                </div>
-              )}
+                  ))}
+              </div>
             </div>
             {preview.binary ? (
               <div className="preview-empty">Binary files can’t be previewed.</div>
@@ -214,6 +303,10 @@ export function FilesPanel({
                   theme="vs-dark"
                   value={editing ? draft : preview.content}
                   onChange={(value) => setDraft(value ?? '')}
+                  onMount={(editor) => {
+                    editorRef.current = editor
+                    revealRequestedPosition(editor)
+                  }}
                   options={{
                     automaticLayout: true,
                     readOnly: !editing,

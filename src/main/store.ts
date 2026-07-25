@@ -5,6 +5,7 @@ import type {
   Activity,
   AgentState,
   Connection,
+  ConversationProvider,
   LatexChatAttachment,
   LatexChatMode,
   LatexChatScope,
@@ -297,6 +298,7 @@ export class Store {
 
   constructor(appDataPath: string) {
     this.db = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
+    this.db.exec('PRAGMA busy_timeout = 5000')
     this.db.exec('PRAGMA journal_mode = WAL')
     this.db.exec('PRAGMA foreign_keys = ON')
     this.migrate()
@@ -1609,6 +1611,16 @@ export class Store {
       .run(data, OUTPUT_LIMIT, now(), id)
   }
 
+  replaceOutput(id: string, data: string): void {
+    this.db
+      .prepare(
+        `UPDATE terminal_sessions
+         SET output = substr(?, -?), updated_at = ?
+         WHERE id = ?`
+      )
+      .run(data, OUTPUT_LIMIT, now(), id)
+  }
+
   setSessionState(id: string, state: AgentState, message?: string): boolean {
     const session = this.getSession(id)
     if (!session || session.state === state) return false
@@ -1621,8 +1633,17 @@ export class Store {
     return true
   }
 
-  setSessionProviderId(id: string, providerSessionId: string): boolean {
+  setSessionProviderId(
+    id: string,
+    provider: ConversationProvider,
+    providerSessionId: string
+  ): boolean {
     const session = this.requireSession(id)
+    if (session.profile !== provider) {
+      throw new Error(
+        `A ${provider} session cannot be linked to a ${session.profile} terminal.`
+      )
+    }
     const cleaned = providerSessionId.trim()
     if (!cleaned || cleaned.length > 200) {
       throw new Error('The provider session ID is invalid.')
@@ -1654,7 +1675,7 @@ export class Store {
       session.projectId,
       id,
       'provider-session-linked',
-      `Linked ${session.name} to ${session.profile === 'claude' ? 'Claude' : 'Codex'} session ${cleaned}`
+      `Linked ${session.name} to ${provider === 'claude' ? 'Claude' : 'Codex'} session ${cleaned}`
     )
     return true
   }

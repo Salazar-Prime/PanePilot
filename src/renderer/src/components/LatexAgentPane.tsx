@@ -19,27 +19,32 @@ import type {
 import { ManagedTerminal } from './ManagedTerminal'
 import { StatusDot } from './StatusDot'
 import { TerminalProfileIcon } from './TerminalProfileIcon'
+import type { TerminalFileTarget } from '../lib/terminalFileLinks'
 
 interface Props {
   sessions: TerminalSession[]
   archivedSessions: TerminalSession[]
   sections: LatexSection[]
+  projectFolder: string
   activeSessionId: string | null
   onSelectSession(id: string): void
   onNewChat(): void
   onChanged(): Promise<void>
   onPromptSent(sessionId: string): void
+  onOpenFile?(target: TerminalFileTarget): void
 }
 
 export function LatexAgentPane({
   sessions,
   archivedSessions,
   sections,
+  projectFolder,
   activeSessionId,
   onSelectSession,
   onNewChat,
   onChanged,
-  onPromptSent
+  onPromptSent,
+  onOpenFile
 }: Props) {
   const [message, setMessage] = useState('')
   const [showArchived, setShowArchived] = useState(false)
@@ -242,14 +247,18 @@ export function LatexAgentPane({
           </div>
 
           <div className="latex-agent-terminal">
-            <ManagedTerminal session={activeSession} />
+            <ManagedTerminal
+              session={activeSession}
+              projectFolder={projectFolder}
+              onOpenFile={onOpenFile}
+            />
           </div>
 
           {['completed', 'error'].includes(activeSession.state) ? (
             <div className="latex-chat-ended">
               <span>This tmux chat is stopped.</span>
               <div>
-                {(activeSession.providerSessionId ?? activeSession.providerSessionName) && (
+                {activeSession.providerSessionId && (
                   <button onClick={() => run(resume())}>
                     <RotateCcw size={12} /> Resume
                   </button>

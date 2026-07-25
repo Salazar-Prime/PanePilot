@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { codexStateFromPaneTitle } from '../src/main/codex-pane-status'
+import {
+  codexStateFromPaneTitle,
+  codexThreadReferenceFromPaneTitle
+} from '../src/main/codex-pane-status'
 
 describe('Codex tmux pane status', () => {
   it('maps Codex run-state and action-required titles', () => {
@@ -20,5 +23,18 @@ describe('Codex tmux pane status', () => {
 
   it('ignores titles without PanePilot-managed Codex status items', () => {
     expect(codexStateFromPaneTitle('sal3000', 'running')).toBeNull()
+  })
+
+  it('reads full and title-truncated Codex thread IDs', () => {
+    expect(
+      codexThreadReferenceFromPaneTitle(
+        'Ready | 019f9718-2e61-7e10-b9f1-347710ba035c'
+      )
+    ).toBe('019f9718-2e61-7e10-b9f1-347710ba035c')
+    expect(
+      codexThreadReferenceFromPaneTitle(
+        'Working | 2/4 tasks | 019f9718-2e61-7e10-b9f1-34771...'
+      )
+    ).toBe('019f9718-2e61-7e10-b9f1-34771')
   })
 })

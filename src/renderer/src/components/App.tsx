@@ -80,6 +80,7 @@ export function App() {
   const [showArchivedProjects, setShowArchivedProjects] = useState(false)
   const [portForwardConnection, setPortForwardConnection] = useState<Connection | null>(null)
   const [launchTerminalRequest, setLaunchTerminalRequest] = useState(0)
+  const [openSessionRequest, setOpenSessionRequest] = useState(0)
   const [sidebarContext, setSidebarContext] = useState<SidebarContext | null>(null)
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
   const [sessionSort] = useSessionSort()
@@ -267,6 +268,7 @@ export function App() {
     setShowArchivedProjects(false)
     setSelectedProjectId(projectId)
     setSelectedSessionId(sessionId)
+    setOpenSessionRequest((current) => current + 1)
     await window.projectConsole.terminals.acknowledge(sessionId)
     await refresh()
   }
@@ -277,7 +279,15 @@ export function App() {
   }
 
   async function stopSession(session: TerminalSession) {
-    if (!window.confirm(`Stop “${session.name}”? Its saved output will be kept.`)) return
+    const detachesOnly = session.kind === 'terminal'
+    if (
+      !window.confirm(
+        detachesOnly
+          ? `Detach “${session.name}”? Its tmux session will keep running.`
+          : `Stop “${session.name}”? Its saved output will be kept.`
+      )
+    )
+      return
     await window.projectConsole.terminals.stop(session.id)
     await refresh()
   }
@@ -305,7 +315,7 @@ export function App() {
   async function deleteSession(session: TerminalSession) {
     if (
       !window.confirm(
-        `Permanently delete “${session.name}” and its saved output? Provider chat archives will remain.`
+        `Close and permanently delete “${session.name}” and its saved output? Provider chat archives will remain.`
       )
     )
       return
@@ -491,8 +501,7 @@ export function App() {
       (item) => item.id === owner.connectionId
     )
     const stopped = ['completed', 'error'].includes(session.state)
-    const providerSessionReference =
-      session.providerSessionId ?? session.providerSessionName
+    const providerSessionReference = session.providerSessionId
     return [
       {
         id: 'open',
@@ -532,9 +541,7 @@ export function App() {
         ? [
             {
               id: 'copy-provider-session',
-              label: session.providerSessionId
-                ? `Copy ${session.profile === 'claude' ? 'Claude' : 'Codex'} session ID`
-                : 'Copy Codex session name',
+              label: `Copy ${session.profile === 'claude' ? 'Claude session' : 'Codex thread'} ID`,
               icon: <Clipboard size={14} />,
               action: () =>
                 window.projectConsole.system.copyText(providerSessionReference)
@@ -575,12 +582,25 @@ export function App() {
         : [
             {
               id: 'stop',
-              label: 'Stop terminal',
+              label:
+                session.kind === 'terminal'
+                  ? 'Detach terminal'
+                  : 'Stop terminal',
               icon: <Square size={14} />,
-              danger: true,
               separatorBefore: true,
               action: () => stopSession(session)
-            }
+            },
+            ...(session.kind === 'terminal'
+              ? [
+                  {
+                    id: 'delete',
+                    label: 'Delete terminal',
+                    icon: <Trash2 size={14} />,
+                    danger: true,
+                    action: () => deleteSession(session)
+                  }
+                ]
+              : [])
           ])
     ]
   }
@@ -921,6 +941,7 @@ export function App() {
             connection={connection}
             selectedSessionId={selectedSessionId}
             launchTerminalRequest={launchTerminalRequest}
+            openSessionRequest={openSessionRequest}
             onSelectSession={setSelectedSessionId}
             onChanged={refresh}
           />

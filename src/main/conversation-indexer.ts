@@ -340,7 +340,8 @@ export class ConversationIndexer {
   findCodexSessionId(
     projectFolder: string,
     terminalCreatedAt: string,
-    excludedIds: Set<string>
+    excludedIds: Set<string>,
+    providerSessionHint: string | null = null
   ): string | null {
     const normalizedFolder = resolve(projectFolder)
     const terminalTime = Date.parse(terminalCreatedAt)
@@ -374,21 +375,53 @@ export class ConversationIndexer {
       }
     }
 
-    candidates.sort(
-      (a, b) =>
-        Math.abs(a.timestamp - terminalTime) - Math.abs(b.timestamp - terminalTime)
-    )
-    return candidates[0]?.id ?? null
+    if (providerSessionHint) {
+      const exact = candidates.find(
+        (candidate) =>
+          candidate.id === providerSessionHint ||
+          candidate.id.startsWith(providerSessionHint)
+      )
+      if (exact) return exact.id
+
+      try {
+        const indexPath = join(homedir(), '.codex', 'session_index.jsonl')
+        const indexedId = readFileSync(indexPath, 'utf8')
+          .split(/\r?\n/)
+          .flatMap((line): string[] => {
+            if (!line.includes(providerSessionHint)) return []
+            try {
+              const record = object(JSON.parse(line))
+              return string(record?.thread_name) === providerSessionHint
+                ? [string(record?.id)].filter((id): id is string => Boolean(id))
+                : []
+            } catch {
+              return []
+            }
+          })
+          .at(-1)
+        const exact = candidates.find((candidate) => candidate.id === indexedId)
+        if (exact) return exact.id
+      } catch {
+        // Older Codex versions may not have a session index.
+      }
+    }
+    return null
   }
 
   findProviderSessionId(
     provider: ConversationProvider,
     projectFolder: string,
     terminalCreatedAt: string,
-    excludedIds: Set<string>
+    excludedIds: Set<string>,
+    providerSessionHint: string | null = null
   ): string | null {
     if (provider === 'codex') {
-      return this.findCodexSessionId(projectFolder, terminalCreatedAt, excludedIds)
+      return this.findCodexSessionId(
+        projectFolder,
+        terminalCreatedAt,
+        excludedIds,
+        providerSessionHint
+      )
     }
     const normalizedFolder = resolve(projectFolder)
     const terminalTime = Date.parse(terminalCreatedAt)
