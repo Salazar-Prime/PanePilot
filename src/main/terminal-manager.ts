@@ -72,7 +72,7 @@ interface Runtime {
   actionTimer: NodeJS.Timeout | null
   providerAttempts: number
   outputClosed: boolean
-  closingForAppExit: boolean
+  closingTransport: boolean
   intentionalStop: boolean
   cols: number
   rows: number
@@ -686,21 +686,64 @@ export class TerminalManager {
 
   retryAttach(sessionId: string, cols: number, rows: number): void {
     const session = this.requireSession(sessionId)
-    if (this.runtimes.has(sessionId)) {
-      this.emitTransport(sessionId, 'attached')
-      return
-    }
     if (['completed', 'error'].includes(session.state)) {
       throw new Error('This terminal is no longer running.')
     }
     const project = this.store.getProject(session.projectId)
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (!project || !connection) throw new Error('The terminal project is unavailable.')
-    if (connection.kind !== 'ssh' || session.backend !== 'tmux') {
+
+    if (session.backend !== 'tmux' || !session.tmuxName) {
+      if (this.runtimes.has(sessionId)) {
+        this.emitTransport(sessionId, 'attached')
+        return
+      }
       this.launch(session, project.folder, connection, cols, rows, false)
       return
     }
-    this.beginRemoteReconnect(session.id, cols, rows, 0, true)
+
+    const runtime = this.runtimes.get(sessionId)
+    const nextCols = runtime?.cols ?? cols
+    const nextRows = runtime?.rows ?? rows
+    if (
+      connection.kind === 'local' &&
+      !this.tmuxSessionExists(connection, session.tmuxName)
+    ) {
+      this.changeState(
+        session,
+        'completed',
+        `${session.name} is no longer running in tmux.`
+      )
+      this.emitTransport(
+        session.id,
+        'detached',
+        0,
+        'The tmux session no longer exists.'
+      )
+      throw new Error(`Tmux session “${session.tmuxName}” no longer exists.`)
+    }
+
+    if (runtime) this.closeRuntimeForReconnect(runtime)
+    this.cancelReconnect(sessionId)
+    this.emitTransport(
+      sessionId,
+      'reconnecting',
+      1,
+      'Reconnecting to the existing tmux session…'
+    )
+    if (connection.kind === 'local') {
+      this.launch(
+        this.requireSession(sessionId),
+        project.folder,
+        connection,
+        nextCols,
+        nextRows,
+        false
+      )
+      return
+    }
+
+    this.beginRemoteReconnect(session.id, nextCols, nextRows, 0, true)
   }
 
   reconnectAfterWake(): void {
@@ -984,7 +1027,7 @@ export class TerminalManager {
     this.remoteReconciliations.clear()
     this.remoteTmuxPaths.clear()
     for (const runtime of this.runtimes.values()) {
-      runtime.closingForAppExit = true
+      runtime.closingTransport = true
       if (runtime.scanTimer) clearTimeout(runtime.scanTimer)
       if (runtime.providerTimer) clearTimeout(runtime.providerTimer)
       if (runtime.actionTimer) clearTimeout(runtime.actionTimer)
@@ -1027,7 +1070,7 @@ export class TerminalManager {
       actionTimer: null,
       providerAttempts: 0,
       outputClosed: false,
-      closingForAppExit: false,
+      closingTransport: false,
       intentionalStop: false,
       cols,
       rows,
@@ -1045,7 +1088,7 @@ export class TerminalManager {
     this.scheduleActionCompletion(runtime)
 
     child.onData((data) => {
-      if (this.shuttingDown || runtime.closingForAppExit) return
+      if (this.shuttingDown || runtime.closingTransport) return
       if (!runtime.outputClosed) this.queueOutput(session.id, data)
       this.getWindow()?.webContents.send('terminal:data', { sessionId: session.id, data })
       screen.write(data, () => this.scheduleScreenScan(runtime))
@@ -1058,7 +1101,7 @@ export class TerminalManager {
       if (this.runtimes.get(session.id) === runtime) {
         this.runtimes.delete(session.id)
       }
-      if (runtime.closingForAppExit) return
+      if (runtime.closingTransport) return
       this.flushOutput(session.id)
       const latest = this.store.getSession(session.id)
       if (!latest) return
@@ -1758,6 +1801,18 @@ export class TerminalManager {
     const reconnect = this.reconnects.get(sessionId)
     if (reconnect?.timer) clearTimeout(reconnect.timer)
     this.reconnects.delete(sessionId)
+  }
+
+  private closeRuntimeForReconnect(runtime: Runtime): void {
+    runtime.closingTransport = true
+    if (runtime.scanTimer) clearTimeout(runtime.scanTimer)
+    if (runtime.providerTimer) clearTimeout(runtime.providerTimer)
+    if (runtime.actionTimer) clearTimeout(runtime.actionTimer)
+    this.flushOutput(runtime.session.id)
+    if (this.runtimes.get(runtime.session.id) === runtime) {
+      this.runtimes.delete(runtime.session.id)
+    }
+    runtime.pty.kill()
   }
 
   private emitTransport(

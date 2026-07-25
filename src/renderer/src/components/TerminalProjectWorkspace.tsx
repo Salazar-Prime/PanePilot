@@ -14,6 +14,7 @@ import {
   PinOff,
   Play,
   Plus,
+  RefreshCw,
   RotateCcw,
   Square,
   TerminalSquare,
@@ -181,6 +182,13 @@ export function TerminalProjectWorkspace({
     await onChanged()
   }
 
+  async function reconnect(session: TerminalSession) {
+    setMenu(null)
+    setTab('terminal')
+    onSelectSession(session.id)
+    await window.projectConsole.terminals.retryAttach(session.id, 100, 30)
+  }
+
   async function archive(session: TerminalSession) {
     setMenu(null)
     await window.projectConsole.terminals.archive(session.id)
@@ -292,6 +300,18 @@ export function TerminalProjectWorkspace({
                     <span>{session.name}</span>
                     {session.dangerousMode && <small className="unsafe-badge">unsafe</small>}
                   </button>
+                  {session.backend === 'tmux' &&
+                    session.tmuxName &&
+                    !['completed', 'error'].includes(session.state) && (
+                      <button
+                        className="tab-reconnect-button"
+                        aria-label={`Reconnect ${session.name} to tmux`}
+                        title="Reconnect to tmux"
+                        onClick={() => run(reconnect(session))}
+                      >
+                        <RefreshCw size={12} />
+                      </button>
+                    )}
                   <button
                     className="tab-menu-button"
                     aria-label={`Actions for ${session.name}`}

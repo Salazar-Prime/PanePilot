@@ -558,7 +558,8 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-.tab-menu-button {
+.tab-menu-button,
+.tab-reconnect-button {
   display: grid;
   width: 25px;
   height: 26px;
@@ -573,12 +574,21 @@ select:focus-visible {
   opacity: 0;
 }
 
+.tab-reconnect-button {
+  margin-right: 0;
+}
+
 .terminal-tab:hover .tab-menu-button,
-.terminal-tab.active .tab-menu-button {
+.terminal-tab.active .tab-menu-button,
+.terminal-tab:hover .tab-reconnect-button,
+.terminal-tab.active .tab-reconnect-button,
+.tab-reconnect-button:focus-visible {
   opacity: 1;
 }
 
-.tab-menu-button:hover {
+.tab-menu-button:hover,
+.tab-reconnect-button:hover {
+  color: #c9d1ff;
   background: #272c37;
 }
 
