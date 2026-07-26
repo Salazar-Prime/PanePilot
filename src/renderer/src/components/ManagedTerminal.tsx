@@ -17,6 +17,7 @@ import {
   terminalFileLinkProvider,
   type TerminalFileTarget
 } from '../lib/terminalFileLinks'
+import { terminalWebLinkProvider } from '../lib/terminalWebLinks'
 import {
   clipboardPasteFits,
   decodeOsc52Clipboard,
@@ -116,6 +117,11 @@ export function ManagedTerminal({
       message: null
     })
 
+    const openUrl = (url: string): void => {
+      void window.projectConsole.system.openExternal(url).catch((error) => {
+        console.error('Could not open terminal URL.', error)
+      })
+    }
     const terminal = new Terminal({
       cursorBlink: !terminalEnded,
       cursorStyle: 'bar',
@@ -127,6 +133,13 @@ export function ManagedTerminal({
       scrollback: 5_000,
       allowProposedApi: true,
       macOptionClickForcesSelection: true,
+      linkHandler: {
+        activate(event, url) {
+          event.preventDefault()
+          openUrl(url)
+        },
+        allowNonHttpProtocols: false
+      },
       theme: {
         background: '#090b10',
         foreground: '#d5d8df',
@@ -166,6 +179,9 @@ export function ManagedTerminal({
             })
           )
         : null
+    const webLinkDisposable = terminal.registerLinkProvider(
+      terminalWebLinkProvider(terminal, openUrl)
+    )
     let replaying = true
     let writable = !terminalEnded
     const osc52Disposable = terminal.parser.registerOscHandler(52, (data) => {
@@ -213,6 +229,7 @@ export function ManagedTerminal({
       return () => {
         resizeObserver.disconnect()
         linkDisposable?.dispose()
+        webLinkDisposable.dispose()
         osc52Disposable.dispose()
         writableRef.current = false
         if (terminalRef.current === terminal) terminalRef.current = null
@@ -277,6 +294,7 @@ export function ManagedTerminal({
       removeTransportListener()
       dataDisposable.dispose()
       linkDisposable?.dispose()
+      webLinkDisposable.dispose()
       osc52Disposable.dispose()
       writableRef.current = false
       if (terminalRef.current === terminal) terminalRef.current = null

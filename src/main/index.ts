@@ -60,6 +60,12 @@ app.setName('PanePilot')
 app.setPath('userData', join(app.getPath('appData'), 'project-console'))
 const ownsSingleInstanceLock = app.requestSingleInstanceLock()
 
+async function openExternalWebUrl(rawUrl: string): Promise<void> {
+  const url = normalizeOptionalWebUrl(rawUrl, 'External URL')
+  if (!url) throw new Error('External URL is required.')
+  await shell.openExternal(url)
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -80,6 +86,12 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    void openExternalWebUrl(url).catch((error) => {
+      console.error('Could not open external URL.', error)
+    })
+    return { action: 'deny' }
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -395,9 +407,7 @@ function registerIpc(): void {
     if (error) throw new Error(error)
   })
   ipcMain.handle('system:open-external', async (_event, rawUrl: string) => {
-    const url = normalizeOptionalWebUrl(rawUrl, 'External URL')
-    if (!url) throw new Error('External URL is required.')
-    await shell.openExternal(url)
+    await openExternalWebUrl(rawUrl)
   })
 
   ipcMain.handle(
