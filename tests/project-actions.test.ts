@@ -285,6 +285,24 @@ describe('project actions and Q&A persistence', () => {
         expect(session.kind).toBe('action')
         expect(session.backend).toBe('tmux')
 
+        let heldCompletion = ''
+        for (let attempt = 0; attempt < 20 && heldCompletion !== '0:0'; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 10))
+          const state = spawnSync(
+            'tmux',
+            [
+              'display-message',
+              '-p',
+              '-t',
+              `=${session.tmuxName}:`,
+              '#{@panepilot_action_exit_status}:#{pane_dead}'
+            ],
+            { encoding: 'utf8' }
+          )
+          if (state.status === 0) heldCompletion = state.stdout.trim()
+        }
+        expect(heldCompletion).toBe('0:0')
+
         let completed = store.getSession(session.id)
         for (
           let attempt = 0;
@@ -309,7 +327,7 @@ describe('project actions and Q&A persistence', () => {
         manager.updateAction({
           actionId: action.id,
           name: replacement,
-          command: `printf '%s\\n' '${replacement}'`
+          command: `printf '%s\\n' '${replacement}'; exit 7`
         })
         const rerun = manager.runAction(action.id)
         sessionId = rerun.id
@@ -326,7 +344,7 @@ describe('project actions and Q&A persistence', () => {
           await new Promise((resolve) => setTimeout(resolve, 20))
           rerunCompleted = store.getSession(rerun.id)
         }
-        expect(rerunCompleted?.state).toBe('completed')
+        expect(rerunCompleted?.state).toBe('error')
         expect(rerunCompleted?.output).toContain(replacement)
         expect(rerunCompleted?.output).not.toContain(token)
       } finally {

@@ -59,6 +59,7 @@ const OUTPUT_RETRY_DELAY_MS = 500
 const OUTPUT_BUFFER_LIMIT = 512 * 1024
 const ACTION_COMPLETION_POLL_MS = 250
 const MAX_ACTION_CAPTURE_OUTPUT = 1024 * 1024
+const ACTION_EXIT_STATUS_OPTION = '@panepilot_action_exit_status'
 const MAX_TERMINAL_CAPTURE_OUTPUT = 4 * 1024 * 1024
 const MAX_TERMINAL_INPUT_BYTES = 2 * 1024 * 1024
 const TERMINAL_INPUT_CHUNK_SIZE = 16 * 1024
@@ -108,6 +109,31 @@ interface ActionPaneSnapshot {
 
 function quote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+function actionRunCommand(tmuxCommand: string, command: string): string {
+  const executable = quote(tmuxCommand)
+  const marker = quote(ACTION_EXIT_STATUS_OPTION)
+  return (
+    `${executable} set-option -q -p -t "$TMUX_PANE" remain-on-exit on || true; ` +
+    `${executable} set-option -q -u -t "$TMUX_PANE" ${marker} 2>/dev/null || true; ` +
+    `( ${command}\n); ` +
+    `panepilot_action_status=$?; ` +
+    `${executable} set-option -q -t "$TMUX_PANE" ${marker} "$panepilot_action_status" || ` +
+    `exit "$panepilot_action_status"; ` +
+    `while :; do sleep 3600; done`
+  )
+}
+
+function actionExitStatus(value: string): number | null {
+  const match = value.trim().match(/^(-?\d+)?:([01]):(-?\d*)$/)
+  if (!match) return null
+  const reported = match[1] ? Number(match[1]) : null
+  if (reported != null && Number.isInteger(reported)) return reported
+  const deadStatus = match[3] ? Number(match[3]) : null
+  return match[2] === '1' && deadStatus != null && Number.isInteger(deadStatus)
+    ? deadStatus
+    : null
 }
 
 export function terminalInputChunks(
@@ -1397,12 +1423,12 @@ export class TerminalManager {
               false,
               remoteTmuxPath
             )
-            const actionSetup =
-              session.kind === 'action'
-                ? ` && ${quote(remoteTmuxPath)} set-option -q -p -t "$TMUX_PANE" remain-on-exit on`
-                : ''
             remoteLaunchCommand =
-              `(${metadataCommand}${actionSetup}) || true; ${remoteLaunchCommand}`
+              `(${metadataCommand}) || true; ${
+                session.kind === 'action'
+                  ? actionRunCommand(remoteTmuxPath, remoteLaunchCommand)
+                  : remoteLaunchCommand
+              }`
           }
         }
         const tmuxAction = create ? 'new-session -s' : 'attach-session -t'
@@ -1441,10 +1467,6 @@ export class TerminalManager {
 
     if (session.backend === 'tmux' && session.tmuxName && this.tmuxPath) {
       const project = this.store.getProject(session.projectId)
-      const actionSetup =
-        session.kind === 'action'
-          ? ` && ${quote(this.tmuxPath)} set-option -q -p -t "$TMUX_PANE" remain-on-exit on`
-          : ''
       const persistentCommand =
         create && project
           ? `(${tmuxMetadataShellCommand(
@@ -1452,7 +1474,11 @@ export class TerminalManager {
               undefined,
               false,
               this.tmuxPath
-            )}${actionSetup}) || true; ${command}`
+            )}) || true; ${
+              session.kind === 'action'
+                ? actionRunCommand(this.tmuxPath, command)
+                : command
+            }`
           : command
       const args = create
         ? ['new-session', '-s', session.tmuxName, '-c', folder, persistentCommand]
@@ -1621,9 +1647,17 @@ export class TerminalManager {
     }
 
     runtime.outputClosed = true
+    this.flushOutput(runtime.session.id)
+    const streamedOutput =
+      this.store.getSession(runtime.session.id)?.output ?? ''
     this.discardPendingOutput(runtime.session.id)
     try {
-      this.store.replaceOutput(runtime.session.id, snapshot.output)
+      this.store.replaceOutput(
+        runtime.session.id,
+        snapshot.output.trim() || !streamedOutput
+          ? snapshot.output
+          : streamedOutput
+      )
       runtime.intentionalStop = true
       this.killTmuxSession(runtime.connection, runtime.session.tmuxName!)
     } catch {
@@ -1651,7 +1685,8 @@ export class TerminalManager {
     const name = runtime.session.tmuxName
     if (!name) return null
     const target = `=${name}:`
-    const stateFormat = '#{pane_dead}:#{pane_dead_status}'
+    const stateFormat =
+      `#{${ACTION_EXIT_STATUS_OPTION}}:#{pane_dead}:#{pane_dead_status}`
 
     if (runtime.connection.kind === 'local') {
       if (!this.tmuxPath) return null
@@ -1660,10 +1695,9 @@ export class TerminalManager {
         ['display-message', '-p', '-t', target, stateFormat],
         { encoding: 'utf8', timeout: 2_000 }
       )
-      const match = state.status === 0
-        ? state.stdout.trim().match(/^1:(-?\d+)$/)
-        : null
-      if (!match) return null
+      const exitCode =
+        state.status === 0 ? actionExitStatus(state.stdout) : null
+      if (exitCode == null) return null
       const capture = spawnSync(
         this.tmuxPath,
         ['capture-pane', '-p', '-e', '-S', '-', '-t', target],
@@ -1675,7 +1709,7 @@ export class TerminalManager {
       )
       if (capture.status !== 0) return null
       return {
-        exitCode: Number(match[1]),
+        exitCode,
         output: capture.stdout.replace(/\r?\n/g, '\r\n')
       }
     }
@@ -1684,8 +1718,7 @@ export class TerminalManager {
     if (!tmuxPath) return null
     const remoteCommand =
       `panepilot_state=$(${quote(tmuxPath)} display-message -p -t ${quote(target)} ${quote(stateFormat)}) || exit $?; ` +
-      `case "$panepilot_state" in 1:*) ;; *) exit 3 ;; esac; ` +
-      `printf '%s\\n' "\${panepilot_state#1:}"; ` +
+      `printf '%s\\n' "$panepilot_state"; ` +
       `${quote(tmuxPath)} capture-pane -p -e -S - -t ${quote(target)}`
     try {
       const result = await execFileAsync(
@@ -1707,8 +1740,10 @@ export class TerminalManager {
       )
       const firstNewline = result.stdout.indexOf('\n')
       if (firstNewline < 0) return null
-      const exitCode = Number(result.stdout.slice(0, firstNewline).trim())
-      if (!Number.isInteger(exitCode)) return null
+      const exitCode = actionExitStatus(
+        result.stdout.slice(0, firstNewline)
+      )
+      if (exitCode == null) return null
       return {
         exitCode,
         output: result.stdout.slice(firstNewline + 1).replace(/\r?\n/g, '\r\n')

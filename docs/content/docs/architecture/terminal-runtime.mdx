@@ -106,8 +106,11 @@ An Action definition lives independently of its latest terminal session. Running
 4. Runs the definition through the user's shell from the project folder.
 5. Leaves xterm input connected until the command exits.
 
-The tmux server removes the ephemeral session when the command exits. PanePilot then
-marks the run completed and retains its bounded output until rerun or deletion.
+When the command exits, a PanePilot-owned wrapper records its exit status and keeps the
+tmux pane alive briefly. PanePilot captures the pane, writes the bounded output to
+SQLite, and only then removes the ephemeral tmux session. If the final pane capture is
+empty, PanePilot keeps the output already streamed to SQLite. The saved run remains
+visible until rerun or deletion.
 
 ## Project Q&A
 
