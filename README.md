@@ -4,6 +4,10 @@ PanePilot is a desktop control center for local and SSH projects worked on by pe
 coding agents. It keeps project folders, persistent terminals, agent attention state,
 files, and activity in one Electron window.
 
+An optional [Android companion](android/README.md) connects directly over SSH to
+PanePilot-tagged tmux sessions, so you can check agent progress and send a message from
+your phone without running a remote daemon.
+
 PanePilot also supports section-aware LaTeX projects: choose a main `.tex` file, edit
 source in place, attach persistent Codex or Claude chats to the whole paper or one
 section, and review source changes highlighted directly in the editor. Optional
