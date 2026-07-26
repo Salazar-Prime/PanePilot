@@ -1,4 +1,9 @@
 import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm'
+import {
+  terminalLinkRange,
+  terminalLogicalLine
+} from './terminalLinkLines'
+import { isBareTerminalWebUrl } from './terminalWebLinks'
 
 export interface TerminalFileTarget {
   path: string
@@ -27,6 +32,7 @@ function positiveInteger(value: string | undefined): number | null {
 }
 
 function looksLikeFilePath(path: string): boolean {
+  if (isBareTerminalWebUrl(path)) return false
   if (
     path.startsWith('/') ||
     path.startsWith('./') ||
@@ -131,26 +137,23 @@ export function terminalFileLinkProvider(
 ): ILinkProvider {
   return {
     provideLinks(bufferLineNumber, callback) {
-      const line = terminal.buffer.active
-        .getLine(bufferLineNumber - 1)
-        ?.translateToString(true)
-      if (!line) {
+      const logicalLine = terminalLogicalLine(terminal, bufferLineNumber)
+      if (!logicalLine?.text) {
         callback(undefined)
         return
       }
-      const links: ILink[] = parseTerminalFileLinks(line, projectFolder).map(
+      const links: ILink[] = parseTerminalFileLinks(
+        logicalLine.text,
+        projectFolder
+      ).map(
         (link) => ({
           text: link.text,
-          range: {
-            start: {
-              x: link.startIndex + 1,
-              y: bufferLineNumber
-            },
-            end: {
-              x: link.startIndex + link.text.length,
-              y: bufferLineNumber
-            }
-          },
+          range: terminalLinkRange(
+            link.startIndex,
+            link.text.length,
+            logicalLine.startLine,
+            terminal.cols
+          ),
           decorations: {
             pointerCursor: true,
             underline: true

@@ -1,4 +1,8 @@
 import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm'
+import {
+  terminalLinkRange,
+  terminalLogicalLine
+} from './terminalLinkLines'
 
 interface ParsedTerminalWebLink {
   startIndex: number
@@ -6,7 +10,16 @@ interface ParsedTerminalWebLink {
   url: string
 }
 
-const WEB_URL_PATTERN = /https?:\/\/[^\s\u0000-\u001f\u007f<>"'`]+/gi
+const BARE_WEB_HOST =
+  String.raw`(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:ai|app|com|dev|edu|gov|io|net|org)`
+const WEB_URL_PATTERN = new RegExp(
+  String.raw`https?:\/\/[^\s\u0000-\u001f\u007f<>"'\x60]+|${BARE_WEB_HOST}(?::\d+)?\/[^\s\u0000-\u001f\u007f<>"'\x60]*`,
+  'gi'
+)
+const BARE_WEB_URL_PATTERN = new RegExp(
+  String.raw`^${BARE_WEB_HOST}(?::\d+)?\/`,
+  'i'
+)
 const TRAILING_PUNCTUATION = /[.,;:!?]/
 const CLOSING_PAIRS: Record<string, string> = {
   ')': '(',
@@ -43,8 +56,9 @@ export function parseTerminalWebLinks(line: string): ParsedTerminalWebLink[] {
     (match): ParsedTerminalWebLink[] => {
       const text = trimUrlCandidate(match[0])
       if (!text) return []
+      const url = /^https?:\/\//i.test(text) ? text : `https://${text}`
       try {
-        const parsed = new URL(text)
+        const parsed = new URL(url)
         if (!['http:', 'https:'].includes(parsed.protocol)) return []
       } catch {
         return []
@@ -53,11 +67,15 @@ export function parseTerminalWebLinks(line: string): ParsedTerminalWebLink[] {
         {
           startIndex: match.index ?? 0,
           text,
-          url: text
+          url
         }
       ]
     }
   )
+}
+
+export function isBareTerminalWebUrl(value: string): boolean {
+  return BARE_WEB_URL_PATTERN.test(value)
 }
 
 export function terminalWebLinkProvider(
@@ -66,25 +84,19 @@ export function terminalWebLinkProvider(
 ): ILinkProvider {
   return {
     provideLinks(bufferLineNumber, callback) {
-      const line = terminal.buffer.active
-        .getLine(bufferLineNumber - 1)
-        ?.translateToString(true)
-      if (!line) {
+      const logicalLine = terminalLogicalLine(terminal, bufferLineNumber)
+      if (!logicalLine?.text) {
         callback(undefined)
         return
       }
-      const links: ILink[] = parseTerminalWebLinks(line).map((link) => ({
+      const links: ILink[] = parseTerminalWebLinks(logicalLine.text).map((link) => ({
         text: link.text,
-        range: {
-          start: {
-            x: link.startIndex + 1,
-            y: bufferLineNumber
-          },
-          end: {
-            x: link.startIndex + link.text.length,
-            y: bufferLineNumber
-          }
-        },
+        range: terminalLinkRange(
+          link.startIndex,
+          link.text.length,
+          logicalLine.startLine,
+          terminal.cols
+        ),
         decorations: {
           pointerCursor: true,
           underline: true

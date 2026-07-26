@@ -28,4 +28,17 @@ describe('terminal web links', () => {
       )
     ).toEqual([])
   })
+
+  it('opens common bare web hosts as HTTPS links', () => {
+    expect(
+      parseTerminalWebLinks(
+        'Dashboard: wandb.ai/salprime/exp2-yolo26'
+      )[0]
+    ).toEqual(
+      expect.objectContaining({
+        text: 'wandb.ai/salprime/exp2-yolo26',
+        url: 'https://wandb.ai/salprime/exp2-yolo26'
+      })
+    )
+  })
 })

@@ -56,4 +56,13 @@ describe('terminal file links', () => {
       })
     ])
   })
+
+  it('does not mistake a bare web dashboard URL for a project path', () => {
+    expect(
+      parseTerminalFileLinks(
+        'Dashboard: wandb.ai/salprime/exp2-yolo26',
+        projectFolder
+      )
+    ).toEqual([])
+  })
 })

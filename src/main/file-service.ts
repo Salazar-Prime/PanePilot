@@ -178,7 +178,9 @@ export function openLocalPath(root: string, requested: string): FileOpenResult {
       preview: null
     }
   }
-  if (!stat.isFile()) throw new Error('The requested path is not a file or directory.')
+  if (!stat.isFile()) {
+    throw new Error(`The requested path is not a file or directory: ${requested}`)
+  }
   const directoryPath = dirname(requested) || '.'
   return {
     kind: 'file',

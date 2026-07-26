@@ -177,7 +177,7 @@ elif os.path.isfile(target):
         },
     }))
 else:
-    raise RuntimeError("The requested path is not a file or directory.")
+    raise RuntimeError("The requested path is not a file or directory: " + payload["relativePath"])
 `
 
 const SEARCH_FILES_SCRIPT = String.raw`
