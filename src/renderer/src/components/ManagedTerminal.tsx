@@ -23,6 +23,7 @@ import {
   decodeOsc52Clipboard,
   prepareClipboardPaste
 } from '../lib/terminalClipboard'
+import { registerSpeechContent } from '../lib/speechContent'
 
 interface Props {
   session: TerminalSession
@@ -171,6 +172,21 @@ export function ManagedTerminal({
     fitRef.current = fit
     fit.fit()
     dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
+    const unregisterSpeechContent = registerSpeechContent(session.id, () => {
+      const buffer = terminal.buffer.active
+      const end = Math.min(buffer.length, buffer.viewportY + terminal.rows)
+      let visibleText = ''
+      for (let index = buffer.viewportY; index < end; index += 1) {
+        const line = buffer.getLine(index)
+        if (!line) continue
+        const content = line.translateToString(true)
+        visibleText += line.isWrapped ? content : `${visibleText ? '\n' : ''}${content}`
+      }
+      return {
+        selectedText: terminal.getSelection().trim(),
+        visibleText: visibleText.trim()
+      }
+    })
     const linkDisposable =
       projectFolder && onOpenFileRef.current
         ? terminal.registerLinkProvider(
@@ -227,6 +243,7 @@ export function ManagedTerminal({
       })
       resizeObserver.observe(host)
       return () => {
+        unregisterSpeechContent()
         resizeObserver.disconnect()
         linkDisposable?.dispose()
         webLinkDisposable.dispose()
@@ -289,6 +306,7 @@ export function ManagedTerminal({
     resizeObserver.observe(host)
 
     return () => {
+      unregisterSpeechContent()
       resizeObserver.disconnect()
       removeDataListener()
       removeTransportListener()
@@ -372,7 +390,7 @@ export function ManagedTerminal({
     )
 
   return (
-    <div className="managed-terminal">
+    <div className="managed-terminal" data-speech-terminal-id={session.id}>
       <div
         className="terminal-host"
         ref={hostRef}

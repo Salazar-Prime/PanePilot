@@ -324,6 +324,55 @@ export interface CreatePortForwardInput {
   remotePort: number
 }
 
+export type SpeechReadingMode = 'concise' | 'verbatim'
+
+export interface SpeechSettings {
+  provider: 'google-neural2'
+  voiceName: string
+  languageCode: string
+  speakingRate: number
+  pitch: number
+  monthlyCharacterLimit: number
+}
+
+export interface UpdateSpeechSettingsInput {
+  voiceName: string
+  speakingRate: number
+  pitch: number
+  monthlyCharacterLimit: number
+}
+
+export interface SpeechUsage {
+  month: string
+  usedCharacters: number
+  remainingCharacters: number
+  monthlyCharacterLimit: number
+}
+
+export interface SpeechStatus {
+  settings: SpeechSettings
+  usage: SpeechUsage
+}
+
+export interface SpeechConnectionTestResult {
+  ok: boolean
+  message: string
+  projectId: string | null
+  voices: string[]
+}
+
+export interface SynthesizeSpeechInput {
+  text: string
+  mode: SpeechReadingMode
+}
+
+export interface SynthesizeSpeechResult {
+  audioDataUrls: string[]
+  spokenText: string
+  characters: number
+  usage: SpeechUsage
+}
+
 export interface ProjectConsoleApi {
   connections: {
     list(): Promise<Connection[]>
@@ -415,6 +464,12 @@ export interface ProjectConsoleApi {
     stop(portForwardId: string): Promise<void>
     delete(portForwardId: string): Promise<void>
     onChanged(listener: () => void): () => void
+  }
+  speech: {
+    status(): Promise<SpeechStatus>
+    updateSettings(input: UpdateSpeechSettingsInput): Promise<SpeechStatus>
+    testConnection(): Promise<SpeechConnectionTestResult>
+    synthesize(input: SynthesizeSpeechInput): Promise<SynthesizeSpeechResult>
   }
   system: {
     copyText(text: string): Promise<void>

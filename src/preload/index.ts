@@ -5,6 +5,7 @@ import type {
   CreateProjectActionInput,
   LatexChatMode,
   ProjectConsoleApi,
+  SynthesizeSpeechInput,
   StartLatexChatInput,
   StartTerminalInput,
   TerminalDataEvent,
@@ -12,7 +13,8 @@ import type {
   TerminalStateEvent,
   TerminalTransportEvent,
   UpdateLatexProjectInput,
-  UpdateProjectActionInput
+  UpdateProjectActionInput,
+  UpdateSpeechSettingsInput
 } from '../shared/types'
 
 const api: ProjectConsoleApi = {
@@ -176,6 +178,14 @@ const api: ProjectConsoleApi = {
       ipcRenderer.on('port-forward:changed', handler)
       return () => ipcRenderer.removeListener('port-forward:changed', handler)
     }
+  },
+  speech: {
+    status: () => ipcRenderer.invoke('speech:status'),
+    updateSettings: (input: UpdateSpeechSettingsInput) =>
+      ipcRenderer.invoke('speech:update-settings', input),
+    testConnection: () => ipcRenderer.invoke('speech:test-connection'),
+    synthesize: (input: SynthesizeSpeechInput) =>
+      ipcRenderer.invoke('speech:synthesize', input)
   },
   system: {
     copyText: (text: string) => ipcRenderer.invoke('system:copy-text', text),

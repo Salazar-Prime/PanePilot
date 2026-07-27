@@ -15,6 +15,8 @@ import type {
   Project,
   ProjectAction,
   ProjectType,
+  SpeechSettings,
+  SpeechUsage,
   TerminalBackend,
   TerminalSession,
   TerminalSessionKind
@@ -148,6 +150,15 @@ type PortForwardRow = {
   remote_host: string
   remote_port: number
   created_at: string
+}
+
+type SpeechSettingsRow = {
+  provider: 'google-neural2'
+  voice_name: string
+  language_code: string
+  speaking_rate: number
+  pitch: number
+  monthly_character_limit: number
 }
 
 export interface StoredPortForward {
@@ -436,6 +447,30 @@ export class Store {
         created_at TEXT NOT NULL,
         PRIMARY KEY (terminal_session_id, relative_path)
       );
+
+      CREATE TABLE IF NOT EXISTS speech_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        provider TEXT NOT NULL DEFAULT 'google-neural2'
+          CHECK (provider = 'google-neural2'),
+        voice_name TEXT NOT NULL DEFAULT 'en-US-Neural2-F',
+        language_code TEXT NOT NULL DEFAULT 'en-US',
+        speaking_rate REAL NOT NULL DEFAULT 1,
+        pitch REAL NOT NULL DEFAULT 0,
+        monthly_character_limit INTEGER NOT NULL DEFAULT 950000,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS speech_usage (
+        billing_month TEXT PRIMARY KEY,
+        characters INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT OR IGNORE INTO speech_settings
+        (id, provider, voice_name, language_code, speaking_rate, pitch,
+         monthly_character_limit, updated_at)
+      VALUES
+        (1, 'google-neural2', 'en-US-Neural2-F', 'en-US', 1, 0, 950000, datetime('now'));
     `)
 
     this.ensureAgentEventDeleteCascade()
@@ -526,7 +561,7 @@ export class Store {
         ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 9;
+      PRAGMA user_version = 10;
     `)
   }
 
@@ -1954,6 +1989,88 @@ export class Store {
     this.db.prepare('DELETE FROM port_forwards WHERE id = ?').run(id)
   }
 
+  getSpeechSettings(): SpeechSettings {
+    const row = this.db
+      .prepare(
+        `SELECT provider, voice_name, language_code, speaking_rate, pitch,
+                monthly_character_limit
+         FROM speech_settings WHERE id = 1`
+      )
+      .get() as SpeechSettingsRow
+    return {
+      provider: row.provider,
+      voiceName: row.voice_name,
+      languageCode: row.language_code,
+      speakingRate: row.speaking_rate,
+      pitch: row.pitch,
+      monthlyCharacterLimit: row.monthly_character_limit
+    }
+  }
+
+  updateSpeechSettings(settings: SpeechSettings): void {
+    this.db
+      .prepare(
+        `UPDATE speech_settings
+         SET provider = ?, voice_name = ?, language_code = ?, speaking_rate = ?,
+             pitch = ?, monthly_character_limit = ?, updated_at = ?
+         WHERE id = 1`
+      )
+      .run(
+        settings.provider,
+        settings.voiceName,
+        settings.languageCode,
+        settings.speakingRate,
+        settings.pitch,
+        settings.monthlyCharacterLimit,
+        now()
+      )
+  }
+
+  getSpeechUsage(month: string, monthlyCharacterLimit: number): SpeechUsage {
+    const row = this.db
+      .prepare('SELECT characters FROM speech_usage WHERE billing_month = ?')
+      .get(month) as { characters: number } | undefined
+    const usedCharacters = row?.characters ?? 0
+    return {
+      month,
+      usedCharacters,
+      remainingCharacters: Math.max(0, monthlyCharacterLimit - usedCharacters),
+      monthlyCharacterLimit
+    }
+  }
+
+  reserveSpeechCharacters(
+    month: string,
+    characters: number,
+    monthlyCharacterLimit: number
+  ): SpeechUsage {
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('Invalid speech billing month.')
+    if (!Number.isSafeInteger(characters) || characters <= 0) {
+      throw new Error('Speech character usage must be a positive integer.')
+    }
+    return this.inTransaction(() => {
+      const current = this.getSpeechUsage(month, monthlyCharacterLimit)
+      if (characters > current.remainingCharacters) {
+        throw new Error(
+          `This request needs ${characters.toLocaleString()} characters, but only ` +
+            `${current.remainingCharacters.toLocaleString()} remain before PanePilot's ` +
+            'monthly Google speech limit.'
+        )
+      }
+      const timestamp = now()
+      this.db
+        .prepare(
+          `INSERT INTO speech_usage (billing_month, characters, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(billing_month) DO UPDATE SET
+             characters = speech_usage.characters + excluded.characters,
+             updated_at = excluded.updated_at`
+        )
+        .run(month, characters, timestamp)
+      return this.getSpeechUsage(month, monthlyCharacterLimit)
+    })
+  }
+
   private requireSession(id: string): TerminalSession {
     const session = this.getSession(id)
     if (!session) throw new Error('Terminal session not found.')
@@ -2000,11 +2117,12 @@ export class Store {
       .run(aggregate, now(), projectId)
   }
 
-  private inTransaction(action: () => void): void {
+  private inTransaction<T>(action: () => T): T {
     this.db.exec('BEGIN')
     try {
-      action()
+      const result = action()
       this.db.exec('COMMIT')
+      return result
     } catch (error) {
       this.db.exec('ROLLBACK')
       throw error

@@ -49,6 +49,7 @@ import { NewProjectDialog } from './NewProjectDialog'
 import { PortForwardDialog } from './PortForwardDialog'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
 import { RenameDialog } from './RenameDialog'
+import { SpeechControl } from './SpeechControl'
 import { StatusDot } from './StatusDot'
 import { TerminalProfileIcon } from './TerminalProfileIcon'
 
@@ -770,6 +771,7 @@ export function App() {
           )}
         </div>
         <div className="top-actions">
+          <SpeechControl />
           {project?.latex?.overleafUrl && (
             <button
               className="secondary-button header-button overleaf-button"

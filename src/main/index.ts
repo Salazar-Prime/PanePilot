@@ -13,10 +13,12 @@ import type {
   CreateProjectInput,
   CreateProjectActionInput,
   LatexChatMode,
+  SynthesizeSpeechInput,
   StartLatexChatInput,
   StartTerminalInput,
   UpdateLatexProjectInput,
-  UpdateProjectActionInput
+  UpdateProjectActionInput,
+  UpdateSpeechSettingsInput
 } from '../shared/types'
 import { ConversationIndexer } from './conversation-indexer'
 import {
@@ -43,6 +45,7 @@ import {
   writeRemoteFileAsync
 } from './remote-file-service'
 import { discoverSshAliases } from './ssh-config'
+import { SpeechService } from './speech-service'
 import { Store } from './store'
 import { TerminalManager } from './terminal-manager'
 
@@ -54,6 +57,7 @@ let remoteConversations: RemoteConversationIndexer
 let portForwards: PortForwardManager
 let latex: LatexProjectService
 let metadata: ProjectMetadataService
+let speech: SpeechService
 
 // Keep the existing application-data identity when the packaged product name is PanePilot.
 app.setName('PanePilot')
@@ -392,6 +396,16 @@ function registerIpc(): void {
     portForwards.delete(id)
   })
 
+  ipcMain.handle('speech:status', () => speech.status())
+  ipcMain.handle(
+    'speech:update-settings',
+    (_event, input: UpdateSpeechSettingsInput) => speech.updateSettings(input)
+  )
+  ipcMain.handle('speech:test-connection', () => speech.testConnection())
+  ipcMain.handle('speech:synthesize', (_event, input: SynthesizeSpeechInput) =>
+    speech.synthesize(input)
+  )
+
   ipcMain.handle('system:copy-text', (_event, text: string) => {
     clipboard.writeText(text)
   })
@@ -479,6 +493,7 @@ if (!ownsSingleInstanceLock) {
         metadata
       )
       latex = new LatexProjectService(store, terminals)
+      speech = new SpeechService(store)
       portForwards = new PortForwardManager(store, () => {
         mainWindow?.webContents.send('port-forward:changed')
       })
@@ -505,6 +520,7 @@ if (!ownsSingleInstanceLock) {
 }
 
 app.on('before-quit', () => {
+  speech?.close()
   terminals?.shutdown()
   portForwards?.shutdown()
   store?.close()

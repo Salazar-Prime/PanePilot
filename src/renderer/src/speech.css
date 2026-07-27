@@ -1,0 +1,240 @@
+.speech-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.speech-control > .icon-button {
+  border-radius: 7px 0 0 7px;
+}
+
+.speech-menu-button {
+  display: inline-flex;
+  width: 17px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: #737b8a;
+  border: 0;
+  border-left: 1px solid #252a35;
+  border-radius: 0 7px 7px 0;
+  background: transparent;
+}
+
+.speech-menu-button:hover,
+.speech-menu-button[aria-expanded="true"] {
+  color: #d4d8e0;
+  background: #20242d;
+}
+
+.speech-popover {
+  position: absolute;
+  z-index: 120;
+  top: 36px;
+  right: 0;
+  width: min(390px, calc(100vw - 24px));
+  padding: 16px;
+  color: #cdd1da;
+  border: 1px solid #303641;
+  border-radius: 12px;
+  background: #12151c;
+  box-shadow: 0 18px 50px #000a;
+}
+
+.speech-popover > header,
+.speech-popover > footer,
+.speech-popover > header > div,
+.speech-setup > strong,
+.speech-usage > div:first-child {
+  display: flex;
+  align-items: center;
+}
+
+.speech-popover > header {
+  justify-content: space-between;
+  color: #8794bf;
+}
+
+.speech-popover > header > div {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.speech-popover > header strong {
+  color: #eef0f6;
+  font-size: 15px;
+}
+
+.speech-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.speech-actions button {
+  display: inline-flex;
+  height: 31px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #cbd0dc;
+  border: 1px solid #2e3440;
+  border-radius: 7px;
+  background: #191d26;
+  font-size: 11px;
+}
+
+.speech-actions button:hover {
+  color: #f0f2f7;
+  border-color: #46516d;
+  background: #202633;
+}
+
+.speech-usage {
+  margin-top: 13px;
+  padding: 11px;
+  border: 1px solid #283043;
+  border-radius: 8px;
+  background: #111722;
+}
+
+.speech-usage > div:first-child {
+  gap: 7px;
+  color: #aeb9dd;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.speech-usage-track {
+  height: 4px;
+  margin: 9px 0 7px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #252b36;
+}
+
+.speech-usage-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6684ef, #9c7be8);
+}
+
+.speech-usage small {
+  color: #697285;
+  font-size: 9px;
+}
+
+.speech-settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 13px;
+}
+
+.speech-settings-grid label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  color: #8e96a5;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.speech-settings-grid label > span {
+  margin-left: auto;
+  color: #b6bdd0;
+}
+
+.speech-settings-grid select,
+.speech-settings-grid input[type="number"] {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  color: #d6dae3;
+  border: 1px solid #303641;
+  border-radius: 6px;
+  outline: none;
+  background: #0d1016;
+  font-size: 10px;
+}
+
+.speech-settings-grid input[type="range"] {
+  width: 100%;
+  accent-color: #7894ef;
+}
+
+.speech-safety-note {
+  margin: 12px 0 0;
+  color: #777f90;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.speech-setup {
+  display: flex;
+  margin-top: 12px;
+  padding-top: 12px;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid #262b35;
+}
+
+.speech-setup > strong {
+  gap: 6px;
+  color: #b9c0d0;
+  font-size: 10px;
+}
+
+.speech-setup p {
+  margin: 0;
+  color: #777f90;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.speech-setup code {
+  display: block;
+  overflow: hidden;
+  padding: 6px 7px;
+  color: #aeb9dd;
+  border-radius: 5px;
+  background: #0b0e13;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.speech-setup > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 9px;
+}
+
+.speech-setup > span.success {
+  color: #75c9a6;
+}
+
+.speech-setup > span.error,
+.speech-error {
+  color: #ff8b9d;
+}
+
+.speech-error {
+  margin: 10px 0 0;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.speech-popover > footer {
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 13px;
+}
