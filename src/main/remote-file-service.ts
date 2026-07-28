@@ -14,6 +14,12 @@ const MAX_FILE_BYTES = 1024 * 1024
 const SEARCH_RESULT_LIMIT = 200
 const SEARCH_SCAN_LIMIT = 20_000
 
+export interface RemoteBinaryFile {
+  dataBase64: string
+  size: number
+  modifiedAt: string
+}
+
 const LIST_FOLDERS_SCRIPT = String.raw`
 import json, os, sys
 payload = json.load(sys.stdin)
@@ -98,6 +104,31 @@ print(json.dumps({
     "imageMimeType": image_mime,
     "imageDataUrl": None if image_data is None else "data:" + image_mime + ";base64," + image_data,
 }))
+`
+
+const READ_BINARY_FILE_SCRIPT = String.raw`
+import base64, datetime, json, os, sys
+payload = json.load(sys.stdin)
+root = os.path.realpath(os.path.expanduser(payload["root"]))
+target = os.path.realpath(os.path.join(root, payload["relativePath"]))
+if os.path.commonpath([root, target]) != root:
+    raise RuntimeError("The requested path is outside the project folder.")
+if not os.path.isfile(target):
+    raise RuntimeError("The requested file has not been built yet.")
+size = os.path.getsize(target)
+max_bytes = int(payload["maxBytes"])
+if size > max_bytes:
+    raise RuntimeError("The requested file is too large to preview in PanePilot.")
+with open(target, "rb") as handle:
+    content = handle.read()
+modified = datetime.datetime.fromtimestamp(
+    os.path.getmtime(target), datetime.timezone.utc
+).isoformat().replace("+00:00", "Z")
+print(json.dumps({
+    "dataBase64": base64.b64encode(content).decode("ascii"),
+    "size": size,
+    "modifiedAt": modified,
+}, separators=(",", ":")))
 `
 
 const OPEN_PATH_SCRIPT = String.raw`
@@ -349,7 +380,8 @@ function runRemotePythonAsync<T>(
   sshAlias: string,
   script: string,
   payload: Record<string, unknown>,
-  maxBuffer = 4 * 1024 * 1024
+  maxBuffer = 4 * 1024 * 1024,
+  timeoutMs = 15_000
 ): Promise<T> {
   const encodedScript = Buffer.from(script, 'utf8').toString('base64')
   const loader = `import base64;exec(base64.b64decode('${encodedScript}'))`
@@ -368,7 +400,7 @@ function runRemotePythonAsync<T>(
     const timer = setTimeout(() => {
       child.kill()
       finish(new Error(`Timed out connecting to ${sshAlias}.`))
-    }, 15_000)
+    }, timeoutMs)
 
     function finish(error?: Error, value?: T): void {
       if (settled) return
@@ -485,6 +517,22 @@ export async function previewRemoteFileAsync(
     preview.content = Buffer.from(preview.content, 'base64').toString('utf8')
   }
   return preview
+}
+
+export function readRemoteBinaryFile(
+  sshAlias: string,
+  root: string,
+  relativePath: string,
+  maxBytes: number
+): Promise<RemoteBinaryFile> {
+  const encodedBytes = Math.ceil(maxBytes / 3) * 4
+  return runRemotePythonAsync<RemoteBinaryFile>(
+    sshAlias,
+    READ_BINARY_FILE_SCRIPT,
+    { root, relativePath, maxBytes },
+    encodedBytes + 256 * 1024,
+    30_000
+  )
 }
 
 export async function openRemotePath(

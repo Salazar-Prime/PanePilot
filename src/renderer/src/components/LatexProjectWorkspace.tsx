@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from 'react'
 import {
   Activity,
   FileClock,
   Files,
+  FileType2,
   FileText,
   LoaderCircle,
   MessageCircleQuestion,
@@ -30,8 +38,14 @@ import { LatexManuscript } from './LatexManuscript'
 import { NotesPanel } from './NotesPanel'
 import { ProjectQnaPane } from './ProjectQnaPane'
 
+const LatexPdfPreview = lazy(async () => {
+  const module = await import('./LatexPdfPreview')
+  return { default: module.LatexPdfPreview }
+})
+
 type WorkspaceTab =
   | 'manuscript'
+  | 'pdf'
   | 'actions'
   | 'qna'
   | 'notes'
@@ -217,6 +231,9 @@ export function LatexProjectWorkspace({
         >
           <FileText size={15} /> Manuscript
         </button>
+        <button className={tab === 'pdf' ? 'active' : ''} onClick={() => setTab('pdf')}>
+          <FileType2 size={15} /> PDF Preview
+        </button>
         <button className={tab === 'actions' ? 'active' : ''} onClick={() => setTab('actions')}>
           <Play size={15} /> Actions
         </button>
@@ -278,6 +295,22 @@ export function LatexProjectWorkspace({
             onOpenFile={openFile}
           />
         </div>
+      )}
+      {tab === 'pdf' && (
+        <Suspense
+          fallback={
+            <div className="latex-pdf-state" role="status">
+              <LoaderCircle className="spin" size={28} />
+              <strong>Preparing the PDF viewer</strong>
+            </div>
+          }
+        >
+          <LatexPdfPreview
+            key={project.id}
+            projectId={project.id}
+            mainFile={workspace.details.mainFile}
+          />
+        </Suspense>
       )}
       <div
         className={`workspace-panel-cache ${tab === 'notes' ? 'active' : ''}`}

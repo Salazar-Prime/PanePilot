@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   diffLatexFile,
+  latexPdfPath,
   parseLatexOutline
 } from '../src/main/latex-project-service'
 import { normalizeProjectRelativePath } from '../src/main/latex-paths'
@@ -116,6 +117,11 @@ describe('LaTeX edit highlighting', () => {
 })
 
 describe('LaTeX project paths', () => {
+  it('places the compiled PDF beside the configured main file', () => {
+    expect(latexPdfPath('main.tex')).toBe('main.pdf')
+    expect(latexPdfPath('papers/Draft.TeX')).toBe('papers/Draft.pdf')
+  })
+
   it('normalizes relative TeX files and rejects traversal', () => {
     expect(normalizeProjectRelativePath('./paper/main.tex', 'Main file', { extension: '.tex' }))
       .toBe('paper/main.tex')

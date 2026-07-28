@@ -11,6 +11,7 @@ import type {
   LatexChangeHighlight,
   LatexChangeSet,
   LatexFileChanges,
+  LatexPdfDocument,
   LatexProjectDetails,
   LatexSection,
   LatexWorkspace,
@@ -24,6 +25,7 @@ import {
 } from './latex-paths'
 import {
   previewRemoteFile,
+  readRemoteBinaryFile,
   readRemoteTextFiles,
   remoteDirectoryExists
 } from './remote-file-service'
@@ -32,6 +34,7 @@ import type { TerminalManager } from './terminal-manager'
 
 const MAX_LATEX_FILES = 256
 const MAX_LATEX_BYTES = 8 * 1024 * 1024
+const MAX_PDF_BYTES = 32 * 1024 * 1024
 const MAX_PROMPT_LENGTH = 50_000
 const SECTION_LEVELS: Record<string, number> = {
   part: 0,
@@ -285,6 +288,39 @@ function localDirectoryExists(root: string, requested: string): boolean {
   }
 }
 
+export function latexPdfPath(mainFile: string): string {
+  return mainFile.replace(/\.tex$/i, '.pdf')
+}
+
+function readLocalPdf(root: string, requested: string): LatexPdfDocument {
+  let realRoot: string
+  let target: string
+  try {
+    realRoot = realpathSync(root)
+    target = realpathSync(resolve(realRoot, requested))
+  } catch {
+    throw new Error(`Compiled PDF “${requested}” was not found.`)
+  }
+  if (target !== realRoot && !target.startsWith(`${realRoot}${sep}`)) {
+    throw new Error('The requested PDF is outside the project folder.')
+  }
+  const stat = statSync(target)
+  if (!stat.isFile()) throw new Error(`Compiled PDF “${requested}” was not found.`)
+  if (stat.size > MAX_PDF_BYTES) {
+    throw new Error('PanePilot previews compiled PDFs up to 32 MB.')
+  }
+  const content = readFileSync(target)
+  if (!content.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+    throw new Error(`“${requested}” is not a valid PDF file.`)
+  }
+  return {
+    path: requested,
+    size: stat.size,
+    modifiedAt: stat.mtime.toISOString(),
+    dataBase64: content.toString('base64')
+  }
+}
+
 function lineOperations(before: string[], after: string[]): DiffOperation[] {
   let prefix = 0
   while (
@@ -484,6 +520,24 @@ export class LatexProjectService {
               details.contextFolder
             )
     }
+  }
+
+  async getPdf(projectId: string): Promise<LatexPdfDocument> {
+    const { project, connection, details } = this.requireProject(projectId)
+    const path = latexPdfPath(details.mainFile)
+    if (connection.kind === 'local') return readLocalPdf(project.folder, path)
+
+    const remote = await readRemoteBinaryFile(
+      connection.sshAlias ?? connection.name,
+      project.folder,
+      path,
+      MAX_PDF_BYTES
+    )
+    const signature = Buffer.from(remote.dataBase64.slice(0, 8), 'base64')
+    if (!signature.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+      throw new Error(`“${path}” is not a valid PDF file.`)
+    }
+    return { path, ...remote }
   }
 
   update(input: UpdateLatexProjectInput): LatexWorkspace {

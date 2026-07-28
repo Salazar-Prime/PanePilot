@@ -164,6 +164,13 @@ export interface LatexWorkspace {
   contextAvailable: boolean
 }
 
+export interface LatexPdfDocument {
+  path: string
+  size: number
+  modifiedAt: string
+  dataBase64: string
+}
+
 export interface StartLatexChatInput {
   projectId: string
   name?: string
@@ -450,6 +457,7 @@ export interface ProjectConsoleApi {
   }
   latex: {
     getWorkspace(projectId: string): Promise<LatexWorkspace>
+    getPdf(projectId: string): Promise<LatexPdfDocument>
     update(input: UpdateLatexProjectInput): Promise<LatexWorkspace>
     startChat(input: StartLatexChatInput): Promise<TerminalSession>
     setChatMode(sessionId: string, mode: LatexChatMode): Promise<void>
