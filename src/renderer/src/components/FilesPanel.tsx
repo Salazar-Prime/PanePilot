@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-react'
 import type { FileEntry, FilePreview, Project } from '@shared/types'
+import { addShowInFinderAction } from '../lib/monacoFinderAction'
 import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
 import { Editor, monaco } from '../lib/monaco'
 
@@ -79,6 +80,8 @@ function FilesPanelInstance({
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
+  const finderActionRef = useRef<{ dispose(): void } | null>(null)
+  const activeFinderPathRef = useRef<string | null>(null)
   const pendingRevealRef = useRef<ProjectFileOpenRequest | null>(null)
   const initialPathRef = useRef(initialPath)
   const listingRequestRef = useRef(0)
@@ -90,6 +93,7 @@ function FilesPanelInstance({
   const preview = activeFile?.preview ?? null
   const draft = activeFile?.draft ?? ''
   const editing = activeFile?.editing ?? false
+  activeFinderPathRef.current = preview?.path ?? null
 
   function updateOpenFile(
     filePath: string,
@@ -128,6 +132,13 @@ function FilesPanelInstance({
   useEffect(() => {
     if (!loaded) void load(initialPath)
   }, [])
+
+  useEffect(
+    () => () => {
+      finderActionRef.current?.dispose()
+    },
+    []
+  )
 
   useEffect(() => {
     if (initialPathRef.current === initialPath) return
@@ -386,14 +397,17 @@ function FilesPanelInstance({
     }
   }
 
-  async function showInFinder() {
-    if (!preview) return
+  async function showPathInFinder(filePath: string) {
     setError('')
     try {
-      await window.projectConsole.files.showInFolder(project.id, preview.path)
+      await window.projectConsole.files.showInFolder(project.id, filePath)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     }
+  }
+
+  async function showInFinder() {
+    if (preview) await showPathInFinder(preview.path)
   }
 
   return (
@@ -637,6 +651,16 @@ function FilesPanelInstance({
                   }
                   onMount={(editor) => {
                     editorRef.current = editor
+                    finderActionRef.current?.dispose()
+                    if (project.connectionId === 'local') {
+                      finderActionRef.current = addShowInFinderAction(
+                        editor,
+                        async () => {
+                          const filePath = activeFinderPathRef.current
+                          if (filePath) await showPathInFinder(filePath)
+                        }
+                      )
+                    }
                     revealRequestedPosition(editor)
                   }}
                   options={{

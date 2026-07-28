@@ -15,6 +15,7 @@ import type {
   ProjectNoteSummary
 } from '@shared/types'
 import { Editor, monaco } from '../lib/monaco'
+import { addShowInFinderAction } from '../lib/monacoFinderAction'
 
 type NoteDialog =
   | { mode: 'create'; initialName: '' }
@@ -31,7 +32,12 @@ export function NotesPanel({ project }: { project: Project }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const saveRef = useRef<() => void>(() => undefined)
+  const finderActionRef = useRef<{ dispose(): void } | null>(null)
+  const activeFinderPathRef = useRef<string | null>(null)
   const dirty = note != null && draft !== saved
+  activeFinderPathRef.current = note
+    ? `.panepilot/notes/${note.path}`
+    : null
 
   function canDiscard(): boolean {
     return (
@@ -190,6 +196,24 @@ export function NotesPanel({ project }: { project: Project }) {
     void refresh(null, false)
   }, [project.id])
 
+  useEffect(
+    () => () => {
+      finderActionRef.current?.dispose()
+    },
+    []
+  )
+
+  async function showActiveNoteInFinder() {
+    const filePath = activeFinderPathRef.current
+    if (!filePath) return
+    setError('')
+    try {
+      await window.projectConsole.files.showInFolder(project.id, filePath)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    }
+  }
+
   return (
     <section className="notes-layout">
       <aside className="notes-list">
@@ -296,6 +320,13 @@ export function NotesPanel({ project }: { project: Project }) {
                     monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
                     () => saveRef.current()
                   )
+                  finderActionRef.current?.dispose()
+                  if (project.connectionId === 'local') {
+                    finderActionRef.current = addShowInFinderAction(
+                      editor,
+                      showActiveNoteInFinder
+                    )
+                  }
                   editor.focus()
                 }}
                 options={{

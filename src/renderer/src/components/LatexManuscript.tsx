@@ -23,6 +23,7 @@ import type {
   LatexWorkspace,
   Project
 } from '@shared/types'
+import { addShowInFinderAction } from '../lib/monacoFinderAction'
 
 loader.config({ monaco })
 self.MonacoEnvironment = {
@@ -103,9 +104,12 @@ export function LatexManuscript({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
+  const finderActionRef = useRef<{ dispose(): void } | null>(null)
+  const activeFinderPathRef = useRef(path)
   const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
   const viewZoneIdsRef = useRef<string[]>([])
   const dirty = draft !== savedContent
+  activeFinderPathRef.current = path
   const selectedSection =
     workspace.sections.find((section) => section.id === selectedSectionId) ?? null
   const desiredPath =
@@ -163,6 +167,13 @@ export function LatexManuscript({
     void load(desiredPath, selectedSection)
   }, [project.id, desiredPath])
 
+  useEffect(
+    () => () => {
+      finderActionRef.current?.dispose()
+    },
+    []
+  )
+
   useEffect(() => {
     const changed = changes?.files.some((file) => file.path === path)
     if (!changed || dirty) return
@@ -219,8 +230,27 @@ export function LatexManuscript({
     setDraft(savedContent)
   }
 
+  async function showActiveFileInFinder() {
+    setError('')
+    try {
+      await window.projectConsole.files.showInFolder(
+        project.id,
+        activeFinderPathRef.current
+      )
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    }
+  }
+
   const handleMount: OnMount = (editor) => {
     editorRef.current = editor
+    finderActionRef.current?.dispose()
+    if (project.connectionId === 'local') {
+      finderActionRef.current = addShowInFinderAction(
+        editor,
+        showActiveFileInFinder
+      )
+    }
     applyDecorations()
     if (selectedSection && selectedSection.sourceFile === path) {
       editor.revealLineInCenter(selectedSection.startLine)
