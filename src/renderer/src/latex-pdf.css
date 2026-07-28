@@ -344,10 +344,14 @@
 
   .latex-pdf-print-page {
     display: block;
+    width: 100%;
+    height: auto;
     margin: 0;
     overflow: hidden;
     break-after: page;
+    break-inside: avoid;
     page-break-after: always;
+    page-break-inside: avoid;
     background: #fff;
   }
 
@@ -358,5 +362,7 @@
 
   .latex-pdf-print-page canvas {
     display: block;
+    width: 100% !important;
+    height: auto !important;
   }
 }

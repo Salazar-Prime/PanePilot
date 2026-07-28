@@ -15,5 +15,7 @@ describe('LaTeX PDF print layout', () => {
     expect(printRules).toContain('body > #root')
     expect(printRules).toContain('display: none !important;')
     expect(printRules).toContain('break-after: page;')
+    expect(printRules).toContain('break-inside: avoid;')
+    expect(printRules).toContain('width: 100% !important;')
   })
 })

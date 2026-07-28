@@ -219,13 +219,9 @@ export function LatexPdfPreview({
         const viewport = page.getViewport({ scale })
         const pageShell = document.createElement('section')
         pageShell.className = 'latex-pdf-print-page'
-        pageShell.style.width = `${baseViewport.width / 72}in`
-        pageShell.style.height = `${baseViewport.height / 72}in`
         const canvas = document.createElement('canvas')
         canvas.width = Math.max(1, Math.ceil(viewport.width))
         canvas.height = Math.max(1, Math.ceil(viewport.height))
-        canvas.style.width = `${baseViewport.width / 72}in`
-        canvas.style.height = `${baseViewport.height / 72}in`
         const context = canvas.getContext('2d', { alpha: false })
         if (!context) throw new Error('PanePilot could not prepare the PDF for printing.')
         pageShell.append(canvas)
@@ -246,7 +242,7 @@ export function LatexPdfPreview({
         window.requestAnimationFrame(() => resolveFrame())
       )
       if (version !== printVersionRef.current) return
-      await window.projectConsole.system.printCurrentWindow()
+      await window.projectConsole.system.printCurrentWindow(pdf.numPages)
     } catch (caught) {
       if (version === printVersionRef.current) {
         setError(caught instanceof Error ? caught.message : String(caught))

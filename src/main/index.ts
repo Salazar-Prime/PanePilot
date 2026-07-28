@@ -426,12 +426,16 @@ function registerIpc(): void {
     clipboard.writeText(text)
   })
   ipcMain.handle('system:read-text', () => clipboard.readText())
-  ipcMain.handle('system:print-current-window', (event) => {
+  ipcMain.handle('system:print-current-window', (event, pageCount: number) => {
+    if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 10_000) {
+      throw new Error('The PDF page count is invalid.')
+    }
     return new Promise<void>((resolvePrint, rejectPrint) => {
       event.sender.print(
         {
           silent: false,
-          printBackground: true
+          printBackground: true,
+          pageRanges: [{ from: 0, to: pageCount - 1 }]
         },
         (success, failureReason) => {
           if (success || /cancel/i.test(failureReason ?? '')) {

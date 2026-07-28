@@ -195,7 +195,8 @@ const api: ProjectConsoleApi = {
     readText: () => ipcRenderer.invoke('system:read-text'),
     openProjectFolder: (projectId: string) =>
       ipcRenderer.invoke('system:open-project-folder', projectId),
-    printCurrentWindow: () => ipcRenderer.invoke('system:print-current-window'),
+    printCurrentWindow: (pageCount: number) =>
+      ipcRenderer.invoke('system:print-current-window', pageCount),
     openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url)
   }
 }

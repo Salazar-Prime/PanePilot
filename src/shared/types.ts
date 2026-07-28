@@ -484,7 +484,7 @@ export interface ProjectConsoleApi {
     copyText(text: string): Promise<void>
     readText(): Promise<string>
     openProjectFolder(projectId: string): Promise<void>
-    printCurrentWindow(): Promise<void>
+    printCurrentWindow(pageCount: number): Promise<void>
     openExternal(url: string): Promise<void>
   }
 }
