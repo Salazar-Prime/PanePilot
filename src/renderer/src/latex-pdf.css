@@ -323,7 +323,11 @@
 
   html,
   body {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
     margin: 0 !important;
+    overflow: visible !important;
     background: #fff !important;
   }
 
@@ -333,6 +337,9 @@
 
   .latex-pdf-print-root {
     display: block !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
   .latex-pdf-print-page {
