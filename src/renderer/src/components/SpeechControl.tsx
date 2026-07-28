@@ -21,6 +21,7 @@ import {
 } from '../lib/speechContent'
 
 const DEFAULT_VOICES = [
+  'en-US-Neural2-A',
   'en-US-Neural2-C',
   'en-US-Neural2-D',
   'en-US-Neural2-E',

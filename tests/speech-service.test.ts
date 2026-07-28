@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   googleBillingMonth,
+  SpeechService,
   splitSpeechText,
   verbalizeSpeechText
 } from '../src/main/speech-service'
@@ -77,6 +78,38 @@ describe('speech usage limit', () => {
         store.getSpeechUsage('2026-07', settings.monthlyCharacterLimit)
           .usedCharacters
       ).toBe(949_000)
+    } finally {
+      store.close()
+    }
+  })
+})
+
+describe('speech Google authentication', () => {
+  it('uses the ADC quota project when authorized-user credentials have no resource project', async () => {
+    appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-speech-'))
+    const store = new Store(appDataPath)
+    const service = new SpeechService(store)
+    const fakeClient = {
+      listVoices: vi.fn().mockResolvedValue([
+        {
+          voices: [{ name: 'en-US-Neural2-F' }]
+        }
+      ]),
+      auth: {
+        getClient: vi.fn().mockResolvedValue({
+          quotaProjectId: 'panepilot-t2s'
+        })
+      }
+    }
+    Reflect.set(service, 'client', fakeClient)
+
+    try {
+      await expect(service.testConnection()).resolves.toEqual({
+        ok: true,
+        message: 'Connected to Google Cloud project panepilot-t2s.',
+        projectId: 'panepilot-t2s',
+        voices: ['en-US-Neural2-F']
+      })
     } finally {
       store.close()
     }

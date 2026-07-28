@@ -264,7 +264,9 @@ function validatedSettings(
 function friendlyGoogleError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error)
   if (
-    /default credentials|could not load|application default|unauthenticated/i.test(message)
+    /default credentials|could not load|application default|unauthenticated|quota project/i.test(
+      message
+    )
   ) {
     return new Error(`Google Cloud credentials are not configured. ${GOOGLE_TTS_SETUP_COMMANDS}`)
   }
@@ -303,10 +305,11 @@ export class SpeechService {
     try {
       const client = this.getClient()
       const settings = this.store.getSpeechSettings()
-      const [[response], projectId] = await Promise.all([
+      const [[response], authClient] = await Promise.all([
         client.listVoices({ languageCode: settings.languageCode }),
-        client.getProjectId()
+        client.auth.getClient()
       ])
+      const projectId = authClient.quotaProjectId ?? null
       const voices = (response.voices ?? [])
         .map((voice) => voice.name ?? '')
         .filter((name) => name.startsWith('en-US-Neural2-'))
@@ -357,7 +360,7 @@ export class SpeechService {
     let client: TextToSpeechClient
     try {
       client = this.getClient()
-      await client.getProjectId()
+      await client.auth.getClient()
     } catch (error) {
       throw friendlyGoogleError(error)
     }
