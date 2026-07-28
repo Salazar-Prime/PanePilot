@@ -137,7 +137,9 @@ const api: ProjectConsoleApi = {
     save: (projectId: string, relativePath: string, content: string) =>
       ipcRenderer.invoke('files:save', projectId, relativePath, content),
     download: (projectId: string, relativePath: string) =>
-      ipcRenderer.invoke('files:download', projectId, relativePath)
+      ipcRenderer.invoke('files:download', projectId, relativePath),
+    showInFolder: (projectId: string, relativePath: string) =>
+      ipcRenderer.invoke('files:show-in-folder', projectId, relativePath)
   },
   remoteFolders: {
     list: (connectionId: string, path?: string) =>
@@ -193,6 +195,7 @@ const api: ProjectConsoleApi = {
     readText: () => ipcRenderer.invoke('system:read-text'),
     openProjectFolder: (projectId: string) =>
       ipcRenderer.invoke('system:open-project-folder', projectId),
+    printCurrentWindow: () => ipcRenderer.invoke('system:print-current-window'),
     openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url)
   }
 }

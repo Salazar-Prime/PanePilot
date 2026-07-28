@@ -26,6 +26,7 @@ import {
   listLocalFiles,
   openLocalPath,
   previewLocalFile,
+  resolveLocalFilePath,
   searchLocalFiles,
   writeLocalFile
 } from './file-service'
@@ -379,6 +380,18 @@ function registerIpc(): void {
       return true
     }
   )
+  ipcMain.handle(
+    'files:show-in-folder',
+    (_event, projectId: string, relativePath: string) => {
+      const project = store.getProject(projectId)
+      if (!project) throw new Error('Project not found.')
+      const connection = store.getConnection(project.connectionId)
+      if (connection?.kind !== 'local') {
+        throw new Error('Only files stored on this Mac can be shown in Finder.')
+      }
+      shell.showItemInFolder(resolveLocalFilePath(project.folder, relativePath))
+    }
+  )
 
   ipcMain.handle('port-forwards:list', (_event, connectionId: string) => {
     const connection = store.getConnection(connectionId)
@@ -413,6 +426,25 @@ function registerIpc(): void {
     clipboard.writeText(text)
   })
   ipcMain.handle('system:read-text', () => clipboard.readText())
+  ipcMain.handle('system:print-current-window', (event) => {
+    return new Promise<void>((resolvePrint, rejectPrint) => {
+      event.sender.print(
+        {
+          silent: false,
+          printBackground: true
+        },
+        (success, failureReason) => {
+          if (success || /cancel/i.test(failureReason ?? '')) {
+            resolvePrint()
+            return
+          }
+          rejectPrint(
+            new Error(failureReason || 'The system print dialog could not be opened.')
+          )
+        }
+      )
+    })
+  })
   ipcMain.handle('system:open-project-folder', async (_event, projectId: string) => {
     const project = store.getProject(projectId)
     if (!project) throw new Error('Project not found.')

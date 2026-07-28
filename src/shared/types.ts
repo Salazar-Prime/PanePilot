@@ -447,6 +447,7 @@ export interface ProjectConsoleApi {
     open(projectId: string, relativePath: string): Promise<FileOpenResult>
     save(projectId: string, relativePath: string, content: string): Promise<void>
     download(projectId: string, relativePath: string): Promise<boolean>
+    showInFolder(projectId: string, relativePath: string): Promise<void>
   }
   remoteFolders: {
     list(connectionId: string, path?: string): Promise<RemoteFolderListing>
@@ -483,6 +484,7 @@ export interface ProjectConsoleApi {
     copyText(text: string): Promise<void>
     readText(): Promise<string>
     openProjectFolder(projectId: string): Promise<void>
+    printCurrentWindow(): Promise<void>
     openExternal(url: string): Promise<void>
   }
 }

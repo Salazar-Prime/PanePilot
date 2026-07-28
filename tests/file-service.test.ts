@@ -2,6 +2,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync
 } from 'node:fs'
@@ -11,6 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   openLocalPath,
   previewLocalFile,
+  resolveLocalFilePath,
   searchLocalFiles,
   writeLocalFile
 } from '../src/main/file-service'
@@ -79,6 +81,25 @@ describe('local file editing', () => {
     expect(result.entries.map((entry) => entry.path)).toEqual([
       join('src', 'index.ts')
     ])
+  })
+
+  it('resolves only existing files for desktop reveal actions', () => {
+    const container = mkdtempSync(join(tmpdir(), 'panepilot-reveal-'))
+    temporaryRoots.push(container)
+    const root = join(container, 'project')
+    mkdirSync(root)
+    mkdirSync(join(root, 'src'))
+    const file = join(root, 'src', 'index.ts')
+    writeFileSync(file, 'export {}')
+    writeFileSync(join(container, 'outside.txt'), 'private')
+
+    expect(resolveLocalFilePath(root, 'src/index.ts')).toBe(realpathSync(file))
+    expect(() => resolveLocalFilePath(root, 'src')).toThrow(
+      'requested path is not a file'
+    )
+    expect(() => resolveLocalFilePath(root, '../outside.txt')).toThrow(
+      'outside the project folder'
+    )
   })
 })
 

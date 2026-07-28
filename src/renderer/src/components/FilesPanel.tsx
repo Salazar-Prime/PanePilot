@@ -386,6 +386,16 @@ function FilesPanelInstance({
     }
   }
 
+  async function showInFinder() {
+    if (!preview) return
+    setError('')
+    try {
+      await window.projectConsole.files.showInFolder(project.id, preview.path)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    }
+  }
+
   return (
     <div className="files-layout">
       <aside className="file-browser">
@@ -540,6 +550,15 @@ function FilesPanelInstance({
                 </small>
               )}
               <div className="preview-actions">
+                {project.connectionId === 'local' && (
+                  <button
+                    className="secondary-button"
+                    onClick={() => void showInFinder()}
+                    title="Reveal the saved project file in Finder"
+                  >
+                    <FolderOpen size={13} /> Show in Finder
+                  </button>
+                )}
                 <button
                   className="secondary-button"
                   onClick={() => void download()}

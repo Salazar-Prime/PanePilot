@@ -36,6 +36,14 @@ function boundedPath(root: string, requested = '.'): string {
   return candidate
 }
 
+export function resolveLocalFilePath(root: string, requested: string): string {
+  const filePath = boundedPath(root, requested)
+  if (!statSync(filePath).isFile()) {
+    throw new Error('The requested path is not a file.')
+  }
+  return filePath
+}
+
 export function listLocalFiles(root: string, requested = '.'): FileEntry[] {
   const realRoot = realpathSync(root)
   const directory = boundedPath(root, requested)

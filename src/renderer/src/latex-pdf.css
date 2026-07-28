@@ -144,6 +144,17 @@
   opacity: 0.28;
 }
 
+.latex-pdf-print-button {
+  height: 28px;
+  margin-left: 5px;
+  padding: 0 10px;
+  font-size: 9px;
+}
+
+.latex-pdf-print-root {
+  display: none;
+}
+
 .latex-pdf-pasteboard {
   min-width: 0;
   min-height: 0;
@@ -302,5 +313,43 @@
 @media (prefers-reduced-motion: reduce) {
   .latex-pdf-preview .spin {
     animation: none;
+  }
+}
+
+@media print {
+  @page {
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    background: #fff !important;
+  }
+
+  body > #root {
+    display: none !important;
+  }
+
+  .latex-pdf-print-root {
+    display: block !important;
+  }
+
+  .latex-pdf-print-page {
+    display: block;
+    margin: 0;
+    overflow: hidden;
+    break-after: page;
+    page-break-after: always;
+    background: #fff;
+  }
+
+  .latex-pdf-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .latex-pdf-print-page canvas {
+    display: block;
   }
 }

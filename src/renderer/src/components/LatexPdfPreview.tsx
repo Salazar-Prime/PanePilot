@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
+  FolderOpen,
   FileType2,
   LoaderCircle,
   Minus,
   Plus,
+  Printer,
   RefreshCw
 } from 'lucide-react'
 import {
@@ -22,10 +24,14 @@ GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 2.5
 const ZOOM_STEP = 0.25
+const MAX_PRINT_SCALE = 2
+const PRINT_PIXEL_BUDGET = 40_000_000
+const MAX_PRINT_CANVAS_EDGE = 8_192
 
 interface LatexPdfPreviewProps {
   projectId: string
   mainFile: string
+  local: boolean
 }
 
 function decodeBase64(value: string): Uint8Array {
@@ -49,11 +55,13 @@ function compiledPdfPath(mainFile: string): string {
 
 export function LatexPdfPreview({
   projectId,
-  mainFile
+  mainFile,
+  local
 }: LatexPdfPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const documentRef = useRef<PDFDocumentProxy | null>(null)
   const loadVersionRef = useRef(0)
+  const printVersionRef = useRef(0)
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [metadata, setMetadata] = useState<
     Pick<LatexPdfDocument, 'path' | 'size' | 'modifiedAt'> | null
@@ -62,6 +70,7 @@ export function LatexPdfPreview({
   const [zoom, setZoom] = useState(1)
   const [loading, setLoading] = useState(true)
   const [rendering, setRendering] = useState(false)
+  const [printingPage, setPrintingPage] = useState<number | null>(null)
   const [error, setError] = useState('')
   const expectedPath = compiledPdfPath(mainFile)
 
@@ -101,6 +110,7 @@ export function LatexPdfPreview({
     void loadPdf()
     return () => {
       loadVersionRef.current += 1
+      printVersionRef.current += 1
       const currentDocument = documentRef.current
       documentRef.current = null
       if (currentDocument) void currentDocument.destroy()
@@ -161,6 +171,90 @@ export function LatexPdfPreview({
     setZoom((current) =>
       Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, current + delta))
     )
+  }
+
+  async function showInFinder() {
+    if (!metadata) return
+    setError('')
+    try {
+      await window.projectConsole.files.showInFolder(projectId, metadata.path)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    }
+  }
+
+  async function printPdf() {
+    if (!pdf || printingPage != null) return
+    const version = ++printVersionRef.current
+    const printRoot = document.createElement('div')
+    printRoot.className = 'latex-pdf-print-root'
+    printRoot.setAttribute('aria-hidden', 'true')
+    document.body.append(printRoot)
+    setPrintingPage(0)
+    setError('')
+
+    try {
+      const pages = []
+      let basePixels = 0
+      for (let pageIndex = 1; pageIndex <= pdf.numPages; pageIndex += 1) {
+        const page = await pdf.getPage(pageIndex)
+        if (version !== printVersionRef.current) return
+        const viewport = page.getViewport({ scale: 1 })
+        pages.push({ page, viewport })
+        basePixels += viewport.width * viewport.height
+      }
+
+      const documentScale = Math.min(
+        MAX_PRINT_SCALE,
+        Math.sqrt(PRINT_PIXEL_BUDGET / Math.max(1, basePixels))
+      )
+      for (let index = 0; index < pages.length; index += 1) {
+        if (version !== printVersionRef.current) return
+        const { page, viewport: baseViewport } = pages[index]
+        const scale = Math.min(
+          documentScale,
+          MAX_PRINT_CANVAS_EDGE / baseViewport.width,
+          MAX_PRINT_CANVAS_EDGE / baseViewport.height
+        )
+        const viewport = page.getViewport({ scale })
+        const pageShell = document.createElement('section')
+        pageShell.className = 'latex-pdf-print-page'
+        pageShell.style.width = `${baseViewport.width / 72}in`
+        pageShell.style.height = `${baseViewport.height / 72}in`
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.ceil(viewport.width))
+        canvas.height = Math.max(1, Math.ceil(viewport.height))
+        canvas.style.width = `${baseViewport.width / 72}in`
+        canvas.style.height = `${baseViewport.height / 72}in`
+        const context = canvas.getContext('2d', { alpha: false })
+        if (!context) throw new Error('PanePilot could not prepare the PDF for printing.')
+        pageShell.append(canvas)
+        printRoot.append(pageShell)
+        await page.render({
+          canvasContext: context,
+          viewport,
+          background: '#ffffff'
+        }).promise
+        if (version === printVersionRef.current) setPrintingPage(index + 1)
+      }
+
+      await document.fonts.ready
+      await new Promise<void>((resolveFrame) =>
+        window.requestAnimationFrame(() => resolveFrame())
+      )
+      await new Promise<void>((resolveFrame) =>
+        window.requestAnimationFrame(() => resolveFrame())
+      )
+      if (version !== printVersionRef.current) return
+      await window.projectConsole.system.printCurrentWindow()
+    } catch (caught) {
+      if (version === printVersionRef.current) {
+        setError(caught instanceof Error ? caught.message : String(caught))
+      }
+    } finally {
+      printRoot.remove()
+      if (version === printVersionRef.current) setPrintingPage(null)
+    }
   }
 
   if (loading) {
@@ -259,11 +353,37 @@ export function LatexPdfPreview({
           </button>
           <button
             className="icon-button latex-pdf-refresh"
+            disabled={printingPage != null}
             onClick={() => void loadPdf()}
             aria-label="Reload compiled PDF"
             title="Reload compiled PDF"
           >
             <RefreshCw size={14} />
+          </button>
+          {local && (
+            <button
+              className="icon-button"
+              onClick={() => void showInFinder()}
+              aria-label="Show compiled PDF in Finder"
+              title="Show compiled PDF in Finder"
+            >
+              <FolderOpen size={14} />
+            </button>
+          )}
+          <button
+            className="secondary-button latex-pdf-print-button"
+            disabled={printingPage != null}
+            onClick={() => void printPdf()}
+            title="Open the system print dialog"
+          >
+            {printingPage != null ? (
+              <LoaderCircle className="spin" size={14} />
+            ) : (
+              <Printer size={14} />
+            )}
+            {printingPage == null
+              ? 'Print'
+              : `Preparing ${printingPage}/${pdf.numPages}`}
           </button>
         </div>
       </header>

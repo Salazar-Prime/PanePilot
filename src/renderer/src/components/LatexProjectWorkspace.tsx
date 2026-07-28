@@ -309,6 +309,7 @@ export function LatexProjectWorkspace({
             key={project.id}
             projectId={project.id}
             mainFile={workspace.details.mainFile}
+            local={project.connectionId === 'local'}
           />
         </Suspense>
       )}
