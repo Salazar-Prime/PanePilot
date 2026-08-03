@@ -27,6 +27,7 @@ import type {
 } from './tmux-metadata'
 
 const OUTPUT_LIMIT = 512 * 1024
+const OUTPUT_CHUNK_LIMIT = 4 * 1024
 const STATE_PRIORITY: AgentState[] = [
   'needs-input',
   'needs-attention',
@@ -181,6 +182,45 @@ function now(): string {
   return new Date().toISOString()
 }
 
+function retainedTerminalOutput(data: string): string {
+  const encoded = Buffer.from(data, 'utf8')
+  if (encoded.length <= OUTPUT_LIMIT) return data
+  let start = encoded.length - OUTPUT_LIMIT
+  while (start < encoded.length && (encoded[start] & 0xc0) === 0x80) start += 1
+  return encoded.subarray(start).toString('utf8')
+}
+
+function terminalOutputChunks(data: string, bounded = true): string[] {
+  const retained = Buffer.from(
+    bounded ? retainedTerminalOutput(data) : data,
+    'utf8'
+  )
+  const chunks: string[] = []
+  for (let start = 0; start < retained.length; ) {
+    let end = Math.min(retained.length, start + OUTPUT_CHUNK_LIMIT)
+    while (end < retained.length && (retained[end] & 0xc0) === 0x80) end -= 1
+    chunks.push(retained.subarray(start, end).toString('utf8'))
+    start = end
+  }
+  return chunks
+}
+
+function terminalOutputPrefix(
+  data: string,
+  maximumBytes: number
+): { prefix: string; remainder: string } {
+  if (maximumBytes <= 0) return { prefix: '', remainder: data }
+  const encoded = Buffer.from(data, 'utf8')
+  if (encoded.length <= maximumBytes) return { prefix: data, remainder: '' }
+  let end = maximumBytes
+  while (end > 0 && (encoded[end] & 0xc0) === 0x80) end -= 1
+  if (end === 0) return { prefix: '', remainder: data }
+  return {
+    prefix: encoded.subarray(0, end).toString('utf8'),
+    remainder: encoded.subarray(end).toString('utf8')
+  }
+}
+
 export function validatedActionId(value: string): string {
   const id = value.trim().toLowerCase()
   if (
@@ -267,7 +307,8 @@ function mapLatexChat(row: LatexChatRow): LatexChatAttachment {
 
 function mapSession(
   row: SessionRow,
-  latexChat: LatexChatAttachment | null = null
+  latexChat: LatexChatAttachment | null = null,
+  output = row.output
 ): TerminalSession {
   return {
     id: row.id,
@@ -285,7 +326,7 @@ function mapSession(
     archived: Boolean(row.archived),
     pinned: Boolean(row.pinned),
     flagged: Boolean(row.flagged),
-    output: row.output,
+    output,
     latexChat,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -371,6 +412,19 @@ export class Store {
         output TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS terminal_output_chunks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        terminal_session_id TEXT NOT NULL
+          REFERENCES terminal_sessions(id) ON DELETE CASCADE,
+        content BLOB NOT NULL,
+        byte_count INTEGER NOT NULL
+          CHECK (
+            byte_count > 0 AND
+            typeof(content) = 'blob' AND
+            byte_count = length(content)
+          )
       );
 
       CREATE TABLE IF NOT EXISTS project_actions (
@@ -547,6 +601,8 @@ export class Store {
         ON terminal_sessions(provider_session_id);
       CREATE INDEX IF NOT EXISTS terminal_sessions_provider_name_idx
         ON terminal_sessions(provider_session_name);
+      CREATE INDEX IF NOT EXISTS terminal_output_chunks_session_idx
+        ON terminal_output_chunks(terminal_session_id, id);
       CREATE INDEX IF NOT EXISTS activities_project_idx
         ON activities(project_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS port_forwards_connection_idx
@@ -561,8 +617,29 @@ export class Store {
         ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 10;
+      PRAGMA user_version = 11;
     `)
+    this.migrateLegacyTerminalOutput()
+  }
+
+  private migrateLegacyTerminalOutput(): void {
+    const rows = this.db
+      .prepare(
+        `SELECT session.id, session.output
+         FROM terminal_sessions session
+         WHERE session.output <> ''
+           AND NOT EXISTS (
+             SELECT 1
+             FROM terminal_output_chunks chunk
+             WHERE chunk.terminal_session_id = session.id
+           )`
+      )
+      .all() as Array<{ id: string; output: string }>
+    if (rows.length === 0) return
+
+    this.inTransaction(() => {
+      for (const row of rows) this.insertOutputChunks(row.id, row.output, false)
+    })
   }
 
   private ensureAgentEventDeleteCascade(): void {
@@ -1047,6 +1124,117 @@ export class Store {
       .run(terminalSessionId)
   }
 
+  private outputBySessionForProject(projectId: string): Map<string, string> {
+    const rows = this.db
+      .prepare(
+        `SELECT chunk.terminal_session_id, chunk.content
+         FROM terminal_output_chunks chunk
+         JOIN terminal_sessions session ON session.id = chunk.terminal_session_id
+         WHERE session.project_id = ?
+         ORDER BY chunk.terminal_session_id, chunk.id`
+      )
+      .all(projectId) as Array<{
+      terminal_session_id: string
+      content: Uint8Array
+    }>
+    const chunksBySession = new Map<string, string[]>()
+    for (const row of rows) {
+      const chunks = chunksBySession.get(row.terminal_session_id) ?? []
+      chunks.push(Buffer.from(row.content).toString('utf8'))
+      chunksBySession.set(row.terminal_session_id, chunks)
+    }
+    return new Map(
+      [...chunksBySession].map(([sessionId, chunks]) => [
+        sessionId,
+        chunks.join('')
+      ])
+    )
+  }
+
+  private outputForSession(id: string, legacyOutput: string): string {
+    const rows = this.db
+      .prepare(
+        `SELECT content
+         FROM terminal_output_chunks
+         WHERE terminal_session_id = ?
+         ORDER BY id`
+      )
+      .all(id) as Array<{ content: Uint8Array }>
+    return rows.length > 0
+      ? Buffer.concat(rows.map((row) => Buffer.from(row.content))).toString('utf8')
+      : legacyOutput
+  }
+
+  private insertOutputChunks(id: string, data: string, bounded = true): void {
+    const insert = this.db.prepare(
+      `INSERT INTO terminal_output_chunks
+       (terminal_session_id, content, byte_count)
+       VALUES (?, ?, ?)`
+    )
+    for (const chunk of terminalOutputChunks(data, bounded)) {
+      const encoded = Buffer.from(chunk, 'utf8')
+      insert.run(id, encoded, encoded.length)
+    }
+  }
+
+  private appendOutputChunks(id: string, data: string): void {
+    let remaining = retainedTerminalOutput(data)
+    const lastChunk = this.db
+      .prepare(
+        `SELECT id, content, byte_count
+         FROM terminal_output_chunks
+         WHERE terminal_session_id = ?
+         ORDER BY id DESC
+         LIMIT 1`
+      )
+      .get(id) as
+      | { id: number; content: Uint8Array; byte_count: number }
+      | undefined
+    if (lastChunk && lastChunk.byte_count < OUTPUT_CHUNK_LIMIT) {
+      const { prefix, remainder } = terminalOutputPrefix(
+        remaining,
+        OUTPUT_CHUNK_LIMIT - lastChunk.byte_count
+      )
+      if (prefix) {
+        const combined = Buffer.concat([
+          Buffer.from(lastChunk.content),
+          Buffer.from(prefix, 'utf8')
+        ])
+        this.db
+          .prepare(
+            `UPDATE terminal_output_chunks
+             SET content = ?, byte_count = ?
+             WHERE id = ?`
+          )
+          .run(combined, combined.length, lastChunk.id)
+        remaining = remainder
+      }
+    }
+    if (remaining) this.insertOutputChunks(id, remaining)
+  }
+
+  private pruneOutputChunks(id: string): void {
+    this.db
+      .prepare(
+        `DELETE FROM terminal_output_chunks
+         WHERE terminal_session_id = ?
+           AND id IN (
+             SELECT id
+             FROM (
+               SELECT id,
+                      SUM(byte_count) OVER (
+                        ORDER BY id DESC
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                      ) AS retained_bytes
+               FROM terminal_output_chunks
+               WHERE terminal_session_id = ?
+             )
+             WHERE retained_bytes > ?
+           )`
+      )
+      .run(id, id, OUTPUT_LIMIT)
+  }
+
   private hydrateProject(row: ProjectRow): Project {
     const latexChatRows = this.db
       .prepare(
@@ -1057,7 +1245,7 @@ export class Store {
     const latexChats = new Map(
       latexChatRows.map((chat) => [chat.terminal_session_id, mapLatexChat(chat)])
     )
-    const sessions = (
+    const sessionRows = (
       this.db
         .prepare(
           `SELECT id, project_id, session_kind, name, profile,
@@ -1067,7 +1255,15 @@ export class Store {
            FROM terminal_sessions WHERE project_id = ? ORDER BY created_at`
         )
         .all(row.id) as SessionRow[]
-    ).map((session) => mapSession(session, latexChats.get(session.id) ?? null))
+    )
+    const outputBySession = this.outputBySessionForProject(row.id)
+    const sessions = sessionRows.map((session) =>
+      mapSession(
+        session,
+        latexChats.get(session.id) ?? null,
+        outputBySession.get(session.id) ?? session.output
+      )
+    )
     const actions = (
       this.db
         .prepare(
@@ -1785,27 +1981,44 @@ export class Store {
          FROM terminal_sessions WHERE id = ?`
       )
       .get(id) as SessionRow | undefined
-    return row ? mapSession(row, this.getLatexChat(id)) : null
+    return row
+      ? mapSession(
+          row,
+          this.getLatexChat(id),
+          this.outputForSession(id, row.output)
+        )
+      : null
   }
 
   appendOutput(id: string, data: string): void {
-    this.db
-      .prepare(
-        `UPDATE terminal_sessions
-         SET output = substr(output || ?, -?), updated_at = ?
-         WHERE id = ?`
-      )
-      .run(data, OUTPUT_LIMIT, now(), id)
+    if (!data) return
+    this.inTransaction(() => {
+      this.appendOutputChunks(id, data)
+      this.pruneOutputChunks(id)
+      this.db
+        .prepare(
+          `UPDATE terminal_sessions
+           SET output = '', updated_at = ?
+           WHERE id = ?`
+        )
+        .run(now(), id)
+    })
   }
 
   replaceOutput(id: string, data: string): void {
-    this.db
-      .prepare(
-        `UPDATE terminal_sessions
-         SET output = substr(?, -?), updated_at = ?
-         WHERE id = ?`
-      )
-      .run(data, OUTPUT_LIMIT, now(), id)
+    this.inTransaction(() => {
+      this.db
+        .prepare('DELETE FROM terminal_output_chunks WHERE terminal_session_id = ?')
+        .run(id)
+      this.insertOutputChunks(id, data)
+      this.db
+        .prepare(
+          `UPDATE terminal_sessions
+           SET output = '', updated_at = ?
+           WHERE id = ?`
+        )
+        .run(now(), id)
+    })
   }
 
   setSessionState(id: string, state: AgentState, message?: string): boolean {
