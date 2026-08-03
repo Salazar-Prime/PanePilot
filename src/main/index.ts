@@ -531,6 +531,12 @@ if (!ownsSingleInstanceLock) {
         remoteConversations,
         metadata
       )
+      const restoredLocalSessions = terminals.restoreLocalSessionsAfterReboot()
+      if (restoredLocalSessions > 0) {
+        console.info(
+          `Restored ${restoredLocalSessions} local tmux session${restoredLocalSessions === 1 ? '' : 's'} after reboot.`
+        )
+      }
       latex = new LatexProjectService(store, terminals)
       speech = new SpeechService(store)
       portForwards = new PortForwardManager(store, () => {

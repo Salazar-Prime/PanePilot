@@ -1,6 +1,6 @@
 import { execFile, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, uptime } from 'node:os'
 import { basename } from 'node:path'
 import { promisify } from 'node:util'
 import type { BrowserWindow } from 'electron'
@@ -62,6 +62,7 @@ const MAX_ACTION_CAPTURE_OUTPUT = 1024 * 1024
 const ACTION_EXIT_STATUS_OPTION = '@panepilot_action_exit_status'
 const MAX_TERMINAL_CAPTURE_OUTPUT = 4 * 1024 * 1024
 const MAX_TERMINAL_INPUT_BYTES = 2 * 1024 * 1024
+const REBOOT_RECOVERY_CLOCK_SKEW_MS = 5_000
 const TERMINAL_INPUT_CHUNK_SIZE = 16 * 1024
 const CODEX_TMUX_TITLE_CONFIG =
   'tui.terminal_title=["activity","run-state","task-progress","thread-id"]'
@@ -134,6 +135,25 @@ function actionExitStatus(value: string): number | null {
   return match[2] === '1' && deadStatus != null && Number.isInteger(deadStatus)
     ? deadStatus
     : null
+}
+
+export function systemBootTimeMs(
+  nowMs = Date.now(),
+  uptimeSeconds = uptime()
+): number {
+  return nowMs - Math.max(0, uptimeSeconds) * 1_000
+}
+
+export function sessionPredatesSystemBoot(
+  updatedAt: string,
+  bootTimeMs: number
+): boolean {
+  const updatedAtMs = Date.parse(updatedAt)
+  return (
+    Number.isFinite(updatedAtMs) &&
+    Number.isFinite(bootTimeMs) &&
+    updatedAtMs < bootTimeMs + REBOOT_RECOVERY_CLOCK_SKEW_MS
+  )
 }
 
 export function terminalInputChunks(
@@ -292,6 +312,137 @@ export class TerminalManager {
       throw new Error('Create a project Action to run a custom command.')
     }
     return this.startSession(input, 'terminal')
+  }
+
+  restoreLocalSessionsAfterReboot(
+    bootTimeMs = systemBootTimeMs()
+  ): number {
+    if (!this.tmuxPath || this.shuttingDown) return 0
+    let restored = 0
+
+    for (const project of this.store.listProjects()) {
+      if (project.archived) continue
+      const connection = this.store.getConnection(project.connectionId)
+      if (!connection || connection.kind !== 'local') continue
+
+      for (const session of project.sessions) {
+        if (
+          session.archived ||
+          session.backend !== 'tmux' ||
+          !session.tmuxName ||
+          ['completed', 'error'].includes(session.state) ||
+          !sessionPredatesSystemBoot(session.updatedAt, bootTimeMs)
+        ) {
+          continue
+        }
+
+        const liveTmuxSession = this.tmuxSessionExists(
+          connection,
+          session.tmuxName
+        )
+        if (
+          liveTmuxSession &&
+          this.localTmuxSessionOwner(session.tmuxName) !== session.id
+        ) {
+          this.store.setSessionState(
+            session.id,
+            'error',
+            `PanePilot did not restore ${session.name} because another tmux session is using that name.`
+          )
+          continue
+        }
+
+        if (session.kind === 'action' || session.profile === 'custom') {
+          if (liveTmuxSession) {
+            try {
+              this.killTmuxSession(connection, session.tmuxName)
+            } catch (error) {
+              const detail = error instanceof Error ? error.message : String(error)
+              console.error(`Could not stop restored Action ${session.name}: ${detail}`)
+              this.store.setSessionState(
+                session.id,
+                'error',
+                `${session.name} was unexpectedly restored by tmux and could not be stopped.`
+              )
+              continue
+            }
+          }
+          this.store.setSessionState(
+            session.id,
+            'completed',
+            `${session.name} ended when the computer restarted. Rerun the Action when needed.`
+          )
+          continue
+        }
+
+        if (session.dangerousMode && AGENT_PROFILES.has(session.profile)) {
+          if (liveTmuxSession) {
+            try {
+              this.killTmuxSession(connection, session.tmuxName)
+            } catch (error) {
+              const detail = error instanceof Error ? error.message : String(error)
+              console.error(`Could not stop restored agent ${session.name}: ${detail}`)
+              this.store.setSessionState(
+                session.id,
+                'error',
+                `${session.name} was unexpectedly restored by tmux and could not be stopped.`
+              )
+              continue
+            }
+          }
+          this.store.setSessionState(
+            session.id,
+            'completed',
+            `${session.name} was not restarted because dangerous mode must be confirmed again after reboot.`
+          )
+          continue
+        }
+
+        if (liveTmuxSession) {
+          try {
+            this.store.prepareSessionForRebootRecovery(session.id, false)
+            restored += 1
+          } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error)
+            console.error(`Could not adopt restored session ${session.name}: ${detail}`)
+            this.store.setSessionState(
+              session.id,
+              'error',
+              `${session.name} could not be adopted after reboot.`
+            )
+          }
+          continue
+        }
+
+        try {
+          const prepared = this.store.prepareSessionForRebootRecovery(session.id)
+          this.launch(
+            prepared,
+            project.folder,
+            connection,
+            100,
+            30,
+            true,
+            AGENT_PROFILES.has(prepared.profile) &&
+              Boolean(prepared.providerSessionId)
+          )
+          restored += 1
+        } catch (error) {
+          const latest = this.store.getSession(session.id)
+          if (latest && !['completed', 'error'].includes(latest.state)) {
+            this.changeState(
+              latest,
+              'error',
+              `${latest.name} could not be restored after reboot.`
+            )
+          }
+          const detail = error instanceof Error ? error.message : String(error)
+          console.error(`Could not restore ${session.name} after reboot: ${detail}`)
+        }
+      }
+    }
+
+    return restored
   }
 
   createAction(input: CreateProjectActionInput): ProjectAction {
@@ -2167,6 +2318,17 @@ export class TerminalManager {
         }
       ).status === 0
     )
+  }
+
+  private localTmuxSessionOwner(name: string): string | null {
+    if (!this.tmuxPath) return null
+    const result = spawnSync(
+      this.tmuxPath,
+      ['show-options', '-qv', '-t', `=${name}:`, '@panepilot_terminal_id'],
+      { encoding: 'utf8', timeout: 2_000 }
+    )
+    if (result.status !== 0) return null
+    return result.stdout.trim() || null
   }
 
   private killTmuxSession(connection: Connection, name: string): void {

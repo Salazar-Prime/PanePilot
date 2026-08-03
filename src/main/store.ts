@@ -1730,6 +1730,34 @@ export class Store {
     return result.changes > 0
   }
 
+  prepareSessionForRebootRecovery(
+    id: string,
+    recreated = true
+  ): TerminalSession {
+    const session = this.requireSession(id)
+    if (
+      session.backend !== 'tmux' ||
+      !session.tmuxName ||
+      ['completed', 'error'].includes(session.state)
+    ) {
+      throw new Error('Only an active tmux session can be restored after reboot.')
+    }
+    const timestamp = now()
+    this.db
+      .prepare(
+        "UPDATE terminal_sessions SET state = 'idle', updated_at = ? WHERE id = ?"
+      )
+      .run(timestamp, id)
+    this.addActivity(
+      session.projectId,
+      session.id,
+      'terminal-reboot-restored',
+      `${recreated ? 'Recreated' : 'Recovered'} ${session.name} after the computer restarted.`
+    )
+    this.updateProjectState(session.projectId)
+    return this.requireSession(id)
+  }
+
   markMissingTmuxSession(id: string): boolean {
     const session = this.getSession(id)
     if (
