@@ -380,6 +380,31 @@ export interface SynthesizeSpeechResult {
   usage: SpeechUsage
 }
 
+export interface GoogleDriveStatus {
+  available: boolean
+  connected: boolean
+  remoteName: string | null
+  folderPath: string | null
+  destination: string | null
+  folderId: string | null
+  folderUrl: string | null
+  connectedAt: string | null
+}
+
+export interface ConnectGoogleDriveInput {
+  projectId: string
+  remoteName: string
+  folderPath: string
+}
+
+export interface GoogleDriveUploadResult {
+  fileId: string
+  name: string
+  webViewLink: string
+  destination: string
+  updated: boolean
+}
+
 export interface ProjectConsoleApi {
   connections: {
     list(): Promise<Connection[]>
@@ -448,6 +473,17 @@ export interface ProjectConsoleApi {
     save(projectId: string, relativePath: string, content: string): Promise<void>
     download(projectId: string, relativePath: string): Promise<boolean>
     showInFolder(projectId: string, relativePath: string): Promise<void>
+  }
+  googleDrive: {
+    status(projectId: string): Promise<GoogleDriveStatus>
+    listRemotes(): Promise<string[]>
+    connect(input: ConnectGoogleDriveInput): Promise<GoogleDriveStatus>
+    disconnect(projectId: string): Promise<void>
+    openFolder(projectId: string): Promise<void>
+    uploadFile(
+      projectId: string,
+      relativePath: string
+    ): Promise<GoogleDriveUploadResult>
   }
   remoteFolders: {
     list(connectionId: string, path?: string): Promise<RemoteFolderListing>

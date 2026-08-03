@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  ConnectGoogleDriveInput,
   CreatePortForwardInput,
   CreateProjectInput,
   CreateProjectActionInput,
@@ -140,6 +141,19 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('files:download', projectId, relativePath),
     showInFolder: (projectId: string, relativePath: string) =>
       ipcRenderer.invoke('files:show-in-folder', projectId, relativePath)
+  },
+  googleDrive: {
+    status: (projectId: string) =>
+      ipcRenderer.invoke('google-drive:status', projectId),
+    listRemotes: () => ipcRenderer.invoke('google-drive:list-remotes'),
+    connect: (input: ConnectGoogleDriveInput) =>
+      ipcRenderer.invoke('google-drive:connect', input),
+    disconnect: (projectId: string) =>
+      ipcRenderer.invoke('google-drive:disconnect', projectId),
+    openFolder: (projectId: string) =>
+      ipcRenderer.invoke('google-drive:open-folder', projectId),
+    uploadFile: (projectId: string, relativePath: string) =>
+      ipcRenderer.invoke('google-drive:upload-file', projectId, relativePath)
   },
   remoteFolders: {
     list: (connectionId: string, path?: string) =>

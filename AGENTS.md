@@ -59,6 +59,7 @@ These are owner-approved decisions and should be treated as product invariants u
 32. Archived projects can be permanently removed from PanePilot after confirmation. This deletes their local SQLite workspace records but never deletes the project folder, `.panepilot` metadata, or provider conversation archives.
 33. Terminal context menus expose copyable exact-session tmux commands. `tmux show-options -t '=session-name'` is the supported command for inspecting every session-scoped `@panepilot_*` option.
 34. An SSH project folder may be browsed or typed directly. Creation verifies the path on the remote host and stores its canonical path.
+35. Google Drive upload destinations are project-scoped and use locally configured rclone remotes. Each project selects one named remote (allowing a different Google account) and one existing folder path. rclone owns OAuth credentials; PanePilot stores no Google tokens and never automatically creates a public `rclone link`. Removing a PanePilot destination or project never deletes uploaded Drive files.
 
 ## Agent lifecycle semantics
 
@@ -128,6 +129,7 @@ Every new capability that crosses the Electron boundary must be updated in all o
 - `src/renderer/src/components/NotesPanel.tsx`: multi-note Markdown manager for local and SSH projects.
 - `src/main/ssh-config.ts`: SSH alias discovery.
 - `src/main/git.ts`: repository URL discovery.
+- `src/main/google-drive-service.ts`: desktop OAuth with PKCE, secure project-scoped token access, and streamed local/SSH file uploads.
 - `src/main/latex-project-service.ts`: LaTeX outline parsing, project settings, scoped chat launch, edit snapshots, and source diffs.
 - `src/main/latex-paths.ts`: bounded relative LaTeX path and external URL validation.
 - `src/renderer/src/components/LatexProjectWorkspace.tsx`: LaTeX capability tabs and workspace orchestration.
@@ -156,6 +158,8 @@ Core tables:
 - `latex_sections`: stable section identities reconciled from the main file and included sources.
 - `latex_chat_sessions`: project/section scope and Ask/Edit mode for a terminal session.
 - `latex_edit_snapshots`: bounded `.tex` baselines used to highlight agent changes until the user clears them.
+- `google_drive_connections`: project-scoped Google OAuth client identity, encrypted refresh token, connected account label, and app-owned Drive folder.
+- `google_drive_files`: project-relative paths mapped to app-created Drive files so later uploads update rather than duplicate them.
 
 The old `projects.parent_id` column remains for migration compatibility but is unused and cleared on startup.
 
@@ -271,6 +275,7 @@ Known scaling limitation: search currently scans the in-memory parsed conversati
 - Relative terminal links resolve against the project folder.
 - Repository URLs are currently auto-discovered only for local projects.
 - The project context menu opens the repository when one is available.
+- The top toolbar manages the focused project's independent rclone Google Drive remote and attached folder. The Files preview uploads the authoritative saved file currently open in Monaco, not an unsaved draft; local files are copied directly and SSH files use a cleaned-up temporary local copy. The project-relative path is retained below the attached folder. Re-uploading that path updates the destination, and the private Drive item link is returned and recorded in project activity.
 
 ## LaTeX projects
 

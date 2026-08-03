@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ChevronRight,
+  CloudUpload,
+  Copy,
   Download,
+  ExternalLink,
   File,
   FileCode2,
   Folder,
@@ -13,7 +16,12 @@ import {
   Search,
   X
 } from 'lucide-react'
-import type { FileEntry, FilePreview, Project } from '@shared/types'
+import type {
+  FileEntry,
+  FilePreview,
+  GoogleDriveUploadResult,
+  Project
+} from '@shared/types'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
 import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
 import { Editor, monaco } from '../lib/monaco'
@@ -22,6 +30,7 @@ interface FilesPanelProps {
   project: Project
   initialPath?: string
   openFileRequest?: ProjectFileOpenRequest | null
+  onChanged?(): Promise<void>
 }
 
 interface FilesPanelSnapshot {
@@ -55,7 +64,8 @@ export function FilesPanel(props: FilesPanelProps) {
 function FilesPanelInstance({
   project,
   initialPath = '.',
-  openFileRequest = null
+  openFileRequest = null,
+  onChanged
 }: FilesPanelProps) {
   const cached = filesPanelCache.get(project.id)
   const [listing, setListing] = useState(() => ({
@@ -79,6 +89,11 @@ function FilesPanelInstance({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [uploadingToDrive, setUploadingToDrive] = useState(false)
+  const [driveMessage, setDriveMessage] = useState('')
+  const [driveUpload, setDriveUpload] = useState<GoogleDriveUploadResult | null>(
+    null
+  )
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const finderActionRef = useRef<{ dispose(): void } | null>(null)
   const activeFinderPathRef = useRef<string | null>(null)
@@ -94,6 +109,11 @@ function FilesPanelInstance({
   const draft = activeFile?.draft ?? ''
   const editing = activeFile?.editing ?? false
   activeFinderPathRef.current = preview?.path ?? null
+
+  useEffect(() => {
+    setDriveMessage('')
+    setDriveUpload(null)
+  }, [preview?.path])
 
   function updateOpenFile(
     filePath: string,
@@ -364,6 +384,10 @@ function FilesPanelInstance({
     return () => window.cancelAnimationFrame(frame)
   }, [preview?.path, openFileRequest?.requestId])
 
+  useEffect(() => {
+    setDriveMessage('')
+  }, [preview?.path])
+
   async function save() {
     if (!preview) return
     const filePath = preview.path
@@ -394,6 +418,46 @@ function FilesPanelInstance({
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
       setDownloading(false)
+    }
+  }
+
+  async function uploadToDrive() {
+    if (!preview) return
+    setUploadingToDrive(true)
+    setDriveMessage('')
+    setDriveUpload(null)
+    setError('')
+    try {
+      const status = await window.projectConsole.googleDrive.status(project.id)
+      if (!status.connected) {
+        throw new Error(
+          'Connect an rclone Drive account and folder from the project toolbar first.'
+        )
+      }
+      const result = await window.projectConsole.googleDrive.uploadFile(
+        project.id,
+        preview.path
+      )
+      setDriveUpload(result)
+      setDriveMessage(
+        `${result.updated ? 'Updated' : 'Uploaded'} ${preview.path} → ${result.destination}`
+      )
+      void onChanged?.().catch(() => undefined)
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      if (!/canceled/i.test(message)) setError(message)
+    } finally {
+      setUploadingToDrive(false)
+    }
+  }
+
+  async function copyDriveLink() {
+    if (!driveUpload) return
+    try {
+      await navigator.clipboard.writeText(driveUpload.webViewLink)
+      setDriveMessage(`Copied Drive link for ${driveUpload.name}`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
     }
   }
 
@@ -563,7 +627,32 @@ function FilesPanelInstance({
                     : 'First 1 MB · editing disabled'}
                 </small>
               )}
+              {driveMessage && (
+                <small className="drive-upload-result">{driveMessage}</small>
+              )}
               <div className="preview-actions">
+                {driveUpload && (
+                  <>
+                    <button
+                      className="secondary-button"
+                      onClick={() => void copyDriveLink()}
+                      title="Copy the private Google Drive link"
+                    >
+                      <Copy size={13} /> Copy Drive link
+                    </button>
+                    <button
+                      className="secondary-button"
+                      onClick={() =>
+                        void window.projectConsole.system.openExternal(
+                          driveUpload.webViewLink
+                        )
+                      }
+                      title="Open this uploaded file in Google Drive"
+                    >
+                      <ExternalLink size={13} /> Open in Drive
+                    </button>
+                  </>
+                )}
                 {project.connectionId === 'local' && (
                   <button
                     className="secondary-button"
@@ -573,6 +662,22 @@ function FilesPanelInstance({
                     <FolderOpen size={13} /> Show in Finder
                   </button>
                 )}
+                <button
+                  className="secondary-button drive-upload-button"
+                  onClick={() => void uploadToDrive()}
+                  disabled={
+                    uploadingToDrive ||
+                    (editing && draft !== preview.content)
+                  }
+                  title={
+                    editing && draft !== preview.content
+                      ? 'Save or cancel your edits before uploading the saved file'
+                      : 'Upload the authoritative saved file to this project’s Google Drive folder'
+                  }
+                >
+                  <CloudUpload size={13} />{' '}
+                  {uploadingToDrive ? 'Uploading…' : 'Upload to Drive'}
+                </button>
                 <button
                   className="secondary-button"
                   onClick={() => void download()}

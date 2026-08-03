@@ -328,6 +328,7 @@ export function LatexProjectWorkspace({
           project={project}
           initialPath={filesInitialPath}
           openFileRequest={openFileRequest}
+          onChanged={onChanged}
         />
       </div>
       {tab === 'actions' && (

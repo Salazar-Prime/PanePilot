@@ -162,6 +162,23 @@ type SpeechSettingsRow = {
   monthly_character_limit: number
 }
 
+type GoogleDriveConnectionRow = {
+  project_id: string
+  remote_name: string
+  folder_path: string
+  folder_id: string | null
+  connected_at: string
+  updated_at: string
+}
+
+type GoogleDriveFileRow = {
+  project_id: string
+  relative_path: string
+  drive_file_id: string
+  web_view_link: string
+  updated_at: string
+}
+
 export interface StoredPortForward {
   id: string
   connectionId: string
@@ -171,6 +188,23 @@ export interface StoredPortForward {
   remoteHost: string
   remotePort: number
   createdAt: string
+}
+
+export interface StoredGoogleDriveConnection {
+  projectId: string
+  remoteName: string
+  folderPath: string
+  folderId: string | null
+  connectedAt: string
+  updatedAt: string
+}
+
+export interface StoredGoogleDriveFile {
+  projectId: string
+  relativePath: string
+  driveFileId: string
+  webViewLink: string
+  updatedAt: string
 }
 
 export interface DiscoveredTmuxSessionUpsert {
@@ -357,6 +391,29 @@ function mapActivity(row: ActivityRow): Activity {
   }
 }
 
+function mapGoogleDriveConnection(
+  row: GoogleDriveConnectionRow
+): StoredGoogleDriveConnection {
+  return {
+    projectId: row.project_id,
+    remoteName: row.remote_name,
+    folderPath: row.folder_path,
+    folderId: row.folder_id,
+    connectedAt: row.connected_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function mapGoogleDriveFile(row: GoogleDriveFileRow): StoredGoogleDriveFile {
+  return {
+    projectId: row.project_id,
+    relativePath: row.relative_path,
+    driveFileId: row.drive_file_id,
+    webViewLink: row.web_view_link,
+    updatedAt: row.updated_at
+  }
+}
+
 export class Store {
   private readonly db: DatabaseSync
 
@@ -520,6 +577,25 @@ export class Store {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS google_drive_connections (
+        project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+        remote_name TEXT NOT NULL,
+        folder_path TEXT NOT NULL DEFAULT '',
+        folder_id TEXT,
+        connected_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS google_drive_files (
+        project_id TEXT NOT NULL
+          REFERENCES google_drive_connections(project_id) ON DELETE CASCADE,
+        relative_path TEXT NOT NULL,
+        drive_file_id TEXT NOT NULL,
+        web_view_link TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, relative_path)
+      );
+
       INSERT OR IGNORE INTO speech_settings
         (id, provider, voice_name, language_code, speaking_rate, pitch,
          monthly_character_limit, updated_at)
@@ -528,6 +604,7 @@ export class Store {
     `)
 
     this.ensureAgentEventDeleteCascade()
+    this.ensureGoogleDriveRcloneSchema()
     this.ensureColumn('connections', 'ssh_alias', 'TEXT')
     this.ensureColumn('projects', 'created_at', `TEXT NOT NULL DEFAULT ''`)
     this.ensureColumn('projects', 'archived', 'INTEGER NOT NULL DEFAULT 0')
@@ -613,11 +690,13 @@ export class Store {
         ON latex_chat_sessions(project_id, scope, section_id);
       CREATE INDEX IF NOT EXISTS project_actions_project_idx
         ON project_actions(project_id, created_at);
+      CREATE INDEX IF NOT EXISTS google_drive_files_drive_id_idx
+        ON google_drive_files(drive_file_id);
       CREATE UNIQUE INDEX IF NOT EXISTS terminal_sessions_project_qna_idx
         ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 11;
+      PRAGMA user_version = 12;
     `)
     this.migrateLegacyTerminalOutput()
   }
@@ -674,6 +753,37 @@ export class Store {
         FROM agent_events;
         DROP TABLE agent_events;
         ALTER TABLE agent_events_with_delete_cascade RENAME TO agent_events;
+      `)
+    })
+  }
+
+  private ensureGoogleDriveRcloneSchema(): void {
+    const columns = this.tableColumns('google_drive_connections')
+    if (columns.has('remote_name') && columns.has('folder_path')) return
+
+    // The original unreleased Drive prototype stored OAuth credentials itself.
+    // rclone now owns account credentials, so no secret material is migrated.
+    this.inTransaction(() => {
+      this.db.exec(`
+        DROP TABLE IF EXISTS google_drive_files;
+        DROP TABLE IF EXISTS google_drive_connections;
+        CREATE TABLE google_drive_connections (
+          project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+          remote_name TEXT NOT NULL,
+          folder_path TEXT NOT NULL DEFAULT '',
+          folder_id TEXT,
+          connected_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE TABLE google_drive_files (
+          project_id TEXT NOT NULL
+            REFERENCES google_drive_connections(project_id) ON DELETE CASCADE,
+          relative_path TEXT NOT NULL,
+          drive_file_id TEXT NOT NULL,
+          web_view_link TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (project_id, relative_path)
+        );
       `)
     })
   }
@@ -2228,6 +2338,130 @@ export class Store {
 
   deletePortForward(id: string): void {
     this.db.prepare('DELETE FROM port_forwards WHERE id = ?').run(id)
+  }
+
+  getGoogleDriveConnection(projectId: string): StoredGoogleDriveConnection | null {
+    const row = this.db
+      .prepare(
+        `SELECT project_id, remote_name, folder_path, folder_id,
+                connected_at, updated_at
+         FROM google_drive_connections WHERE project_id = ?`
+      )
+      .get(projectId) as GoogleDriveConnectionRow | undefined
+    return row ? mapGoogleDriveConnection(row) : null
+  }
+
+  saveGoogleDriveConnection(input: {
+    projectId: string
+    remoteName: string
+    folderPath: string
+    folderId: string | null
+  }): StoredGoogleDriveConnection {
+    const project = this.getProject(input.projectId)
+    if (!project) throw new Error('Project not found.')
+    const timestamp = now()
+    const existing = this.getGoogleDriveConnection(input.projectId)
+    this.db
+      .prepare(
+        `INSERT INTO google_drive_connections
+           (project_id, remote_name, folder_path, folder_id, connected_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(project_id) DO UPDATE SET
+           remote_name = excluded.remote_name,
+           folder_path = excluded.folder_path,
+           folder_id = excluded.folder_id,
+           connected_at = excluded.connected_at,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        input.projectId,
+        input.remoteName,
+        input.folderPath,
+        input.folderId,
+        timestamp,
+        timestamp
+      )
+    if (existing) {
+      this.db
+        .prepare('DELETE FROM google_drive_files WHERE project_id = ?')
+        .run(input.projectId)
+    }
+    this.addActivity(
+      input.projectId,
+      null,
+      'google-drive-connected',
+      `Connected Google Drive at ${input.remoteName}:${input.folderPath}`
+    )
+    return this.getGoogleDriveConnection(input.projectId)!
+  }
+
+  deleteGoogleDriveConnection(projectId: string): void {
+    const connection = this.getGoogleDriveConnection(projectId)
+    if (!connection) return
+    this.db
+      .prepare('DELETE FROM google_drive_connections WHERE project_id = ?')
+      .run(projectId)
+    this.addActivity(
+      projectId,
+      null,
+      'google-drive-disconnected',
+      'Removed the Google Drive connection from this project'
+    )
+  }
+
+  getGoogleDriveFile(
+    projectId: string,
+    relativePath: string
+  ): StoredGoogleDriveFile | null {
+    const row = this.db
+      .prepare(
+        `SELECT project_id, relative_path, drive_file_id, web_view_link, updated_at
+         FROM google_drive_files WHERE project_id = ? AND relative_path = ?`
+      )
+      .get(projectId, relativePath) as GoogleDriveFileRow | undefined
+    return row ? mapGoogleDriveFile(row) : null
+  }
+
+  saveGoogleDriveFile(input: {
+    projectId: string
+    relativePath: string
+    driveFileId: string
+    webViewLink: string
+  }): StoredGoogleDriveFile {
+    const timestamp = now()
+    const existing = this.getGoogleDriveFile(input.projectId, input.relativePath)
+    this.db
+      .prepare(
+        `INSERT INTO google_drive_files
+           (project_id, relative_path, drive_file_id, web_view_link, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(project_id, relative_path) DO UPDATE SET
+           drive_file_id = excluded.drive_file_id,
+           web_view_link = excluded.web_view_link,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        input.projectId,
+        input.relativePath,
+        input.driveFileId,
+        input.webViewLink,
+        timestamp
+      )
+    this.addActivity(
+      input.projectId,
+      null,
+      existing ? 'google-drive-file-updated' : 'google-drive-file-uploaded',
+      `${existing ? 'Updated' : 'Uploaded'} ${input.relativePath} in Google Drive · ${input.webViewLink}`
+    )
+    return this.getGoogleDriveFile(input.projectId, input.relativePath)!
+  }
+
+  deleteGoogleDriveFile(projectId: string, relativePath: string): void {
+    this.db
+      .prepare(
+        'DELETE FROM google_drive_files WHERE project_id = ? AND relative_path = ?'
+      )
+      .run(projectId, relativePath)
   }
 
   getSpeechSettings(): SpeechSettings {

@@ -9,6 +9,7 @@ import {
   shell
 } from 'electron'
 import type {
+  ConnectGoogleDriveInput,
   CreatePortForwardInput,
   CreateProjectInput,
   CreateProjectActionInput,
@@ -30,6 +31,7 @@ import {
   searchLocalFiles,
   writeLocalFile
 } from './file-service'
+import { GoogleDriveService } from './google-drive-service'
 import { LatexProjectService } from './latex-project-service'
 import { normalizeOptionalWebUrl } from './latex-paths'
 import { PortForwardManager, testSshConnection } from './port-forward-manager'
@@ -59,6 +61,7 @@ let portForwards: PortForwardManager
 let latex: LatexProjectService
 let metadata: ProjectMetadataService
 let speech: SpeechService
+let googleDrive: GoogleDriveService
 
 // Keep the existing application-data identity when the packaged product name is PanePilot.
 app.setName('PanePilot')
@@ -393,6 +396,27 @@ function registerIpc(): void {
     }
   )
 
+  ipcMain.handle('google-drive:status', (_event, projectId: string) =>
+    googleDrive.status(projectId)
+  )
+  ipcMain.handle('google-drive:list-remotes', () => googleDrive.listRemotes())
+  ipcMain.handle(
+    'google-drive:connect',
+    (_event, input: ConnectGoogleDriveInput) =>
+      googleDrive.connect(input.projectId, input.remoteName, input.folderPath)
+  )
+  ipcMain.handle('google-drive:disconnect', (_event, projectId: string) => {
+    googleDrive.disconnect(projectId)
+  })
+  ipcMain.handle('google-drive:open-folder', (_event, projectId: string) =>
+    googleDrive.openFolder(projectId)
+  )
+  ipcMain.handle(
+    'google-drive:upload-file',
+    (_event, projectId: string, relativePath: string) =>
+      googleDrive.uploadFile(projectId, relativePath)
+  )
+
   ipcMain.handle('port-forwards:list', (_event, connectionId: string) => {
     const connection = store.getConnection(connectionId)
     if (!connection || connection.kind !== 'ssh') {
@@ -539,6 +563,7 @@ if (!ownsSingleInstanceLock) {
       }
       latex = new LatexProjectService(store, terminals)
       speech = new SpeechService(store)
+      googleDrive = new GoogleDriveService(store)
       portForwards = new PortForwardManager(store, () => {
         mainWindow?.webContents.send('port-forward:changed')
       })

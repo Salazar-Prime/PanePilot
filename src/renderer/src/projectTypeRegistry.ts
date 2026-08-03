@@ -34,6 +34,7 @@ export interface ProjectTypeDefinition {
     | 'project-qna'
     | 'context'
     | 'notes'
+    | 'google-drive'
   >
   Workspace: ComponentType<ProjectWorkspaceProps>
   createFields: Array<
@@ -52,6 +53,7 @@ export const projectTypeRegistry: Record<ProjectType, ProjectTypeDefinition> = {
       'project-qna',
       'notes',
       'files',
+      'google-drive',
       'repository',
       'agent-history'
     ],
@@ -70,6 +72,7 @@ export const projectTypeRegistry: Record<ProjectType, ProjectTypeDefinition> = {
       'notes',
       'context',
       'files',
+      'google-drive',
       'repository',
       'agent-history',
       'terminal'

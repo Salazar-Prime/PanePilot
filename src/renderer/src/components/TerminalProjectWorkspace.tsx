@@ -528,6 +528,7 @@ export function TerminalProjectWorkspace({
         <FilesPanel
           project={project}
           openFileRequest={openFileRequest}
+          onChanged={onChanged}
         />
       </div>
       {tab === 'chats' && <ChatHistoryPanel project={project} />}

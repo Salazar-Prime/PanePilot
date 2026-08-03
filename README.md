@@ -48,6 +48,7 @@ Requirements:
 - Node.js 20.18+
 - `tmux` for persistent terminals (PanePilot falls back to a plain PTY)
 - `codex` and/or `claude` on `PATH` for agent launch profiles
+- Optional: `rclone` for project-scoped Google Drive uploads
 
 ```bash
 npm install
@@ -73,3 +74,29 @@ terminal output cannot create a false working state.
 
 Project and terminal metadata, saved output, and activity are stored in
 `~/Library/Application Support/project-console/project-console.sqlite` on macOS.
+
+## Google Drive uploads
+
+Google Drive uploads use [rclone](https://rclone.org/drive/), so rclone owns the OAuth
+credentials and PanePilot does not need a Google Cloud client-secret file.
+
+1. Install rclone (`brew install rclone` on macOS).
+2. Run `rclone config` and create one named Google Drive remote for each account, such
+   as `personal-drive` and `work-drive`.
+3. In PanePilot, choose **Connect Drive** in a project's top toolbar, select that
+   project's remote, and enter an existing folder path. Leave the folder empty to use
+   My Drive.
+
+Each project independently stores only its rclone remote name, attached folder path,
+and returned Drive item IDs. Removing the project connection never removes the rclone
+account or uploaded files.
+
+In the Files workspace, open a file and choose **Upload to Drive**. The full saved file
+currently open in Monaco is uploaded even when its preview is truncated. Its
+project-relative path is preserved under the attached folder, and uploading that path
+again updates the destination. Save any Monaco edits before uploading. PanePilot shows
+Open/Copy actions for the private Drive link and records the same link in project
+activity. It does not call `rclone link`, which would create a public share link.
+
+Press **Command-K** (or **Control-K**) to open the command palette for projects,
+terminals, and common project actions.

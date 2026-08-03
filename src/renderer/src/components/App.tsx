@@ -7,6 +7,8 @@ import {
   ChevronDown,
   ChevronRight,
   Clipboard,
+  Cloud,
+  Command as CommandIcon,
   ExternalLink,
   FileText,
   Flag,
@@ -44,7 +46,12 @@ import { shouldOfferTmuxReconnect } from '../lib/terminalTransport'
 import { tmuxAttachCommand, tmuxOptionsCommand } from '../lib/tmuxCommands'
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
+import {
+  CommandPalette,
+  type CommandPaletteCommand
+} from './CommandPalette'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
+import { GoogleDriveControl } from './GoogleDriveControl'
 import { NewProjectDialog } from './NewProjectDialog'
 import { PortForwardDialog } from './PortForwardDialog'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
@@ -86,6 +93,11 @@ export function App() {
   const [newProjectType, setNewProjectType] = useState<ProjectType>('terminal')
   const [showTypeMenu, setShowTypeMenu] = useState(false)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
+  const [driveDialogRequest, setDriveDialogRequest] = useState<{
+    projectId: string
+    nonce: number
+  } | null>(null)
   const [showArchivedProjects, setShowArchivedProjects] = useState(false)
   const [portForwardConnection, setPortForwardConnection] = useState<Connection | null>(null)
   const [launchTerminalRequest, setLaunchTerminalRequest] = useState(0)
@@ -149,6 +161,21 @@ export function App() {
       removeTransportListener()
     }
   }, [refresh])
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        event.key.toLocaleLowerCase() === 'k'
+      ) {
+        event.preventDefault()
+        setShowCommandPalette((current) => !current)
+      }
+    }
+    window.addEventListener('keydown', handleShortcut, true)
+    return () => window.removeEventListener('keydown', handleShortcut, true)
+  }, [])
 
   const activeProjects = useMemo(
     () => projects.filter((project) => !project.archived),
@@ -411,6 +438,127 @@ export function App() {
     ? projectTypeRegistry[project.type]
     : projectTypeRegistry.terminal
   const Workspace = typeDefinition.Workspace
+
+  const commandPaletteCommands: CommandPaletteCommand[] = [
+    {
+      id: 'action:new-project',
+      section: 'Actions',
+      label: 'New project',
+      detail: 'Add a local or SSH-backed PanePilot project',
+      keywords: ['create', 'add'],
+      icon: <Plus size={15} />,
+      action: () => openNewProject()
+    },
+    ...(project
+      ? [
+          {
+            id: 'action:project-settings',
+            section: 'Actions',
+            label: 'Project settings',
+            detail: project.name,
+            keywords: ['rename', 'repository', 'overleaf'],
+            icon: <Settings size={15} />,
+            action: () => setShowProjectSettings(true)
+          },
+          {
+            id: 'action:google-drive',
+            section: 'Actions',
+            label: 'Google Drive connection',
+            detail: `Connect or open Drive for ${project.name}`,
+            keywords: ['upload', 'cloud', 'gdrive'],
+            icon: <Cloud size={15} />,
+            action: () =>
+              setDriveDialogRequest((current) => ({
+                projectId: project.id,
+                nonce: (current?.nonce ?? 0) + 1
+              }))
+          },
+          {
+            id: 'action:new-terminal',
+            section: 'Actions',
+            label: project.type === 'latex' ? 'New writing chat' : 'New terminal',
+            detail: project.name,
+            keywords: ['shell', 'codex', 'claude', 'launch'],
+            icon: <TerminalSquare size={15} />,
+            action: () => openProjectLauncher(project)
+          },
+          ...(project.repositoryUrl
+            ? [
+                {
+                  id: 'action:repository',
+                  section: 'Actions',
+                  label: 'Open repository',
+                  detail: project.repositoryUrl,
+                  keywords: ['github', 'git'],
+                  icon: <Github size={15} />,
+                  action: () =>
+                    void window.projectConsole.projects.openRepository(
+                      project.repositoryUrl!
+                    )
+                }
+              ]
+            : [])
+        ]
+      : []),
+    {
+      id: 'action:toggle-sidebar',
+      section: 'Actions',
+      label: sidebarOpen ? 'Hide sidebar' : 'Show sidebar',
+      detail: 'Toggle the project navigator',
+      keywords: ['navigation', 'panel'],
+      icon: <PanelLeftClose size={15} />,
+      action: () => setSidebarOpen((current) => !current)
+    },
+    {
+      id: 'action:archive',
+      section: 'Actions',
+      label: 'Show project archive',
+      detail: `${archivedProjects.length} archived project${archivedProjects.length === 1 ? '' : 's'}`,
+      keywords: ['library', 'restore'],
+      icon: <Archive size={15} />,
+      action: () => {
+        setShowArchivedProjects(true)
+        setShowTypeMenu(false)
+      }
+    },
+    ...activeProjects.map((target): CommandPaletteCommand => {
+      const targetConnection = connections.find(
+        (candidate) => candidate.id === target.connectionId
+      )
+      return {
+        id: `project:${target.id}`,
+        section: 'Projects',
+        label: target.name,
+        detail:
+          targetConnection?.kind === 'ssh'
+            ? `${targetConnection.name}:${target.folder}`
+            : target.folder,
+        keywords: [target.type, 'project', targetConnection?.name ?? ''],
+        icon:
+          target.type === 'latex' ? (
+            <FileText size={15} />
+          ) : (
+            <TerminalSquare size={15} />
+          ),
+        action: () => selectProject(target.id)
+      }
+    }),
+    ...activeProjects.flatMap((owner) =>
+      owner.sessions
+        .filter((session) => !session.archived && isSidebarSession(session))
+        .map(
+          (session): CommandPaletteCommand => ({
+            id: `session:${session.id}`,
+            section: 'Terminals',
+            label: session.name,
+            detail: `${owner.name} · ${session.profile} · ${session.state}`,
+            keywords: [owner.name, session.profile, session.state, 'terminal'],
+            icon: <TerminalProfileIcon profile={session.profile} size={15} />,
+            action: () => void selectSession(owner.id, session.id)
+          })
+        )
+    )
+  ]
 
   function contextItems(context: SidebarContext): ContextMenuItem[] {
     if (context.kind === 'connection') {
@@ -771,6 +919,13 @@ export function App() {
           )}
         </div>
         <div className="top-actions">
+          <button
+            className="secondary-button command-trigger"
+            onClick={() => setShowCommandPalette(true)}
+            title="Open command palette (Command K)"
+          >
+            <CommandIcon size={14} /> <kbd>⌘K</kbd>
+          </button>
           <SpeechControl />
           {project?.latex?.overleafUrl && (
             <button
@@ -795,6 +950,13 @@ export function App() {
             >
               <Github size={15} /> Repository
             </button>
+          )}
+          {project && (
+            <GoogleDriveControl
+              key={project.id}
+              project={project}
+              openRequest={driveDialogRequest}
+            />
           )}
           <button
             className="icon-button"
@@ -1171,6 +1333,11 @@ export function App() {
           onClose={() => setPortForwardConnection(null)}
         />
       )}
+      <CommandPalette
+        open={showCommandPalette}
+        commands={commandPaletteCommands}
+        onClose={() => setShowCommandPalette(false)}
+      />
       {sidebarContext && (
         <ContextMenu
           x={sidebarContext.x}
