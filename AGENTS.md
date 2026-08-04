@@ -60,6 +60,7 @@ These are owner-approved decisions and should be treated as product invariants u
 33. Terminal context menus expose copyable exact-session tmux commands. `tmux show-options -t '=session-name'` is the supported command for inspecting every session-scoped `@panepilot_*` option.
 34. An SSH project folder may be browsed or typed directly. Creation verifies the path on the remote host and stores its canonical path.
 35. Google Drive upload destinations are project-scoped and use locally configured rclone remotes. Each project selects one named remote (allowing a different Google account) and one existing folder path. rclone owns OAuth credentials; PanePilot stores no Google tokens and never automatically creates a public `rclone link`. Removing a PanePilot destination or project never deletes uploaded Drive files.
+36. Project keyboard navigation is renderer-local and applies only to the focused workspace pane. Command/Control + `/` toggles discoverable KeyTips; single letters route to project capabilities, Command/Control + `1`–`9` selects active terminal/chat tabs, and Command/Control + Shift + `[` or `]` cycles those tabs. Shortcut routing must not leak keystrokes into inactive xterm or Monaco instances.
 
 ## Agent lifecycle semantics
 

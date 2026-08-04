@@ -100,3 +100,12 @@ activity. It does not call `rclone link`, which would create a public share link
 
 Press **Command-K** (or **Control-K**) to open the command palette for projects,
 terminals, and common project actions.
+
+Press **Command-/** (or **Control-/**) to reveal the focused project's keyboard
+KeyTips. While they are visible, use `T` for terminals, `A` for Actions, `Q` for
+project Q&A, `N` for Notes, `F` for Files, `C` for chat history, and `H` for Activity.
+LaTeX projects also use `M` for Manuscript and `P` for PDF. Number keys select the
+shown terminal or chat tabs. Without opening KeyTips, **Command/Control-1–9** jumps
+directly to a tab and **Command/Control-Shift-[ / ]** cycles tabs. Only the focused
+pane responds in split view. **Control-Page Up / Page Down** is also available for
+cycling tabs.

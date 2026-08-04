@@ -28,6 +28,10 @@ import type {
   TerminalFileTarget
 } from '../lib/terminalFileLinks'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
+import {
+  type ProjectShortcutAction,
+  useProjectShortcuts
+} from '../lib/projectShortcuts'
 import { ActionsPanel } from './ActionsPanel'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
 import { FilesPanel } from './FilesPanel'
@@ -37,6 +41,11 @@ import { LatexChatLauncher } from './LatexChatLauncher'
 import { LatexManuscript } from './LatexManuscript'
 import { NotesPanel } from './NotesPanel'
 import { ProjectQnaPane } from './ProjectQnaPane'
+import {
+  ProjectShortcutGuide,
+  ShortcutGuideButton,
+  ShortcutKeytip
+} from './ProjectShortcutGuide'
 
 const LatexPdfPreview = lazy(async () => {
   const module = await import('./LatexPdfPreview')
@@ -93,6 +102,57 @@ export function LatexProjectWorkspace({
   )
   const activeSession =
     sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null
+  const shortcutActions: ProjectShortcutAction[] = [
+    {
+      key: 'm',
+      label: 'Manuscript',
+      active: tab === 'manuscript',
+      run: () => setTab('manuscript')
+    },
+    { key: 'p', label: 'PDF', active: tab === 'pdf', run: () => setTab('pdf') },
+    {
+      key: 'a',
+      label: 'Actions',
+      active: tab === 'actions',
+      run: () => setTab('actions')
+    },
+    { key: 'q', label: 'Q&A', active: tab === 'qna', run: () => setTab('qna') },
+    {
+      key: 'n',
+      label: 'Notes',
+      active: tab === 'notes',
+      run: () => setTab('notes')
+    },
+    {
+      key: 'f',
+      label: 'Files',
+      active: tab === 'files',
+      run: () => setTab('files')
+    },
+    {
+      key: 'c',
+      label: 'Chats',
+      active: tab === 'chats',
+      run: () => setTab('chats')
+    },
+    {
+      key: 'h',
+      label: 'Activity',
+      active: tab === 'activity',
+      run: () => setTab('activity')
+    }
+  ]
+  const shortcutSessions = sessions.map((session) => ({
+    id: session.id,
+    label: session.name
+  }))
+  const projectShortcuts = useProjectShortcuts({
+    scopeId: project.id,
+    actions: shortcutActions,
+    sessions: shortcutSessions,
+    activeSessionId: activeSession?.id ?? null,
+    onSelectSession: selectShortcutSession
+  })
 
   const loadWorkspace = useCallback(async () => {
     setError('')
@@ -166,6 +226,13 @@ export function LatexProjectWorkspace({
     onSelectSession(session.id)
   }
 
+  async function selectShortcutSession(id: string) {
+    setTab('manuscript')
+    onSelectSession(id)
+    await window.projectConsole.terminals.acknowledge(id)
+    await onChanged()
+  }
+
   async function clearChanges() {
     if (!activeSession) return
     await window.projectConsole.latex.clearChanges(activeSession.id)
@@ -223,38 +290,53 @@ export function LatexProjectWorkspace({
   }
 
   return (
-    <div className="project-workspace latex-project-workspace">
+    <div
+      className="project-workspace latex-project-workspace"
+      ref={projectShortcuts.rootRef}
+    >
       <nav className="workspace-tabs" aria-label="LaTeX project tools">
         <button
           className={tab === 'manuscript' ? 'active' : ''}
           onClick={() => setTab('manuscript')}
         >
           <FileText size={15} /> Manuscript
+          <ShortcutKeytip value="M" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'pdf' ? 'active' : ''} onClick={() => setTab('pdf')}>
           <FileType2 size={15} /> PDF Preview
+          <ShortcutKeytip value="P" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'actions' ? 'active' : ''} onClick={() => setTab('actions')}>
           <Play size={15} /> Actions
+          <ShortcutKeytip value="A" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'qna' ? 'active' : ''} onClick={() => setTab('qna')}>
           <MessageCircleQuestion size={15} /> Project Q&amp;A
+          <ShortcutKeytip value="Q" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>
           <FileText size={15} /> Notes
+          <ShortcutKeytip value="N" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>
           <Files size={15} /> Files
+          <ShortcutKeytip value="F" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'chats' ? 'active' : ''} onClick={() => setTab('chats')}>
           <MessageSquareText size={15} /> Chat history
+          <ShortcutKeytip value="C" open={projectShortcuts.open} />
         </button>
         <button
           className={tab === 'activity' ? 'active' : ''}
           onClick={() => setTab('activity')}
         >
           <Activity size={15} /> Activity
+          <ShortcutKeytip value="H" open={projectShortcuts.open} />
         </button>
+        <ShortcutGuideButton
+          open={projectShortcuts.open}
+          onClick={projectShortcuts.toggle}
+        />
         <div className="latex-tab-meta">
           <FileClock size={13} />
           <span>{workspace.details.mainFile}</span>
@@ -263,6 +345,14 @@ export function LatexProjectWorkspace({
           </button>
         </div>
       </nav>
+
+      <ProjectShortcutGuide
+        open={projectShortcuts.open}
+        projectName={project.name}
+        actions={shortcutActions}
+        sessions={shortcutSessions}
+        activeSessionId={activeSession?.id ?? null}
+      />
 
       {tab === 'manuscript' && (
         <div className="latex-workbench">

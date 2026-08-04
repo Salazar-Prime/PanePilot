@@ -1,0 +1,249 @@
+.project-workspace {
+  position: relative;
+  isolation: isolate;
+}
+
+.workspace-tabs > .shortcut-guide-button {
+  height: 29px;
+  margin: 0 7px 7px auto;
+  padding: 0 8px;
+  gap: 6px;
+  color: #727d91;
+  border: 1px solid #292f3b;
+  border-radius: 6px;
+  background: #11151d;
+  font: 9px Inter, ui-sans-serif, sans-serif;
+}
+
+.workspace-tabs > .shortcut-guide-button:hover,
+.workspace-tabs > .shortcut-guide-button.open {
+  color: #c2cced;
+  border-color: #46547e;
+  background: #182036;
+}
+
+.shortcut-guide-button kbd,
+.shortcut-command-overlay kbd,
+.shortcut-keytip {
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-weight: 750;
+}
+
+.shortcut-guide-button kbd {
+  color: #8f9bc0;
+  font-size: 8px;
+}
+
+.shortcut-command-overlay {
+  position: absolute;
+  z-index: 90;
+  top: 53px;
+  left: 50%;
+  width: min(720px, calc(100% - 24px));
+  overflow: hidden;
+  color: #aab2c2;
+  border: 1px solid #3a455d;
+  border-radius: 9px;
+  background: #0c1017f2;
+  box-shadow: 0 18px 56px #000c, inset 0 1px 0 #ffffff0a;
+  transform: translateX(-50%);
+  backdrop-filter: blur(13px);
+  pointer-events: none;
+  animation: shortcut-command-arrive 110ms ease-out;
+}
+
+.shortcut-command-overlay::before {
+  position: absolute;
+  top: 0;
+  right: 13%;
+  left: 13%;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, transparent, #8096eb, transparent);
+  box-shadow: 0 0 13px #657cd899;
+}
+
+.shortcut-command-overlay > header {
+  display: flex;
+  min-height: 45px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  border-bottom: 1px solid #272e3a;
+  background: #121721;
+}
+
+.shortcut-command-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  color: #93a6eb;
+  border: 1px solid #40517f;
+  border-radius: 6px;
+  background: #1a2440;
+  place-items: center;
+}
+
+.shortcut-command-overlay header > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.shortcut-command-overlay header small,
+.shortcut-command-row > b {
+  color: #65728a;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 7px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.shortcut-command-overlay header strong {
+  overflow: hidden;
+  color: #dfe4ed;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortcut-command-dismiss {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: #657083;
+  font-size: 8px;
+}
+
+.shortcut-command-overlay kbd {
+  display: inline-grid;
+  min-width: 19px;
+  height: 18px;
+  padding: 0 4px;
+  color: #c8d2f7;
+  border: 1px solid #465576;
+  border-radius: 4px;
+  background: #182035;
+  box-shadow: inset 0 -1px 0 #090c12, 0 1px 0 #0009;
+  font-size: 8px;
+  place-items: center;
+}
+
+.shortcut-command-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 9px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #202631;
+}
+
+.shortcut-command-row > b {
+  padding-top: 5px;
+}
+
+.shortcut-command-row > div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 5px 11px;
+}
+
+.shortcut-command-row > div > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: #818b9c;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.shortcut-command-row > div > span.active {
+  color: #d8def0;
+}
+
+.shortcut-command-row > div > span.active kbd {
+  color: #e8edff;
+  border-color: #6a7fc0;
+  background: #26345b;
+}
+
+.shortcut-command-overlay > footer {
+  display: flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 12px;
+  color: #626d80;
+  background: #090c12;
+  font-size: 8px;
+}
+
+.shortcut-command-overlay > footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shortcut-command-overlay > footer span:first-child {
+  margin-right: auto;
+}
+
+.shortcut-keytip {
+  position: absolute;
+  z-index: 5;
+  top: -5px;
+  right: 1px;
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  color: #eff2ff;
+  border: 1px solid #7489cc;
+  border-radius: 4px;
+  background: #2a3964;
+  box-shadow: 0 3px 9px #000b;
+  font-size: 7px;
+  place-items: center;
+  animation: shortcut-keytip-arrive 90ms ease-out;
+}
+
+.terminal-tab > .shortcut-keytip {
+  top: 2px;
+  right: auto;
+  left: 3px;
+}
+
+.terminal-tab > .shortcut-keytip + .terminal-tab-select {
+  padding-left: 22px;
+}
+
+@keyframes shortcut-command-arrive {
+  from { opacity: 0; transform: translate(-50%, -5px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@keyframes shortcut-keytip-arrive {
+  from { opacity: 0; transform: translateY(-3px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shortcut-command-overlay,
+  .shortcut-keytip {
+    animation: none;
+  }
+}
+
+@media (max-width: 1050px) {
+  .workspace-tabs > .shortcut-guide-button span,
+  .workspace-tabs > .shortcut-guide-button kbd {
+    display: none;
+  }
+
+  .shortcut-command-row {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+}

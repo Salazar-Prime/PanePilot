@@ -28,6 +28,10 @@ import type {
 } from '../lib/terminalFileLinks'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
 import {
+  type ProjectShortcutAction,
+  useProjectShortcuts
+} from '../lib/projectShortcuts'
+import {
   sessionSortOptions,
   sortSessions,
   useSessionSort
@@ -41,6 +45,11 @@ import { HistoryPanel } from './HistoryPanel'
 import { ManagedTerminal } from './ManagedTerminal'
 import { NotesPanel } from './NotesPanel'
 import { ProjectQnaPane } from './ProjectQnaPane'
+import {
+  ProjectShortcutGuide,
+  ShortcutGuideButton,
+  ShortcutKeytip
+} from './ProjectShortcutGuide'
 import { RenameDialog } from './RenameDialog'
 import { StatusDot } from './StatusDot'
 import { TerminalLauncher } from './TerminalLauncher'
@@ -108,6 +117,56 @@ export function TerminalProjectWorkspace({
   )
   const activeSession =
     visibleSessions.find((session) => session.id === selectedSessionId) ?? visibleSessions[0]
+  const shortcutActions: ProjectShortcutAction[] = [
+    {
+      key: 't',
+      label: 'Terminals',
+      active: tab === 'terminal',
+      run: () => setTab('terminal')
+    },
+    {
+      key: 'a',
+      label: 'Actions',
+      active: tab === 'actions',
+      run: () => setTab('actions')
+    },
+    { key: 'q', label: 'Q&A', active: tab === 'qna', run: () => setTab('qna') },
+    {
+      key: 'n',
+      label: 'Notes',
+      active: tab === 'notes',
+      run: () => setTab('notes')
+    },
+    {
+      key: 'f',
+      label: 'Files',
+      active: tab === 'files',
+      run: () => setTab('files')
+    },
+    {
+      key: 'c',
+      label: 'Chats',
+      active: tab === 'chats',
+      run: () => setTab('chats')
+    },
+    {
+      key: 'h',
+      label: 'Activity',
+      active: tab === 'history',
+      run: () => setTab('history')
+    }
+  ]
+  const shortcutSessions = visibleSessions.map((session) => ({
+    id: session.id,
+    label: session.name
+  }))
+  const projectShortcuts = useProjectShortcuts({
+    scopeId: project.id,
+    actions: shortcutActions,
+    sessions: shortcutSessions,
+    activeSessionId: activeSession?.id ?? null,
+    onSelectSession: selectSession
+  })
   const renderedTerminalViews = useMemo(() => {
     const currentSessions = new Map(
       project.sessions.map((session) => [session.id, session])
@@ -312,43 +371,62 @@ export function TerminalProjectWorkspace({
   }
 
   return (
-    <div className="project-workspace">
+    <div className="project-workspace" ref={projectShortcuts.rootRef}>
       <nav className="workspace-tabs" aria-label="Project tools">
         <button className={tab === 'terminal' ? 'active' : ''} onClick={() => setTab('terminal')}>
           <TerminalSquare size={15} />
           Terminals
+          <ShortcutKeytip value="T" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'actions' ? 'active' : ''} onClick={() => setTab('actions')}>
           <Play size={15} />
           Actions
+          <ShortcutKeytip value="A" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'qna' ? 'active' : ''} onClick={() => setTab('qna')}>
           <MessageCircleQuestion size={15} />
           Project Q&amp;A
+          <ShortcutKeytip value="Q" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>
           <FileText size={15} />
           Notes
+          <ShortcutKeytip value="N" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>
           <Files size={15} />
           Files
+          <ShortcutKeytip value="F" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'chats' ? 'active' : ''} onClick={() => setTab('chats')}>
           <MessageSquareText size={15} />
           LLM Chats
+          <ShortcutKeytip value="C" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
           <History size={15} />
           Activity
+          <ShortcutKeytip value="H" open={projectShortcuts.open} />
         </button>
+        <ShortcutGuideButton
+          open={projectShortcuts.open}
+          onClick={projectShortcuts.toggle}
+        />
       </nav>
+
+      <ProjectShortcutGuide
+        open={projectShortcuts.open}
+        projectName={project.name}
+        actions={shortcutActions}
+        sessions={shortcutSessions}
+        activeSessionId={activeSession?.id ?? null}
+      />
 
       {tab === 'terminal' && (
         <section className="terminal-workspace">
           <div className="terminal-tabs">
             <div className="terminal-tabs-scroll">
-              {visibleSessions.map((session) => (
+              {visibleSessions.map((session, index) => (
                 <div
                   key={session.id}
                   className={`terminal-tab ${activeSession?.id === session.id ? 'active' : ''}`}
@@ -361,6 +439,10 @@ export function TerminalProjectWorkspace({
                     })
                   }}
                 >
+                  <ShortcutKeytip
+                    value={String(index + 1)}
+                    open={projectShortcuts.open && index < 9}
+                  />
                   <button
                     className="terminal-tab-select"
                     onClick={() => void selectSession(session.id)}
