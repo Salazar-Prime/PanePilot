@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  advanceShortcutOverlayGesture,
   directSessionIndex,
-  isShortcutOverlayToggle,
+  isShortcutOverlayTap,
   keyTipActionKey,
   keyTipSessionIndex,
   sessionCycleDirection
@@ -27,18 +28,96 @@ function keyEvent(overrides: Partial<{
 }
 
 describe('project keyboard shortcuts', () => {
-  it('uses Command or Control plus slash for the KeyTips overlay', () => {
+  it('recognizes only Control plus the question-mark key for the help gesture', () => {
     expect(
-      isShortcutOverlayToggle(keyEvent({ key: '/', code: 'Slash', metaKey: true }))
+      isShortcutOverlayTap(
+        keyEvent({ key: '?', code: 'Slash', ctrlKey: true, shiftKey: true })
+      )
     ).toBe(true)
     expect(
-      isShortcutOverlayToggle(keyEvent({ key: '/', code: 'Slash', ctrlKey: true }))
-    ).toBe(true)
-    expect(
-      isShortcutOverlayToggle(
-        keyEvent({ key: '/', code: 'Slash', metaKey: true, shiftKey: true })
+      isShortcutOverlayTap(
+        keyEvent({ key: '?', code: 'Slash', metaKey: true, shiftKey: true })
       )
     ).toBe(false)
+    expect(
+      isShortcutOverlayTap(keyEvent({ key: '/', code: 'Slash', ctrlKey: true }))
+    ).toBe(true)
+    expect(isShortcutOverlayTap(keyEvent({ key: '?', code: 'Slash' }))).toBe(false)
+  })
+
+  it('opens help after three timely question-mark taps and then resets', () => {
+    const event = keyEvent({
+      key: '?',
+      code: 'Slash',
+      ctrlKey: true,
+      shiftKey: true
+    })
+    const first = advanceShortcutOverlayGesture(event, { count: 0, lastTapAt: 0 }, 100)
+    const second = advanceShortcutOverlayGesture(event, first.state, 500)
+    const third = advanceShortcutOverlayGesture(event, second.state, 900)
+
+    expect(first).toMatchObject({ recognized: true, triggered: false })
+    expect(second).toMatchObject({ recognized: true, triggered: false })
+    expect(third).toEqual({
+      state: { count: 0, lastTapAt: 0 },
+      recognized: true,
+      triggered: true
+    })
+  })
+
+  it('restarts the help gesture after its time window or another key', () => {
+    const questionMark = keyEvent({
+      key: '?',
+      code: 'Slash',
+      ctrlKey: true,
+      shiftKey: true
+    })
+    const first = advanceShortcutOverlayGesture(
+      questionMark,
+      { count: 0, lastTapAt: 0 },
+      100
+    )
+    const expired = advanceShortcutOverlayGesture(questionMark, first.state, 1_301)
+    const interrupted = advanceShortcutOverlayGesture(
+      keyEvent({ key: 'x', code: 'KeyX', ctrlKey: true }),
+      expired.state,
+      1_400
+    )
+
+    expect(expired).toMatchObject({
+      state: { count: 1, lastTapAt: 1_301 },
+      triggered: false
+    })
+    expect(interrupted).toEqual({
+      state: { count: 0, lastTapAt: 0 },
+      recognized: false,
+      triggered: false
+    })
+  })
+
+  it('does not interrupt the help gesture when Shift is pressed between taps', () => {
+    const first = advanceShortcutOverlayGesture(
+      keyEvent({ key: '/', code: 'Slash', ctrlKey: true }),
+      { count: 0, lastTapAt: 0 },
+      100
+    )
+    const shift = advanceShortcutOverlayGesture(
+      keyEvent({ key: 'Shift', code: 'ShiftLeft', ctrlKey: true, shiftKey: true }),
+      first.state,
+      200
+    )
+    const second = advanceShortcutOverlayGesture(
+      keyEvent({ key: '?', code: 'Slash', ctrlKey: true, shiftKey: true }),
+      shift.state,
+      300
+    )
+
+    expect(shift).toMatchObject({
+      state: first.state,
+      recognized: false,
+      triggered: false
+    })
+    expect(second.state.count).toBe(2)
   })
 
   it('maps direct and overlay number keys to zero-based session indexes', () => {

@@ -43,7 +43,6 @@ import { NotesPanel } from './NotesPanel'
 import { ProjectQnaPane } from './ProjectQnaPane'
 import {
   ProjectShortcutGuide,
-  ShortcutGuideButton,
   ShortcutKeytip
 } from './ProjectShortcutGuide'
 
@@ -333,10 +332,6 @@ export function LatexProjectWorkspace({
           <Activity size={15} /> Activity
           <ShortcutKeytip value="H" open={projectShortcuts.open} />
         </button>
-        <ShortcutGuideButton
-          open={projectShortcuts.open}
-          onClick={projectShortcuts.toggle}
-        />
         <div className="latex-tab-meta">
           <FileClock size={13} />
           <span>{workspace.details.mainFile}</span>

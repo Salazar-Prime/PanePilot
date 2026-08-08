@@ -21,6 +21,17 @@ interface ShortcutEvent {
   shiftKey: boolean
 }
 
+export interface ShortcutOverlayGestureState {
+  count: number
+  lastTapAt: number
+}
+
+export interface ShortcutOverlayGestureResult {
+  state: ShortcutOverlayGestureState
+  recognized: boolean
+  triggered: boolean
+}
+
 interface ProjectShortcutsOptions {
   scopeId: string
   actions: ProjectShortcutAction[]
@@ -30,21 +41,58 @@ interface ProjectShortcutsOptions {
 }
 
 const SHORTCUT_GUIDE_OPENED = 'panepilot:shortcut-guide-opened'
+const SHORTCUT_GUIDE_TAP_COUNT = 3
+const SHORTCUT_GUIDE_TAP_WINDOW_MS = 1_200
 
 export interface ProjectShortcutsController {
   rootRef: RefObject<HTMLDivElement>
   open: boolean
-  setOpen(open: boolean): void
-  toggle(): void
 }
 
-export function isShortcutOverlayToggle(event: ShortcutEvent): boolean {
+export function isShortcutOverlayTap(event: ShortcutEvent): boolean {
   return (
-    (event.metaKey || event.ctrlKey) &&
+    event.ctrlKey &&
+    !event.metaKey &&
     !event.altKey &&
-    !event.shiftKey &&
-    (event.code === 'Slash' || event.key === '/')
+    (event.code === 'Slash' || event.key === '?' || event.key === '/')
   )
+}
+
+export function advanceShortcutOverlayGesture(
+  event: ShortcutEvent,
+  state: ShortcutOverlayGestureState,
+  now: number
+): ShortcutOverlayGestureResult {
+  if (!isShortcutOverlayTap(event)) {
+    if (isModifierKey(event.key)) {
+      return {
+        state,
+        recognized: false,
+        triggered: false
+      }
+    }
+    return {
+      state: { count: 0, lastTapAt: 0 },
+      recognized: false,
+      triggered: false
+    }
+  }
+
+  const count =
+    state.count > 0 && now - state.lastTapAt <= SHORTCUT_GUIDE_TAP_WINDOW_MS
+      ? state.count + 1
+      : 1
+  const triggered = count >= SHORTCUT_GUIDE_TAP_COUNT
+
+  return {
+    state: triggered ? { count: 0, lastTapAt: 0 } : { count, lastTapAt: now },
+    recognized: true,
+    triggered
+  }
+}
+
+function isModifierKey(key: string): boolean {
+  return key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta'
 }
 
 export function directSessionIndex(event: ShortcutEvent): number | null {
@@ -86,10 +134,15 @@ export function useProjectShortcuts(
   options: ProjectShortcutsOptions
 ): ProjectShortcutsController {
   const rootRef = useRef<HTMLDivElement>(null)
+  const overlayGestureRef = useRef<ShortcutOverlayGestureState>({
+    count: 0,
+    lastTapAt: 0
+  })
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
     setOpen(false)
+    overlayGestureRef.current = { count: 0, lastTapAt: 0 }
   }, [options.scopeId])
 
   useEffect(() => {
@@ -141,12 +194,23 @@ export function useProjectShortcuts(
         return
       }
 
-      if (isShortcutOverlayToggle(event)) {
-        if (!open && hasBlockingDialog()) return
+      const overlayGesture = advanceShortcutOverlayGesture(
+        event,
+        overlayGestureRef.current,
+        performance.now()
+      )
+      overlayGestureRef.current = overlayGesture.state
+      if (overlayGesture.recognized) {
+        if (!open && hasBlockingDialog()) {
+          overlayGestureRef.current = { count: 0, lastTapAt: 0 }
+          return
+        }
         event.preventDefault()
         event.stopPropagation()
-        if (!open) announceShortcutOwner(rootRef.current)
-        setOpen(!open)
+        if (overlayGesture.triggered) {
+          if (!open) announceShortcutOwner(rootRef.current)
+          setOpen(!open)
+        }
         return
       }
 
@@ -200,18 +264,29 @@ export function useProjectShortcuts(
       run(action.run)
     }
 
+    function resetOverlayGestureOnControlRelease(event: KeyboardEvent) {
+      if (event.key === 'Control') {
+        overlayGestureRef.current = { count: 0, lastTapAt: 0 }
+      }
+    }
+
+    function resetOverlayGestureOnBlur() {
+      overlayGestureRef.current = { count: 0, lastTapAt: 0 }
+    }
+
     window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('keyup', resetOverlayGestureOnControlRelease, true)
+    window.addEventListener('blur', resetOverlayGestureOnBlur)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      window.removeEventListener('keyup', resetOverlayGestureOnControlRelease, true)
+      window.removeEventListener('blur', resetOverlayGestureOnBlur)
+    }
   }, [open, options])
 
   return {
     rootRef,
-    open,
-    setOpen,
-    toggle: () => {
-      if (!open) announceShortcutOwner(rootRef.current)
-      setOpen(!open)
-    }
+    open
   }
 }
 

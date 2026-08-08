@@ -69,7 +69,7 @@ export function ProjectShortcutGuide({
       )}
       <footer>
         <span>
-          <kbd>{primary}/</kbd> toggle
+          hold <kbd>Ctrl</kbd> · tap <kbd>?</kbd> three times to toggle
         </span>
         <span>
           <kbd>{primary}1–9</kbd> jump directly
@@ -95,29 +95,5 @@ export function ShortcutKeytip({
     <kbd className="shortcut-keytip" aria-hidden="true">
       {value}
     </kbd>
-  )
-}
-
-export function ShortcutGuideButton({
-  open,
-  onClick
-}: {
-  open: boolean
-  onClick(): void
-}) {
-  const primary = navigator.platform.toLocaleLowerCase().includes('mac')
-    ? '⌘'
-    : 'Ctrl+'
-  return (
-    <button
-      className={`shortcut-guide-button ${open ? 'open' : ''}`}
-      onClick={onClick}
-      aria-pressed={open}
-      title={`Show keyboard shortcuts (${primary}/)`}
-    >
-      <Keyboard size={14} />
-      <span>Shortcuts</span>
-      <kbd>{primary}/</kbd>
-    </button>
   )
 }

@@ -47,7 +47,6 @@ import { NotesPanel } from './NotesPanel'
 import { ProjectQnaPane } from './ProjectQnaPane'
 import {
   ProjectShortcutGuide,
-  ShortcutGuideButton,
   ShortcutKeytip
 } from './ProjectShortcutGuide'
 import { RenameDialog } from './RenameDialog'
@@ -408,10 +407,6 @@ export function TerminalProjectWorkspace({
           Activity
           <ShortcutKeytip value="H" open={projectShortcuts.open} />
         </button>
-        <ShortcutGuideButton
-          open={projectShortcuts.open}
-          onClick={projectShortcuts.toggle}
-        />
       </nav>
 
       <ProjectShortcutGuide
