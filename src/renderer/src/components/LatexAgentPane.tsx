@@ -5,6 +5,7 @@ import {
   MessageCircleQuestion,
   PencilLine,
   Plus,
+  RefreshCw,
   RotateCcw,
   Send,
   Sparkles,
@@ -101,6 +102,20 @@ export function LatexAgentPane({
     if (!activeSession) return
     await window.projectConsole.terminals.resumeAgent(activeSession.id)
     await onChanged()
+  }
+
+  async function forceReload() {
+    if (!activeSession) return
+    setSending(true)
+    setError('')
+    try {
+      await window.projectConsole.terminals.forceReloadAgent(activeSession.id)
+      await onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setSending(false)
+    }
   }
 
   async function archive() {
@@ -218,6 +233,16 @@ export function LatexAgentPane({
               <span>{scopeLabel(activeSession)}</span>
               <small>{activeSession.profile === 'codex' ? 'Codex' : 'Claude'}</small>
             </div>
+            {activeSession.providerSessionId && (
+              <button
+                className="latex-force-reload-button"
+                onClick={() => void forceReload()}
+                disabled={sending}
+                title="Restart this agent process and resume the same provider chat"
+              >
+                <RefreshCw size={11} /> Reload
+              </button>
+            )}
             <div className="latex-mode-toggle" aria-label="Chat mode">
               <button
                 className={activeSession.latexChat.mode === 'ask' ? 'active' : ''}

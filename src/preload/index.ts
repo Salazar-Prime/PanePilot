@@ -54,6 +54,8 @@ const api: ProjectConsoleApi = {
     acknowledge: (sessionId: string) => ipcRenderer.invoke('terminals:acknowledge', sessionId),
     resumeAgent: (sessionId: string) =>
       ipcRenderer.invoke('terminals:resume-agent', sessionId),
+    forceReloadAgent: (sessionId: string) =>
+      ipcRenderer.invoke('terminals:force-reload-agent', sessionId),
     rename: (sessionId: string, name: string) =>
       ipcRenderer.invoke('terminals:rename', sessionId, name),
     setPinned: (sessionId: string, pinned: boolean) =>

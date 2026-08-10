@@ -256,6 +256,9 @@ function registerIpc(): void {
       terminals.resumeAgent(sessionId)
     }
   )
+  ipcMain.handle('terminals:force-reload-agent', (_event, sessionId: string) => {
+    terminals.forceReloadAgent(sessionId)
+  })
   ipcMain.handle('terminals:rename', (_event, sessionId: string, name: string) => {
     terminals.rename(sessionId, name)
   })

@@ -3770,6 +3770,26 @@ button.type-switcher {
   font-size: 7px;
 }
 
+.latex-force-reload-button {
+  display: flex;
+  height: 27px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  color: #7f8998;
+  border: 1px solid #2a303b;
+  border-radius: 6px;
+  background: #10131a;
+  font-size: 7px;
+}
+
+.latex-force-reload-button:hover:not(:disabled) {
+  color: #c4cad4;
+  border-color: #3a4250;
+  background: #171b24;
+}
+
 .latex-mode-toggle {
   display: flex;
   padding: 2px;

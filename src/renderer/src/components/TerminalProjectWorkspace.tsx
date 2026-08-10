@@ -335,6 +335,14 @@ export function TerminalProjectWorkspace({
     await onChanged()
   }
 
+  async function forceReloadAgent(session: TerminalSession) {
+    setMenu(null)
+    await window.projectConsole.terminals.forceReloadAgent(session.id)
+    setTab('terminal')
+    onSelectSession(session.id)
+    await onChanged()
+  }
+
   async function restore(session: TerminalSession) {
     await window.projectConsole.terminals.restore(session.id)
     if (archivedSessions.length === 1) setShowArchivedSessions(false)
@@ -627,18 +635,24 @@ export function TerminalProjectWorkspace({
                     {session.flagged ? 'Remove flag' : 'Flag for later'}
                   </button>
                   {providerSessionReference && (
-                    <button
-                      onClick={() =>
-                        run(
-                          window.projectConsole.system.copyText(
-                            providerSessionReference
+                    <>
+                      <button
+                        onClick={() =>
+                          run(
+                            window.projectConsole.system.copyText(
+                              providerSessionReference
+                            )
                           )
-                        )
-                      }
-                    >
-                      <Clipboard size={14} />
-                      Copy Codex thread ID
-                    </button>
+                        }
+                      >
+                        <Clipboard size={14} />
+                        Copy {session.profile === 'claude' ? 'Claude session' : 'Codex thread'} ID
+                      </button>
+                      <button onClick={() => run(forceReloadAgent(session))}>
+                        <RefreshCw size={14} /> Force reload{' '}
+                        {session.profile === 'claude' ? 'Claude' : 'Codex'} chat
+                      </button>
+                    </>
                   )}
                   {session.tmuxName && (
                     <button

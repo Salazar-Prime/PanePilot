@@ -1123,6 +1123,59 @@ export class TerminalManager {
     }
   }
 
+  forceReloadAgent(sessionId: string): void {
+    const session = this.requireSession(sessionId)
+    if (!AGENT_PROFILES.has(session.profile)) {
+      throw new Error('Only Codex or Claude chats can be force reloaded.')
+    }
+    const providerSessionReference = session.providerSessionId
+    if (!providerSessionReference) {
+      throw new Error(
+        `This terminal does not have a verified ${session.profile === 'codex' ? 'Codex thread' : 'Claude session'} ID yet.`
+      )
+    }
+    if (session.archived) {
+      throw new Error('Restore the archived chat before force reloading it.')
+    }
+
+    const project = this.store.getProject(session.projectId)
+    const connection = project ? this.store.getConnection(project.connectionId) : null
+    if (!project || !connection) throw new Error('The terminal project is unavailable.')
+
+    const runtime = this.runtimes.get(sessionId)
+    const cols = runtime?.cols ?? 100
+    const rows = runtime?.rows ?? 30
+    this.cancelReconnect(sessionId)
+    if (runtime) this.closeRuntimeForReconnect(runtime)
+
+    try {
+      if (session.backend === 'tmux' && session.tmuxName) {
+        this.killTmuxSession(connection, session.tmuxName)
+      }
+      const providerLabel = session.profile === 'claude' ? 'Claude' : 'Codex'
+      this.changeState(
+        session,
+        'idle',
+        `Force reloaded ${providerLabel} session ${providerSessionReference}.`
+      )
+      this.launch(
+        this.requireSession(sessionId),
+        project.folder,
+        connection,
+        cols,
+        rows,
+        true,
+        true
+      )
+    } catch (error) {
+      const latest = this.store.getSession(sessionId)
+      if (latest) {
+        this.changeState(latest, 'error', `Could not force reload ${session.name}.`)
+      }
+      throw error
+    }
+  }
+
   rename(sessionId: string, name: string): void {
     const cleaned = validatedTerminalName(name)
     const session = this.requireSession(sessionId)

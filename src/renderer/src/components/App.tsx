@@ -383,6 +383,14 @@ export function App() {
     await selectSession(owner.id, session.id)
   }
 
+  async function forceReloadAgentSession(
+    owner: Project,
+    session: TerminalSession
+  ) {
+    await window.projectConsole.terminals.forceReloadAgent(session.id)
+    await selectSession(owner.id, session.id)
+  }
+
   async function deleteSession(session: TerminalSession) {
     if (
       !window.confirm(
@@ -755,6 +763,12 @@ export function App() {
               icon: <Clipboard size={14} />,
               action: () =>
                 window.projectConsole.system.copyText(providerSessionReference)
+            },
+            {
+              id: 'force-reload-agent',
+              label: `Force reload ${session.profile === 'claude' ? 'Claude' : 'Codex'} chat`,
+              icon: <RefreshCw size={14} />,
+              action: () => forceReloadAgentSession(owner, session)
             }
           ]
         : []),

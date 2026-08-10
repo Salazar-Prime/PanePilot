@@ -432,6 +432,7 @@ export interface ProjectConsoleApi {
     resize(sessionId: string, cols: number, rows: number): Promise<void>
     acknowledge(sessionId: string): Promise<void>
     resumeAgent(sessionId: string): Promise<void>
+    forceReloadAgent(sessionId: string): Promise<void>
     rename(sessionId: string, name: string): Promise<void>
     setPinned(sessionId: string, pinned: boolean): Promise<void>
     setFlagged(sessionId: string, flagged: boolean): Promise<void>

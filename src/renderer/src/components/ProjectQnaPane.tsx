@@ -92,6 +92,20 @@ export function ProjectQnaPane({
     }
   }
 
+  async function forceReload() {
+    if (!session) return
+    setBusy(true)
+    setError('')
+    try {
+      await window.projectConsole.terminals.forceReloadAgent(session.id)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      await onChanged()
+      setBusy(false)
+    }
+  }
+
   if (!session) {
     return (
       <div className="project-qna-empty capability-empty">
@@ -123,6 +137,16 @@ export function ProjectQnaPane({
           </span>
         </div>
         <div className="project-qna-heading-actions">
+          {session.providerSessionId && (
+            <button
+              className="secondary-button"
+              onClick={() => void forceReload()}
+              disabled={busy}
+              title="Restart Codex and resume this same Q&A conversation"
+            >
+              <RefreshCw size={13} /> Force reload
+            </button>
+          )}
           <button
             className="secondary-button"
             onClick={() => void reset()}
