@@ -635,24 +635,24 @@ export function TerminalProjectWorkspace({
                     {session.flagged ? 'Remove flag' : 'Flag for later'}
                   </button>
                   {providerSessionReference && (
-                    <>
-                      <button
-                        onClick={() =>
-                          run(
-                            window.projectConsole.system.copyText(
-                              providerSessionReference
-                            )
+                    <button
+                      onClick={() =>
+                        run(
+                          window.projectConsole.system.copyText(
+                            providerSessionReference
                           )
-                        }
-                      >
-                        <Clipboard size={14} />
-                        Copy {session.profile === 'claude' ? 'Claude session' : 'Codex thread'} ID
-                      </button>
-                      <button onClick={() => run(forceReloadAgent(session))}>
-                        <RefreshCw size={14} /> Force reload{' '}
-                        {session.profile === 'claude' ? 'Claude' : 'Codex'} chat
-                      </button>
-                    </>
+                        )
+                      }
+                    >
+                      <Clipboard size={14} />
+                      Copy {session.profile === 'claude' ? 'Claude session' : 'Codex thread'} ID
+                    </button>
+                  )}
+                  {['codex', 'claude'].includes(session.profile) && (
+                    <button onClick={() => run(forceReloadAgent(session))}>
+                      <RefreshCw size={14} /> Force reload{' '}
+                      {session.profile === 'claude' ? 'Claude' : 'Codex'} chat
+                    </button>
                   )}
                   {session.tmuxName && (
                     <button

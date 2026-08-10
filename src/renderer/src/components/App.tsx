@@ -763,7 +763,11 @@ export function App() {
               icon: <Clipboard size={14} />,
               action: () =>
                 window.projectConsole.system.copyText(providerSessionReference)
-            },
+            }
+          ]
+        : []),
+      ...(['codex', 'claude'].includes(session.profile)
+        ? [
             {
               id: 'force-reload-agent',
               label: `Force reload ${session.profile === 'claude' ? 'Claude' : 'Codex'} chat`,

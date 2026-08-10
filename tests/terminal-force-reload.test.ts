@@ -21,7 +21,7 @@ describe('terminal agent force reload', () => {
   })
 
   it.skipIf(spawnSync('tmux', ['-V']).status !== 0)(
-    'recreates the exact tmux session and resumes the stored provider chat',
+    'reloads linked and not-yet-linked agent tabs in place',
     async () => {
       appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-force-reload-'))
       const store = new Store(appDataPath)
@@ -90,8 +90,9 @@ describe('terminal agent force reload', () => {
         new RemoteConversationIndexer()
       )
 
+      let unlinkedSessionId: string | null = null
       try {
-        manager.forceReloadAgent(session.id)
+        await manager.forceReloadAgent(session.id)
 
         for (let attempt = 0; attempt < 50 && !existsSync(argsFile); attempt += 1) {
           await new Promise((resolve) => setTimeout(resolve, 20))
@@ -106,8 +107,52 @@ describe('terminal agent force reload', () => {
         expect(
           spawnSync('tmux', ['has-session', '-t', `=${tmuxName}`]).status
         ).toBe(0)
+
+        manager.delete(session.id)
+        rmSync(argsFile, { force: true })
+
+        const unlinkedTmuxName = `Force reload unlinked ${randomUUID()}`
+        const unlinkedSession = store.createSession({
+          projectId: project.id,
+          name: unlinkedTmuxName,
+          profile: 'codex',
+          providerSessionName: null,
+          customCommand: null,
+          backend: 'tmux',
+          tmuxName: unlinkedTmuxName,
+          dangerousMode: true
+        })
+        unlinkedSessionId = unlinkedSession.id
+        store.setSessionState(unlinkedSession.id, 'completed')
+        expect(
+          spawnSync('tmux', [
+            'new-session',
+            '-d',
+            '-s',
+            unlinkedTmuxName,
+            'while :; do sleep 60; done'
+          ]).status
+        ).toBe(0)
+
+        await manager.forceReloadAgent(unlinkedSession.id)
+        for (let attempt = 0; attempt < 50 && !existsSync(argsFile); attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+
+        expect(existsSync(argsFile)).toBe(true)
+        const unlinkedArgs = readFileSync(argsFile, 'utf8').trim().split('\n')
+        expect(unlinkedArgs).not.toContain('resume')
+        expect(unlinkedArgs).toContain('--dangerously-bypass-approvals-and-sandbox')
+        expect(store.getSession(unlinkedSession.id)?.providerSessionId).toBeNull()
+        expect(store.getSession(unlinkedSession.id)?.state).toBe('idle')
+        expect(
+          spawnSync('tmux', ['has-session', '-t', `=${unlinkedTmuxName}`]).status
+        ).toBe(0)
       } finally {
         if (store.getSession(session.id)) manager.delete(session.id)
+        if (unlinkedSessionId && store.getSession(unlinkedSessionId)) {
+          manager.delete(unlinkedSessionId)
+        }
         manager.shutdown()
         store.close()
         if (originalPath == null) delete process.env.PATH

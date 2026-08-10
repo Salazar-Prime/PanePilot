@@ -137,16 +137,14 @@ export function ProjectQnaPane({
           </span>
         </div>
         <div className="project-qna-heading-actions">
-          {session.providerSessionId && (
-            <button
-              className="secondary-button"
-              onClick={() => void forceReload()}
-              disabled={busy}
-              title="Restart Codex and resume this same Q&A conversation"
-            >
-              <RefreshCw size={13} /> Force reload
-            </button>
-          )}
+          <button
+            className="secondary-button"
+            onClick={() => void forceReload()}
+            disabled={busy}
+            title="Restart Codex in this same Q&A tab"
+          >
+            <RefreshCw size={13} /> Force reload
+          </button>
           <button
             className="secondary-button"
             onClick={() => void reset()}

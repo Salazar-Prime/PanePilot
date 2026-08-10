@@ -233,16 +233,14 @@ export function LatexAgentPane({
               <span>{scopeLabel(activeSession)}</span>
               <small>{activeSession.profile === 'codex' ? 'Codex' : 'Claude'}</small>
             </div>
-            {activeSession.providerSessionId && (
-              <button
-                className="latex-force-reload-button"
-                onClick={() => void forceReload()}
-                disabled={sending}
-                title="Restart this agent process and resume the same provider chat"
-              >
-                <RefreshCw size={11} /> Reload
-              </button>
-            )}
+            <button
+              className="latex-force-reload-button"
+              onClick={() => void forceReload()}
+              disabled={sending}
+              title="Restart this agent process in the same chat tab"
+            >
+              <RefreshCw size={11} /> Reload
+            </button>
             <div className="latex-mode-toggle" aria-label="Chat mode">
               <button
                 className={activeSession.latexChat.mode === 'ask' ? 'active' : ''}

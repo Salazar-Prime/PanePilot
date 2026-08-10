@@ -1123,16 +1123,10 @@ export class TerminalManager {
     }
   }
 
-  forceReloadAgent(sessionId: string): void {
-    const session = this.requireSession(sessionId)
+  async forceReloadAgent(sessionId: string): Promise<void> {
+    let session = this.requireSession(sessionId)
     if (!AGENT_PROFILES.has(session.profile)) {
       throw new Error('Only Codex or Claude chats can be force reloaded.')
-    }
-    const providerSessionReference = session.providerSessionId
-    if (!providerSessionReference) {
-      throw new Error(
-        `This terminal does not have a verified ${session.profile === 'codex' ? 'Codex thread' : 'Claude session'} ID yet.`
-      )
     }
     if (session.archived) {
       throw new Error('Restore the archived chat before force reloading it.')
@@ -1141,6 +1135,17 @@ export class TerminalManager {
     const project = this.store.getProject(session.projectId)
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (!project || !connection) throw new Error('The terminal project is unavailable.')
+
+    if (!session.providerSessionId) {
+      try {
+        await this.discoverProviderSession(session, project.folder, connection)
+      } catch {
+        // Reload must still recover a tab whose original provider process never
+        // became linkable. In that case the same tab starts a fresh chat below.
+      }
+      session = this.requireSession(sessionId)
+    }
+    const providerSessionReference = session.providerSessionId
 
     const runtime = this.runtimes.get(sessionId)
     const cols = runtime?.cols ?? 100
@@ -1156,7 +1161,9 @@ export class TerminalManager {
       this.changeState(
         session,
         'idle',
-        `Force reloaded ${providerLabel} session ${providerSessionReference}.`
+        providerSessionReference
+          ? `Force reloaded ${providerLabel} session ${providerSessionReference}.`
+          : `Force reloaded ${providerLabel} as a new chat because no provider session ID was available.`
       )
       this.launch(
         this.requireSession(sessionId),
@@ -1165,7 +1172,7 @@ export class TerminalManager {
         cols,
         rows,
         true,
-        true
+        Boolean(providerSessionReference)
       )
     } catch (error) {
       const latest = this.store.getSession(sessionId)
