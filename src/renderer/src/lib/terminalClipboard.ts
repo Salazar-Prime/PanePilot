@@ -5,6 +5,16 @@ export function prepareClipboardPaste(text: string): string {
   return text.replaceAll('\0', '')
 }
 
+export function terminalPastePayload(
+  text: string,
+  bracketedPasteMode: boolean
+): string {
+  const prepared = text.replace(/\r?\n/g, '\r')
+  return bracketedPasteMode
+    ? `\x1b[200~${prepared}\x1b[201~`
+    : prepared
+}
+
 export function clipboardPasteFits(text: string): boolean {
   return new TextEncoder().encode(text).byteLength <= MAX_CLIPBOARD_PASTE_BYTES
 }

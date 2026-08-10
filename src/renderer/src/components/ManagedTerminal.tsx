@@ -21,7 +21,8 @@ import { terminalWebLinkProvider } from '../lib/terminalWebLinks'
 import {
   clipboardPasteFits,
   decodeOsc52Clipboard,
-  prepareClipboardPaste
+  prepareClipboardPaste,
+  terminalPastePayload
 } from '../lib/terminalClipboard'
 import { registerSpeechContent } from '../lib/speechContent'
 
@@ -74,23 +75,37 @@ export function ManagedTerminal({
     setContextMenu(null)
     const terminal = terminalRef.current
     if (!terminal || !activeRef.current || !writableRef.current) return
-    const text = prepareClipboardPaste(
-      await window.projectConsole.system.readText()
-    )
-    if (
-      terminalRef.current !== terminal ||
-      !activeRef.current ||
-      !writableRef.current
-    ) {
-      return
+    try {
+      const text = prepareClipboardPaste(
+        await window.projectConsole.system.readText()
+      )
+      if (
+        terminalRef.current !== terminal ||
+        !activeRef.current ||
+        !writableRef.current
+      ) {
+        window.alert('Terminal input is no longer available.')
+        return
+      }
+      if (!text) return
+      const payload = terminalPastePayload(
+        text,
+        terminal.modes.bracketedPasteMode
+      )
+      if (!clipboardPasteFits(payload)) {
+        window.alert('Clipboard paste is limited to 2 MB.')
+        return
+      }
+      await window.projectConsole.terminals.write(session.id, payload)
+      terminal.scrollToBottom()
+      terminal.focus()
+    } catch (error) {
+      window.alert(
+        `Could not paste clipboard: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
     }
-    if (!text) return
-    if (!clipboardPasteFits(text)) {
-      window.alert('Clipboard paste is limited to 2 MB.')
-      return
-    }
-    terminal.paste(text)
-    terminal.focus()
   }
 
   async function copyFullBuffer(): Promise<void> {

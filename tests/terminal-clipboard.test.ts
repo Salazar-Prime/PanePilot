@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   clipboardPasteFits,
   decodeOsc52Clipboard,
-  prepareClipboardPaste
+  prepareClipboardPaste,
+  terminalPastePayload
 } from '../src/renderer/src/lib/terminalClipboard'
 import { terminalInputChunks } from '../src/main/terminal-manager'
 
@@ -11,6 +12,15 @@ describe('terminal clipboard', () => {
     expect(prepareClipboardPaste('before\0after')).toBe('beforeafter')
     expect(clipboardPasteFits('small paste')).toBe(true)
     expect(clipboardPasteFits('x'.repeat(2 * 1024 * 1024 + 1))).toBe(false)
+  })
+
+  it('normalizes line endings and preserves bracketed-paste semantics', () => {
+    expect(terminalPastePayload('first\nsecond\r\nthird', false)).toBe(
+      'first\rsecond\rthird'
+    )
+    expect(terminalPastePayload('npm test\n', true)).toBe(
+      '\x1b[200~npm test\r\x1b[201~'
+    )
   })
 
   it('decodes bounded OSC 52 clipboard messages', () => {
