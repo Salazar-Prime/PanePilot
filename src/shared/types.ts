@@ -431,7 +431,7 @@ export interface ProjectConsoleApi {
     captureBuffer(sessionId: string): Promise<string>
     resize(sessionId: string, cols: number, rows: number): Promise<void>
     acknowledge(sessionId: string): Promise<void>
-    resumeAgent(sessionId: string, dangerousModeConfirmed?: boolean): Promise<void>
+    resumeAgent(sessionId: string): Promise<void>
     rename(sessionId: string, name: string): Promise<void>
     setPinned(sessionId: string, pinned: boolean): Promise<void>
     setFlagged(sessionId: string, flagged: boolean): Promise<void>

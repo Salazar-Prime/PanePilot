@@ -99,17 +99,7 @@ export function LatexAgentPane({
 
   async function resume() {
     if (!activeSession) return
-    const dangerousModeConfirmed =
-      !activeSession.dangerousMode ||
-      window.confirm(
-        `Resume “${activeSession.name}” with all provider permission checks disabled? ` +
-          'Use this only in an isolated or disposable environment.'
-      )
-    if (!dangerousModeConfirmed) return
-    await window.projectConsole.terminals.resumeAgent(
-      activeSession.id,
-      activeSession.dangerousMode
-    )
+    await window.projectConsole.terminals.resumeAgent(activeSession.id)
     await onChanged()
   }
 

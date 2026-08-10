@@ -34,7 +34,7 @@ These are owner-approved decisions and should be treated as product invariants u
 7. Terminals appear both as tabs in the main workspace and as direct-jump items under their project in the sidebar.
 8. Persistent terminals use tmux when available. A plain PTY is the fallback.
 9. User-created terminal launch profiles are login shell, Codex, and Claude Code. Reusable custom commands are project Actions, not ordinary terminal tabs.
-10. Dangerous permission bypass is per terminal, off by default, visibly marked, and confirmed before launch. It must never become a silent global default.
+10. Dangerous permission bypass is per terminal, off by default, and visibly marked. Enabling or resuming it does not show an additional confirmation prompt, and it must never become a silent global default.
 11. Terminal rename is non-destructive. Detaching an ordinary terminal leaves its tmux session running. Archive hides a stopped terminal but preserves its saved output. Confirmed deletion closes the exact live terminal session when necessary, then removes its saved output.
 12. Deleting a terminal does not delete the provider's Codex or Claude conversation archive.
 13. Local Codex and Claude archives are indexed read-only and are searchable across full message text.
@@ -237,7 +237,7 @@ Safety invariants:
 
 - Off by default for every launch.
 - Per-terminal choice, never a global preference.
-- Confirmation immediately before launch.
+- No additional confirmation on launch, resume, or reboot recovery after the user enables it for a terminal.
 - Persistent `unsafe` badge on the terminal.
 - Activity history records that permission checks were disabled.
 - UI language must explain that this is intended only for isolated or disposable environments.

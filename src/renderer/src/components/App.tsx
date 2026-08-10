@@ -379,17 +379,7 @@ export function App() {
   }
 
   async function resumeAgentSession(owner: Project, session: TerminalSession) {
-    const dangerousModeConfirmed =
-      !session.dangerousMode ||
-      window.confirm(
-        `Resume “${session.name}” with all provider permission checks disabled? ` +
-          'Use this only in an isolated or disposable environment.'
-      )
-    if (!dangerousModeConfirmed) return
-    await window.projectConsole.terminals.resumeAgent(
-      session.id,
-      session.dangerousMode
-    )
+    await window.projectConsole.terminals.resumeAgent(session.id)
     await selectSession(owner.id, session.id)
   }
 

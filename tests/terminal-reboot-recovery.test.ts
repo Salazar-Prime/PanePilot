@@ -35,7 +35,7 @@ describe('terminal reboot recovery', () => {
   })
 
   it.skipIf(spawnSync('tmux', ['-V']).status !== 0)(
-    'recreates safe local sessions while leaving Actions and dangerous agents stopped',
+    'recreates local sessions including dangerous agents while leaving Actions stopped',
     async () => {
       appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-reboot-recovery-'))
       const store = new Store(appDataPath)
@@ -94,7 +94,7 @@ describe('terminal reboot recovery', () => {
         const restored = manager.restoreLocalSessionsAfterReboot(
           Date.now() + 60_000
         )
-        expect(restored).toBe(1)
+        expect(restored).toBe(2)
 
         let owner = ''
         for (let attempt = 0; attempt < 50 && !owner; attempt += 1) {
@@ -115,13 +115,13 @@ describe('terminal reboot recovery', () => {
         expect(owner).toBe(shell.id)
         expect(store.getSession(shell.id)?.state).toBe('idle')
         expect(store.getSession(action.id)?.state).toBe('completed')
-        expect(store.getSession(dangerousAgent.id)?.state).toBe('completed')
+        expect(store.getSession(dangerousAgent.id)?.state).toBe('idle')
         expect(
           spawnSync('tmux', ['has-session', '-t', `=${actionName}`]).status
         ).not.toBe(0)
         expect(
           spawnSync('tmux', ['has-session', '-t', `=${dangerousName}`]).status
-        ).not.toBe(0)
+        ).toBe(0)
         expect(
           store
             .getProject(project.id)

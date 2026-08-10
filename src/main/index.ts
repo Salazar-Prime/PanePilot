@@ -252,8 +252,8 @@ function registerIpc(): void {
   })
   ipcMain.handle(
     'terminals:resume-agent',
-    (_event, sessionId: string, dangerousModeConfirmed = false) => {
-      terminals.resumeAgent(sessionId, dangerousModeConfirmed)
+    (_event, sessionId: string) => {
+      terminals.resumeAgent(sessionId)
     }
   )
   ipcMain.handle('terminals:rename', (_event, sessionId: string, name: string) => {

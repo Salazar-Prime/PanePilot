@@ -375,29 +375,6 @@ export class TerminalManager {
           continue
         }
 
-        if (session.dangerousMode && AGENT_PROFILES.has(session.profile)) {
-          if (liveTmuxSession) {
-            try {
-              this.killTmuxSession(connection, session.tmuxName)
-            } catch (error) {
-              const detail = error instanceof Error ? error.message : String(error)
-              console.error(`Could not stop restored agent ${session.name}: ${detail}`)
-              this.store.setSessionState(
-                session.id,
-                'error',
-                `${session.name} was unexpectedly restored by tmux and could not be stopped.`
-              )
-              continue
-            }
-          }
-          this.store.setSessionState(
-            session.id,
-            'completed',
-            `${session.name} was not restarted because dangerous mode must be confirmed again after reboot.`
-          )
-          continue
-        }
-
         if (liveTmuxSession) {
           try {
             this.store.prepareSessionForRebootRecovery(session.id, false)
@@ -1094,7 +1071,7 @@ export class TerminalManager {
     if (acknowledged !== session.state) this.changeState(session, acknowledged)
   }
 
-  resumeAgent(sessionId: string, dangerousModeConfirmed = false): void {
+  resumeAgent(sessionId: string): void {
     const session = this.requireSession(sessionId)
     if (!AGENT_PROFILES.has(session.profile)) {
       throw new Error('Only Codex or Claude terminals can resume a linked chat.')
@@ -1110,9 +1087,6 @@ export class TerminalManager {
     }
     if (session.archived) {
       throw new Error('Restore the archived terminal before resuming its agent chat.')
-    }
-    if (session.dangerousMode && !dangerousModeConfirmed) {
-      throw new Error('Confirm dangerous mode again before resuming this agent.')
     }
     const project = this.store.getProject(session.projectId)
     const connection = project ? this.store.getConnection(project.connectionId) : null

@@ -44,14 +44,6 @@ export function LatexChatLauncher({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (
-      dangerousMode &&
-      !window.confirm(
-        'Disable the agent’s permission checks for this chat? Only use this in an isolated or disposable environment.'
-      )
-    ) {
-      return
-    }
     setSubmitting(true)
     setError('')
     try {

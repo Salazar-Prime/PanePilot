@@ -52,12 +52,8 @@ const api: ProjectConsoleApi = {
     resize: (sessionId: string, cols: number, rows: number) =>
       ipcRenderer.invoke('terminals:resize', sessionId, cols, rows),
     acknowledge: (sessionId: string) => ipcRenderer.invoke('terminals:acknowledge', sessionId),
-    resumeAgent: (sessionId: string, dangerousModeConfirmed = false) =>
-      ipcRenderer.invoke(
-        'terminals:resume-agent',
-        sessionId,
-        dangerousModeConfirmed
-      ),
+    resumeAgent: (sessionId: string) =>
+      ipcRenderer.invoke('terminals:resume-agent', sessionId),
     rename: (sessionId: string, name: string) =>
       ipcRenderer.invoke('terminals:rename', sessionId, name),
     setPinned: (sessionId: string, pinned: boolean) =>
