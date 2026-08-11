@@ -104,6 +104,11 @@ interface PendingOutput {
   warned: boolean
 }
 
+interface VolatileOutput {
+  chunks: string[]
+  byteLength: number
+}
+
 interface ActionPaneSnapshot {
   exitCode: number
   output: string
@@ -178,6 +183,24 @@ export function terminalInputChunks(
     start = end
   }
   return chunks
+}
+
+export function persistsTerminalOutput(profile: LaunchProfile): boolean {
+  // Codex owns the durable conversation archive. Persist only the small exact
+  // thread reference that PanePilot needs to resume it after a restart.
+  return profile !== 'codex'
+}
+
+export function retainedVolatileTerminalOutput(
+  data: string,
+  maximumBytes = OUTPUT_BUFFER_LIMIT
+): string {
+  if (!data || maximumBytes <= 0) return ''
+  const encoded = Buffer.from(data, 'utf8')
+  if (encoded.length <= maximumBytes) return data
+  let start = encoded.length - maximumBytes
+  while (start < encoded.length && (encoded[start] & 0xc0) === 0x80) start += 1
+  return encoded.subarray(start).toString('utf8')
 }
 
 function resolveTmux(): string | null {
@@ -339,6 +362,7 @@ export class TerminalManager {
   private readonly remoteReconciliations = new Map<string, Promise<number>>()
   private readonly remoteTmuxPaths = new Map<string, string>()
   private readonly pendingOutput = new Map<string, PendingOutput>()
+  private readonly volatileOutput = new Map<string, VolatileOutput>()
   private readonly tmuxPath = resolveTmux()
   private readonly metadata: ProjectMetadataService
   private shuttingDown = false
@@ -910,7 +934,12 @@ export class TerminalManager {
         this.launch(session, project.folder, connection, cols, rows, false)
       }
     }
-    return { output: this.store.getSession(sessionId)?.output ?? '' }
+    return {
+      output:
+        session.profile === 'codex'
+          ? this.volatileOutput.get(sessionId)?.chunks.join('') ?? ''
+          : this.store.getSession(sessionId)?.output ?? ''
+    }
   }
 
   async retryAttach(sessionId: string, cols: number, rows: number): Promise<void> {
@@ -1201,6 +1230,7 @@ export class TerminalManager {
     const rows = runtime?.rows ?? 30
     this.cancelReconnect(sessionId)
     if (runtime) this.closeRuntimeForReconnect(runtime)
+    if (session.profile === 'codex') this.volatileOutput.delete(sessionId)
 
     try {
       if (session.backend === 'tmux' && session.tmuxName) {
@@ -1394,6 +1424,7 @@ export class TerminalManager {
     this.reconnects.clear()
     this.remoteReconciliations.clear()
     this.remoteTmuxPaths.clear()
+    this.volatileOutput.clear()
     for (const runtime of this.runtimes.values()) {
       runtime.closingTransport = true
       if (runtime.scanTimer) clearTimeout(runtime.scanTimer)
@@ -1457,7 +1488,7 @@ export class TerminalManager {
 
     child.onData((data) => {
       if (this.shuttingDown || runtime.closingTransport) return
-      if (!runtime.outputClosed) this.queueOutput(session.id, data)
+      if (!runtime.outputClosed) this.retainTerminalOutput(session, data)
       this.getWindow()?.webContents.send('terminal:data', { sessionId: session.id, data })
       screen.write(data, () => this.scheduleScreenScan(runtime))
     })
@@ -1788,6 +1819,46 @@ export class TerminalManager {
     this.scheduleOutputFlush(sessionId, OUTPUT_FLUSH_DELAY_MS)
   }
 
+  private retainTerminalOutput(session: TerminalSession, data: string): void {
+    if (!data || this.shuttingDown) return
+    if (persistsTerminalOutput(session.profile)) {
+      this.queueOutput(session.id, data)
+      return
+    }
+    const dataBytes = Buffer.byteLength(data, 'utf8')
+    if (dataBytes >= OUTPUT_BUFFER_LIMIT) {
+      const retained = retainedVolatileTerminalOutput(data)
+      this.volatileOutput.set(session.id, {
+        chunks: [retained],
+        byteLength: Buffer.byteLength(retained, 'utf8')
+      })
+      return
+    }
+
+    const output = this.volatileOutput.get(session.id) ?? {
+      chunks: [],
+      byteLength: 0
+    }
+    output.chunks.push(data)
+    output.byteLength += dataBytes
+    while (output.byteLength > OUTPUT_BUFFER_LIMIT && output.chunks.length > 0) {
+      const first = output.chunks[0]
+      const firstBytes = Buffer.byteLength(first, 'utf8')
+      const excess = output.byteLength - OUTPUT_BUFFER_LIMIT
+      if (firstBytes <= excess) {
+        output.chunks.shift()
+        output.byteLength -= firstBytes
+      } else {
+        const retained = retainedVolatileTerminalOutput(first, firstBytes - excess)
+        output.chunks[0] = retained
+        output.byteLength =
+          output.byteLength - firstBytes + Buffer.byteLength(retained, 'utf8')
+      }
+    }
+    if (output.chunks.length > 256) output.chunks = [output.chunks.join('')]
+    this.volatileOutput.set(session.id, output)
+  }
+
   private scheduleOutputFlush(sessionId: string, delay: number): void {
     const pending = this.pendingOutput.get(sessionId)
     if (!pending || pending.timer || this.shuttingDown) return
@@ -1840,6 +1911,7 @@ export class TerminalManager {
     const pending = this.pendingOutput.get(sessionId)
     if (pending?.timer) clearTimeout(pending.timer)
     this.pendingOutput.delete(sessionId)
+    this.volatileOutput.delete(sessionId)
   }
 
   private scheduleActionCompletion(runtime: Runtime): void {

@@ -35,7 +35,7 @@ These are owner-approved decisions and should be treated as product invariants u
 8. Persistent terminals use tmux when available. A plain PTY is the fallback.
 9. User-created terminal launch profiles are login shell, Codex, and Claude Code. Reusable custom commands are project Actions, not ordinary terminal tabs.
 10. Dangerous permission bypass is per terminal, off by default, and visibly marked. Enabling or resuming it does not show an additional confirmation prompt, and it must never become a silent global default.
-11. Terminal rename is non-destructive. Detaching an ordinary terminal leaves its tmux session running. Archive hides a stopped terminal but preserves its saved output. Confirmed deletion closes the exact live terminal session when necessary, then removes its saved output.
+11. Terminal rename is non-destructive. Detaching an ordinary terminal leaves its tmux session running. Archive hides a stopped terminal and preserves saved output for profiles that persist it; Codex uses its provider archive instead. Confirmed deletion closes the exact live terminal session when necessary, then removes any saved output.
 12. Deleting a terminal does not delete the provider's Codex or Claude conversation archive.
 13. Local Codex and Claude archives are indexed read-only and are searchable across full message text.
 14. File-looking terminal output should be clickable. Files can also be browsed and previewed in the UI.
@@ -69,6 +69,7 @@ These are owner-approved decisions and should be treated as product invariants u
 42. Project “Needs attention” sorting is a sticky, client-local promotion order. A project moves upward only when it enters `needs-input` or `needs-attention`; clicks and ordinary activity do not affect this order, and clearing attention never demotes it. A later attention transition may promote another project above it.
 43. Any Codex or Claude chat tab can be force reloaded in place, including one that never connected or linked a provider ID. PanePilot closes only that tab’s exact backend session and recreates tmux with the same name and unsafe-mode setting. It resumes the exact stored or newly discovered provider session ID when available; otherwise it starts a fresh provider chat in the same tab.
 44. Git is a read-only, folder-backed capability for local and SSH projects. The focused project’s toolbar indicator summarizes conflicts, staged changes, untracked/working changes, and ahead/behind state. Its toggleable right pane separates working-tree groups and exposes the all-branch commit graph through bounded, user-requested history pages; it never mutates the repository.
+45. Codex raw terminal output is application-lifetime state, not durable workspace data. PanePilot keeps a bounded in-memory replay buffer for live usability but does not continuously save Codex output in SQLite. Restart and reboot recovery rely on the exact provider thread ID and Codex’s own archive. Other terminal profiles retain their existing saved-output behavior.
 
 ## Agent lifecycle semantics
 
@@ -199,7 +200,7 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - Stopping an Action or agent capability, and deleting any live tmux-backed terminal, must directly kill the exact tmux session and verify that it is gone before marking it `completed` or removing it. Do not simulate tmux prefix keystrokes through the terminal UI.
 - Local tmux resolution checks PATH plus common Homebrew/system locations.
 - Custom hook environment variables must be passed through the pane's initial `env` command. A pre-existing tmux server does not automatically import arbitrary client variables.
-- Saved terminal output is capped in SQLite.
+- Saved non-Codex terminal output is capped in SQLite. Codex raw output is capped in main-process memory and is discarded when PanePilot exits.
 - xterm replay must suppress `onData`; otherwise xterm protocol replies can be echoed into the PTY as numeric garbage.
 - Raw PTY output must remain byte-for-byte intact. Codex remote-state recovery reads the tmux pane title separately and must never inject metadata into terminal output.
 
