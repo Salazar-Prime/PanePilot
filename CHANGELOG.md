@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0 — 2026-08-10
+
+This release adds:
+
+- Project-scoped rclone Google Drive destinations, authoritative local/SSH file
+  uploads, and explicit creation, copying, and revocation of public file links.
+- Google Neural2 read-aloud controls with concise and verbatim modes, local monthly
+  usage limits, and Application Default Credentials support.
+- Built-in LaTeX PDF preview, printing, and Finder reveal actions.
+- Focused project keyboard navigation, KeyTips, split-pane swapping, client-local
+  project sorting, custom project icons, and drag-ordered terminal tabs.
+- Force reload for Codex and Claude tabs, exact-session recovery improvements, local
+  tmux restoration after reboot, safer clipboard handling, and login-shell PATH
+  resolution for agent launches.
+- PanePilot Remote 0.1.1 source with optional Android Keystore-backed password
+  storage and broader tmux delimiter compatibility.
+
+The v0.4.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It remains
+unsigned and unnotarized. PanePilot Remote remains source-only in this release.
+
 ## 0.2.0-rc.1 — 2026-07-24
 
 This release candidate adds:
