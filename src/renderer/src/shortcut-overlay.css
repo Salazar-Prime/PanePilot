@@ -1,37 +1,11 @@
 .project-workspace {
   position: relative;
-  isolation: isolate;
 }
 
-.workspace-tabs > .shortcut-guide-button {
-  height: 29px;
-  margin: 0 7px 7px auto;
-  padding: 0 8px;
-  gap: 6px;
-  color: #727d91;
-  border: 1px solid #292f3b;
-  border-radius: 6px;
-  background: #11151d;
-  font: 9px Inter, ui-sans-serif, sans-serif;
-}
-
-.workspace-tabs > .shortcut-guide-button:hover,
-.workspace-tabs > .shortcut-guide-button.open {
-  color: #c2cced;
-  border-color: #46547e;
-  background: #182036;
-}
-
-.shortcut-guide-button kbd,
 .shortcut-command-overlay kbd,
 .shortcut-keytip {
   font-family: "SFMono-Regular", "Cascadia Code", monospace;
   font-weight: 750;
-}
-
-.shortcut-guide-button kbd {
-  color: #8f9bc0;
-  font-size: 8px;
 }
 
 .shortcut-command-overlay {
@@ -237,11 +211,6 @@
 }
 
 @media (max-width: 1050px) {
-  .workspace-tabs > .shortcut-guide-button span,
-  .workspace-tabs > .shortcut-guide-button kbd {
-    display: none;
-  }
-
   .shortcut-command-row {
     grid-template-columns: 1fr;
     gap: 5px;

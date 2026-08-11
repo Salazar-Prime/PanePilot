@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   advanceShortcutOverlayGesture,
   directSessionIndex,
+  isPaneSwapShortcut,
   isShortcutOverlayTap,
   keyTipActionKey,
   keyTipSessionIndex,
@@ -118,6 +119,22 @@ describe('project keyboard shortcuts', () => {
       triggered: false
     })
     expect(second.state.count).toBe(2)
+  })
+
+  it('uses the shifted split key to swap workspace panes', () => {
+    expect(
+      isPaneSwapShortcut(
+        keyEvent({ code: 'Backslash', metaKey: true, shiftKey: true })
+      )
+    ).toBe(true)
+    expect(
+      isPaneSwapShortcut(
+        keyEvent({ code: 'Backslash', ctrlKey: true, shiftKey: true })
+      )
+    ).toBe(true)
+    expect(
+      isPaneSwapShortcut(keyEvent({ code: 'Backslash', metaKey: true }))
+    ).toBe(false)
   })
 
   it('maps direct and overlay number keys to zero-based session indexes', () => {

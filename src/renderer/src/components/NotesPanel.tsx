@@ -14,6 +14,7 @@ import type {
   ProjectNote,
   ProjectNoteSummary
 } from '@shared/types'
+import { useModalEscape } from '../lib/modalEscape'
 import { Editor, monaco } from '../lib/monaco'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
 
@@ -400,6 +401,7 @@ function NoteNameDialog({
   const [name, setName] = useState(initialName)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  useModalEscape(onClose, true, saving)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()

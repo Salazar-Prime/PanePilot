@@ -12,9 +12,16 @@ export interface ProjectWorkspaceProps {
   project: Project
   connection: Connection | undefined
   selectedSessionId: string | null
-  launchTerminalRequest: number
-  openSessionRequest: number
+  launchTerminalRequest: number | null
+  openSessionRequest: number | null
   terminalTransportStates: Record<string, TerminalTransportState>
+  openSessionIds: Set<string>
+  onOpenSession(id: string): void
+  onCloseSession(id: string): void
+  onSessionSelected(id: string): void
+  onLaunchTerminalRequestHandled(id: number): void
+  onOpenSessionRequestHandled(id: number): void
+  onSwapPanes?(): void
   onSelectSession(id: string): void
   onChanged(): Promise<void>
 }

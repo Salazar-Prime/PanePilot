@@ -68,6 +68,27 @@ export function parseRcloneStat(raw: string): RcloneStat {
   return item as RcloneStat
 }
 
+export function parseRclonePublicLink(raw: string): string {
+  const candidate = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .at(-1)
+  if (!candidate) {
+    throw new Error('rclone did not return a public Google Drive link.')
+  }
+  let url: URL
+  try {
+    url = new URL(candidate)
+  } catch {
+    throw new Error('rclone returned an invalid public Google Drive link.')
+  }
+  if (url.protocol !== 'https:') {
+    throw new Error('rclone returned an unsafe public Google Drive link.')
+  }
+  return url.toString()
+}
+
 export function isGoogleDriveRemoteConfig(raw: string): boolean {
   return /^\s*type\s*=\s*drive\s*$/im.test(raw)
 }

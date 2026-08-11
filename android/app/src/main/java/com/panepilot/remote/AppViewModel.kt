@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.panepilot.remote.data.CredentialStore
 import com.panepilot.remote.data.ProfileStore
 import com.panepilot.remote.model.AuthMode
 import com.panepilot.remote.model.ConnectionSecret
@@ -61,6 +62,7 @@ private data class PendingTrust(
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val profileStore = ProfileStore(application)
+    private val credentialStore = CredentialStore(application)
     private val pendingTrust = AtomicReference<PendingTrust?>(null)
     private val ssh = SshConnection(application, profileStore, ::awaitHostKeyDecision)
     private val tmux = TmuxGateway(ssh)
@@ -100,6 +102,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     profileStore.save(normalized, selectedKey)
                 }
             }.onSuccess { profiles ->
+                if (normalized.authMode != AuthMode.PASSWORD) {
+                    credentialStore.remove(normalized.id)
+                }
                 _state.update {
                     it.copy(
                         profiles = profiles,
@@ -113,7 +118,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteServer(profileId: String) {
         viewModelScope.launch {
-            val profiles = withContext(Dispatchers.IO) { profileStore.delete(profileId) }
+            val profiles = withContext(Dispatchers.IO) {
+                credentialStore.remove(profileId)
+                profileStore.delete(profileId)
+            }
             _state.update {
                 it.copy(profiles = profiles, screen = AppScreen.Servers, error = null)
             }
@@ -133,7 +141,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun connect(profileId: String, secret: ConnectionSecret) {
+    fun connect(
+        profileId: String,
+        secret: ConnectionSecret,
+        rememberPassword: Boolean = false
+    ) {
         val profile = profile(profileId) ?: return
         viewModelScope.launch {
             _state.update { it.copy(isBusy = true, error = null) }
@@ -141,7 +153,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.IO) {
                     ssh.connect(profile, secret)
                     tmux.reset()
-                    tmux.listSessions()
+                    val sessions = tmux.listSessions()
+                    if (profile.authMode == AuthMode.PASSWORD) {
+                        if (rememberPassword) {
+                            credentialStore.savePassword(profile.id, secret.password)
+                        } else {
+                            credentialStore.remove(profile.id)
+                        }
+                    }
+                    sessions
                 }
             }.onSuccess { sessions ->
                 _state.update {
@@ -274,6 +294,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.value.profiles.firstOrNull { it.id == profileId }
 
     fun hasPrivateKey(profileId: String): Boolean = profileStore.hasPrivateKey(profileId)
+
+    fun rememberedPassword(profileId: String): String? = credentialStore.password(profileId)
+
+    fun forgetPassword(profileId: String) {
+        credentialStore.remove(profileId)
+    }
 
     override fun onCleared() {
         pendingTrust.getAndSet(null)?.latch?.countDown()

@@ -96,7 +96,10 @@ currently open in Monaco is uploaded even when its preview is truncated. Its
 project-relative path is preserved under the attached folder, and uploading that path
 again updates the destination. Save any Monaco edits before uploading. PanePilot shows
 Open/Copy actions for the private Drive link and records the same link in project
-activity. It does not call `rclone link`, which would create a public share link.
+activity. Uploading alone does not call `rclone link` or change public access.
+After an upload, **Create public link** explicitly asks rclone to make an
+anyone-with-the-link URL and copies it to the clipboard. **Stop sharing** removes the
+public link. Uploading by itself never changes the file's public sharing state.
 
 Press **Command-K** (or **Control-K**) to open the command palette for projects,
 terminals, and common project actions.
@@ -109,3 +112,25 @@ shown terminal or chat tabs. Without opening KeyTips, **Command/Control-1–9** 
 directly to a tab and **Command/Control-Shift-[ / ]** cycles tabs. Only the focused
 pane responds in split view. **Control-Page Up / Page Down** is also available for
 cycling tabs.
+
+Each Local or SSH machine heading in the sidebar has its own project sort menu.
+The choice is saved only on this PanePilot client and applies inside that machine
+group. Project icons light their left and right halves independently to show which
+split pane currently has the project open. Drag open terminal tabs to arrange them;
+the order is saved per project on this client, and pinned tabs always stay in the
+leftmost group. Use **Command/Control-Shift-\\** to swap the left and right pane
+contents, or reveal KeyTips and press `S`. For project sorting, **Newest first**
+means the project selected most recently on this PanePilot client; it does not mean
+the newest database record.
+With project sorting set to **Needs attention**, entering an attention state
+promotes a project. That promotion is sticky: resolving the attention state does
+not move the project back down, while a later attention event can promote another
+project above it.
+
+Click a project's sidebar glyph to replace its initial with one Unicode symbol
+or emoji. In split view, violet on the glyph's left half marks the left pane and
+teal on its right half marks the right pane. The larger project name in the top
+bar is followed by a dotted-underlined path; click that path to copy it. The
+keyboard shortcut overlay remains available with **Command/Control-/** even
+though the visible Shortcuts and Command Palette buttons are intentionally
+omitted. Press **Escape** to dismiss the topmost open modal.

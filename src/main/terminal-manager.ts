@@ -62,6 +62,7 @@ const MAX_ACTION_CAPTURE_OUTPUT = 1024 * 1024
 const ACTION_EXIT_STATUS_OPTION = '@panepilot_action_exit_status'
 const MAX_TERMINAL_CAPTURE_OUTPUT = 4 * 1024 * 1024
 const MAX_TERMINAL_INPUT_BYTES = 2 * 1024 * 1024
+const LOGIN_PATH_TIMEOUT_MS = 8_000
 const REBOOT_RECOVERY_CLOCK_SKEW_MS = 5_000
 const TERMINAL_INPUT_CHUNK_SIZE = 16 * 1024
 const CODEX_TMUX_TITLE_CONFIG =
@@ -188,6 +189,51 @@ function resolveTmux(): string | null {
   return TMUX_CANDIDATES.find(existsSync) ?? null
 }
 
+// PanePilot inherits whatever PATH launched it, which is frequently narrower than
+// the user's own shell PATH: on zsh, entries such as ~/.local/bin and
+// ~/Library/pnpm are usually added in ~/.zshrc, which only interactive shells
+// read. tmux copies the *client's* environment into a session it creates, so a
+// narrow PATH means `codex`/`claude` are not found, the pane exits immediately,
+// and the tmux session dies before anyone can attach to it. Resolve the user's
+// real PATH once from an interactive login shell and reuse it for every launch;
+// doing this per launch would add that shell's startup time to every terminal.
+let resolvedLoginPath: string | null | undefined
+
+function loginShellPath(): string | null {
+  if (resolvedLoginPath !== undefined) return resolvedLoginPath
+  resolvedLoginPath = null
+  const shell = process.env.SHELL
+  if (!shell || !existsSync(shell)) return resolvedLoginPath
+  try {
+    // Interactive startup files print banners and prompts, so delimit the value
+    // instead of trusting stdout to hold nothing else.
+    const result = spawnSync(
+      shell,
+      ['-lic', 'printf "\\npanepilot_path<%s>panepilot_end\\n" "$PATH"'],
+      { encoding: 'utf8', timeout: LOGIN_PATH_TIMEOUT_MS }
+    )
+    const match = /panepilot_path<([^>\n]*)>panepilot_end/.exec(result.stdout ?? '')
+    const value = match?.[1]?.trim()
+    if (value) resolvedLoginPath = value
+  } catch {
+    // A missing or misbehaving login shell just means we keep the inherited PATH.
+  }
+  return resolvedLoginPath
+}
+
+function terminalPath(): string | undefined {
+  const loginPath = loginShellPath()
+  if (!loginPath) return process.env.PATH
+  // Keep anything the launch environment contributed that the login shell does
+  // not know about, but let the user's own entries win when both provide a
+  // command.
+  const seen = new Set(loginPath.split(':'))
+  const extras = (process.env.PATH ?? '')
+    .split(':')
+    .filter((entry) => entry && !seen.has(entry))
+  return extras.length > 0 ? `${loginPath}:${extras.join(':')}` : loginPath
+}
+
 function remoteTmuxResolutionCommand(): string {
   return (
     `panepilot_tmux=$(command -v tmux 2>/dev/null || true); ` +
@@ -305,6 +351,9 @@ export class TerminalManager {
     metadata?: ProjectMetadataService
   ) {
     this.metadata = metadata ?? new ProjectMetadataService(store)
+    // Resolving the login PATH costs a full interactive shell startup. Prime it
+    // just off the critical path so the first terminal launch does not wear it.
+    setImmediate(() => loginShellPath()).unref()
   }
 
   start(input: StartTerminalInput): TerminalSession {
@@ -1586,7 +1635,8 @@ export class TerminalManager {
     const env = {
       ...process.env,
       TERM: 'xterm-256color',
-      COLORTERM: 'truecolor'
+      COLORTERM: 'truecolor',
+      PATH: terminalPath()
     } as Record<string, string>
 
     if (connection.kind === 'ssh') {

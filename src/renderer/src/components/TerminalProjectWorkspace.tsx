@@ -19,23 +19,25 @@ import {
   RotateCcw,
   Square,
   TerminalSquare,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react'
 import type { TerminalSession } from '@shared/types'
 import type {
   ProjectFileOpenRequest,
   TerminalFileTarget
 } from '../lib/terminalFileLinks'
+import { useModalEscape } from '../lib/modalEscape'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
 import {
   type ProjectShortcutAction,
   useProjectShortcuts
 } from '../lib/projectShortcuts'
 import {
-  sessionSortOptions,
-  sortSessions,
-  useSessionSort
-} from '../lib/sessionSort'
+  clampTerminalTabDrop,
+  type TabDropEdge,
+  useTerminalTabOrder
+} from '../lib/terminalTabOrder'
 import { shouldOfferTmuxReconnect } from '../lib/terminalTransport'
 import { tmuxOptionsCommand } from '../lib/tmuxCommands'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
@@ -81,6 +83,13 @@ export function TerminalProjectWorkspace({
   launchTerminalRequest,
   openSessionRequest,
   terminalTransportStates,
+  openSessionIds,
+  onOpenSession,
+  onCloseSession,
+  onSessionSelected,
+  onLaunchTerminalRequestHandled,
+  onOpenSessionRequestHandled,
+  onSwapPanes,
   onSelectSession,
   onChanged
 }: ProjectWorkspaceProps) {
@@ -89,7 +98,6 @@ export function TerminalProjectWorkspace({
   const [showArchivedSessions, setShowArchivedSessions] = useState(false)
   const [openFileRequest, setOpenFileRequest] =
     useState<ProjectFileOpenRequest | null>(null)
-  const [sessionSort, setSessionSort] = useSessionSort()
   const [renameTarget, setRenameTarget] = useState<TerminalSession | null>(null)
   const [cachedTerminalViews, setCachedTerminalViews] = useState<
     CachedTerminalView[]
@@ -97,15 +105,38 @@ export function TerminalProjectWorkspace({
   const [menu, setMenu] = useState<{ sessionId: string; top: number; left: number } | null>(
     null
   )
-  const visibleSessions = useMemo(
+  const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
+  const [tabDropTarget, setTabDropTarget] = useState<{
+    targetId: string
+    edge: TabDropEdge
+  } | null>(null)
+  const terminalSessions = useMemo(
     () =>
-      sortSessions(
-        project.sessions.filter(
-          (session) => !session.archived && session.kind === 'terminal'
-        ),
-        sessionSort
+      project.sessions.filter(
+        (session) => !session.archived && session.kind === 'terminal'
       ),
-    [project.sessions, sessionSort]
+    [project.sessions]
+  )
+  const { orderedSessions: allSessions, moveTab } = useTerminalTabOrder(
+    project.id,
+    terminalSessions
+  )
+  const openTabs = useMemo(
+    () => allSessions.filter((session) => openSessionIds.has(session.id)),
+    [allSessions, openSessionIds]
+  )
+  const openPinnedTabIds = useMemo(
+    () =>
+      new Set(
+        openTabs
+          .filter((session) => session.pinned)
+          .map((session) => session.id)
+      ),
+    [openTabs]
+  )
+  const closedSessions = useMemo(
+    () => allSessions.filter((session) => !openSessionIds.has(session.id)),
+    [allSessions, openSessionIds]
   )
   const archivedSessions = useMemo(
     () =>
@@ -115,7 +146,7 @@ export function TerminalProjectWorkspace({
     [project.sessions]
   )
   const activeSession =
-    visibleSessions.find((session) => session.id === selectedSessionId) ?? visibleSessions[0]
+    openTabs.find((session) => session.id === selectedSessionId) ?? openTabs[0]
   const shortcutActions: ProjectShortcutAction[] = [
     {
       key: 't',
@@ -153,9 +184,12 @@ export function TerminalProjectWorkspace({
       label: 'Activity',
       active: tab === 'history',
       run: () => setTab('history')
-    }
+    },
+    ...(onSwapPanes
+      ? [{ key: 's', label: 'Swap panes', run: onSwapPanes }]
+      : [])
   ]
-  const shortcutSessions = visibleSessions.map((session) => ({
+  const shortcutSessions = openTabs.map((session) => ({
     id: session.id,
     label: session.name
   }))
@@ -166,6 +200,10 @@ export function TerminalProjectWorkspace({
     activeSessionId: activeSession?.id ?? null,
     onSelectSession: selectSession
   })
+  useModalEscape(
+    () => setShowArchivedSessions(false),
+    showArchivedSessions
+  )
   const renderedTerminalViews = useMemo(() => {
     const currentSessions = new Map(
       project.sessions.map((session) => [session.id, session])
@@ -196,6 +234,18 @@ export function TerminalProjectWorkspace({
     void window.projectConsole.terminals.acknowledge(activeSession.id).then(onChanged)
   }, [activeSession?.id])
 
+  // Seed every non-archived terminal as "open" the first time this project is
+  // encountered, so existing sessions keep showing as tabs the way they always
+  // have. Deliberately keyed on project.id only: once the user starts closing
+  // tabs, allSessions having zero open members again must not re-seed them.
+  useEffect(() => {
+    if (allSessions.length === 0) return
+    const hasAnyOpen = allSessions.some((session) => openSessionIds.has(session.id))
+    if (hasAnyOpen) return
+    for (const session of allSessions) onOpenSession(session.id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id])
+
   useEffect(() => {
     setCachedTerminalViews((current) => {
       const currentSessions = new Map(
@@ -224,12 +274,22 @@ export function TerminalProjectWorkspace({
   }, [activeSession, project.folder, project.id, project.sessions])
 
   useEffect(() => {
-    if (launchTerminalRequest > 0) setShowLauncher(true)
-  }, [launchTerminalRequest])
+    setShowLauncher(false)
+    setDraggingTabId(null)
+    setTabDropTarget(null)
+  }, [project.id])
 
   useEffect(() => {
-    if (openSessionRequest > 0) setTab('terminal')
-  }, [openSessionRequest])
+    if (launchTerminalRequest == null) return
+    setShowLauncher(true)
+    onLaunchTerminalRequestHandled(launchTerminalRequest)
+  }, [launchTerminalRequest, onLaunchTerminalRequestHandled])
+
+  useEffect(() => {
+    if (openSessionRequest == null) return
+    setTab('terminal')
+    onOpenSessionRequestHandled(openSessionRequest)
+  }, [openSessionRequest, onOpenSessionRequestHandled])
 
   useEffect(() => {
     setOpenFileRequest(null)
@@ -254,6 +314,8 @@ export function TerminalProjectWorkspace({
 
   async function selectSession(id: string) {
     setTab('terminal')
+    onSessionSelected(id)
+    onOpenSession(id)
     onSelectSession(id)
     await window.projectConsole.terminals.acknowledge(id)
     await onChanged()
@@ -263,6 +325,7 @@ export function TerminalProjectWorkspace({
     const session = await window.projectConsole.terminals.start(input)
     await onChanged()
     setTab('terminal')
+    onOpenSession(session.id)
     onSelectSession(session.id)
   }
 
@@ -316,6 +379,8 @@ export function TerminalProjectWorkspace({
   async function reconnect(session: TerminalSession) {
     setMenu(null)
     setTab('terminal')
+    onSessionSelected(session.id)
+    onOpenSession(session.id)
     onSelectSession(session.id)
     await window.projectConsole.terminals.retryAttach(session.id, 100, 30)
     await onChanged()
@@ -331,6 +396,8 @@ export function TerminalProjectWorkspace({
     setMenu(null)
     await window.projectConsole.terminals.resumeAgent(session.id)
     setTab('terminal')
+    onSessionSelected(session.id)
+    onOpenSession(session.id)
     onSelectSession(session.id)
     await onChanged()
   }
@@ -339,6 +406,8 @@ export function TerminalProjectWorkspace({
     setMenu(null)
     await window.projectConsole.terminals.forceReloadAgent(session.id)
     setTab('terminal')
+    onSessionSelected(session.id)
+    onOpenSession(session.id)
     onSelectSession(session.id)
     await onChanged()
   }
@@ -346,6 +415,8 @@ export function TerminalProjectWorkspace({
   async function restore(session: TerminalSession) {
     await window.projectConsole.terminals.restore(session.id)
     if (archivedSessions.length === 1) setShowArchivedSessions(false)
+    onSessionSelected(session.id)
+    onOpenSession(session.id)
     onSelectSession(session.id)
     await onChanged()
   }
@@ -419,10 +490,72 @@ export function TerminalProjectWorkspace({
         <section className="terminal-workspace">
           <div className="terminal-tabs">
             <div className="terminal-tabs-scroll">
-              {visibleSessions.map((session, index) => (
+              {openTabs.map((session, index) => (
                 <div
                   key={session.id}
-                  className={`terminal-tab ${activeSession?.id === session.id ? 'active' : ''}`}
+                  className={`terminal-tab ${
+                    activeSession?.id === session.id ? 'active' : ''
+                  } ${session.pinned ? 'pinned-tab' : ''} ${
+                    draggingTabId === session.id ? 'dragging' : ''
+                  } ${
+                    tabDropTarget?.targetId === session.id
+                      ? `drop-${tabDropTarget.edge}`
+                      : ''
+                  }`}
+                  draggable
+                  aria-grabbed={draggingTabId === session.id}
+                  onDragStart={(event) => {
+                    if (
+                      (event.target as HTMLElement).closest(
+                        '.tab-menu-button, .tab-reconnect-button, .tab-close-button'
+                      )
+                    ) {
+                      event.preventDefault()
+                      return
+                    }
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData(
+                      'application/x-panepilot-terminal-tab',
+                      session.id
+                    )
+                    setDraggingTabId(session.id)
+                    setTabDropTarget(null)
+                  }}
+                  onDragOver={(event) => {
+                    if (!draggingTabId || draggingTabId === session.id) return
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                    const bounds = event.currentTarget.getBoundingClientRect()
+                    const edge =
+                      event.clientX < bounds.left + bounds.width / 2
+                        ? 'before'
+                        : 'after'
+                    setTabDropTarget(
+                      clampTerminalTabDrop(
+                        openTabs.map((item) => item.id),
+                        draggingTabId,
+                        session.id,
+                        edge,
+                        openPinnedTabIds
+                      )
+                    )
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    if (draggingTabId && tabDropTarget) {
+                      moveTab(
+                        draggingTabId,
+                        tabDropTarget.targetId,
+                        tabDropTarget.edge
+                      )
+                    }
+                    setDraggingTabId(null)
+                    setTabDropTarget(null)
+                  }}
+                  onDragEnd={() => {
+                    setDraggingTabId(null)
+                    setTabDropTarget(null)
+                  }}
                   onContextMenu={(event) => {
                     event.preventDefault()
                     setMenu({
@@ -439,6 +572,14 @@ export function TerminalProjectWorkspace({
                   <button
                     className="terminal-tab-select"
                     onClick={() => void selectSession(session.id)}
+                    // The unsafe state lives in the status bar now — it only
+                    // matters for the terminal you are actually looking at, and
+                    // a badge on every tab crowded out the session names.
+                    title={
+                      session.dangerousMode
+                        ? `${session.name} — permission checks disabled · drag to reorder`
+                        : `${session.name} — drag to reorder`
+                    }
                   >
                     <StatusDot state={session.state} compact />
                     <TerminalProfileIcon
@@ -447,7 +588,6 @@ export function TerminalProjectWorkspace({
                     />
                     {session.pinned && <Pin className="pinned-indicator" size={10} />}
                     <span>{session.name}</span>
-                    {session.dangerousMode && <small className="unsafe-badge">unsafe</small>}
                   </button>
                   {shouldOfferTmuxReconnect(
                     project,
@@ -481,26 +621,20 @@ export function TerminalProjectWorkspace({
                   >
                     <MoreHorizontal size={14} />
                   </button>
+                  <button
+                    className="tab-close-button"
+                    aria-label={`Close ${session.name} tab`}
+                    title="Close tab (tmux session keeps running)"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onCloseSession(session.id)
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
                 </div>
               ))}
             </div>
-            <label className="session-sort-control" title="Sort terminal sessions">
-              <span>Sort</span>
-              <select
-                value={sessionSort}
-                onChange={(event) =>
-                  setSessionSort(
-                    event.target.value as Parameters<typeof setSessionSort>[0]
-                  )
-                }
-              >
-                {sessionSortOptions.map((option) => (
-                  <option value={option.value} key={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
             {archivedSessions.length > 0 && (
               <button
                 className="session-archive-button"
@@ -511,13 +645,6 @@ export function TerminalProjectWorkspace({
                 <span>{archivedSessions.length}</span>
               </button>
             )}
-            <button
-              className="new-terminal-button"
-              onClick={() => setShowLauncher(true)}
-              title="New terminal"
-            >
-              <Plus size={16} />
-            </button>
           </div>
 
           {activeSession ? (
@@ -538,6 +665,33 @@ export function TerminalProjectWorkspace({
                   />
                 </div>
               ))}
+            </div>
+          ) : allSessions.length > 0 ? (
+            <div className="terminal-empty">
+              <div className="empty-orbit">
+                <TerminalSquare size={31} />
+              </div>
+              <span className="eyebrow">ALL TABS CLOSED</span>
+              <h2>No terminal open</h2>
+              <p>
+                Reopen one below, or start a new terminal in{' '}
+                <strong>{project.name}</strong>.
+              </p>
+              <button className="primary-button" onClick={() => setShowLauncher(true)}>
+                <Plus size={16} /> New terminal
+              </button>
+              <div className="archived-list">
+                <span>{closedSessions.length} closed</span>
+                {closedSessions.map((session) => (
+                  <div key={session.id}>
+                    <StatusDot state={session.state} compact />
+                    <span>{session.name}</span>
+                    <button onClick={() => void selectSession(session.id)}>
+                      <RotateCcw size={13} /> Open
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="terminal-empty">
@@ -615,7 +769,7 @@ export function TerminalProjectWorkspace({
             style={{ top: menu.top, left: menu.left }}
           >
             {(() => {
-              const session = visibleSessions.find((item) => item.id === menu.sessionId)
+              const session = openTabs.find((item) => item.id === menu.sessionId)
               if (!session) return null
               const providerSessionReference = session.providerSessionId
               return (

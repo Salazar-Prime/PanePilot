@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive,
   ArchiveRestore,
+  ArrowUpDown,
   Bot,
   Boxes,
   ChevronDown,
   ChevronRight,
   Clipboard,
   Cloud,
-  Command as CommandIcon,
+  Columns2,
   ExternalLink,
   FileText,
   Flag,
@@ -18,7 +19,9 @@ import {
   Menu,
   MessageSquareText,
   Network,
+  PanelLeft,
   PanelLeftClose,
+  PanelRight,
   Pencil,
   Pin,
   PinOff,
@@ -26,11 +29,13 @@ import {
   RefreshCw,
   Server,
   Settings,
+  ShieldAlert,
   Sparkles,
   Square,
   TerminalSquare,
   Trash2,
-  Wifi
+  Wifi,
+  X
 } from 'lucide-react'
 import type {
   Connection,
@@ -41,9 +46,26 @@ import type {
   TerminalTransportState
 } from '@shared/types'
 import { isAttentionState } from '../lib/status'
+import { useOpenSessions } from '../lib/openSessions'
+import { isPaneSwapShortcut } from '../lib/projectShortcuts'
+import {
+  projectSortFor,
+  projectSortOptions,
+  sortProjects,
+  useProjectSorts
+} from '../lib/projectSort'
+import { useProjectAttentionOrder } from '../lib/projectAttentionOrder'
+import { useCollapsedProjects } from '../lib/sidebarCollapse'
+import { useSelectionRecency } from '../lib/selectionRecency'
 import { sortSessions, useSessionSort } from '../lib/sessionSort'
 import { shouldOfferTmuxReconnect } from '../lib/terminalTransport'
 import { tmuxAttachCommand, tmuxOptionsCommand } from '../lib/tmuxCommands'
+import {
+  consumeWorkspaceRequest,
+  workspaceRequestIdFor,
+  type WorkspacePane,
+  type WorkspaceRequest
+} from '../lib/workspaceRequest'
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
 import {
@@ -54,8 +76,10 @@ import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 import { GoogleDriveControl } from './GoogleDriveControl'
 import { NewProjectDialog } from './NewProjectDialog'
 import { PortForwardDialog } from './PortForwardDialog'
+import { ProjectIconMenu } from './ProjectIconMenu'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
 import { RenameDialog } from './RenameDialog'
+import { SortMenu } from './SortMenu'
 import { SpeechControl } from './SpeechControl'
 import { StatusDot } from './StatusDot'
 import { TerminalProfileIcon } from './TerminalProfileIcon'
@@ -87,6 +111,11 @@ export function App() {
   >({})
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
+  const [splitOpen, setSplitOpen] = useState(false)
+  const [focusedPane, setFocusedPane] = useState<'a' | 'b'>('a')
+  const [paneBProjectId, setPaneBProjectId] = useState<string | null>(null)
+  const [paneBSessionId, setPaneBSessionId] = useState<string | null>(null)
+  const [openSessionIds, openSession, closeSession] = useOpenSessions()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showNewProject, setShowNewProject] = useState(false)
   const [newProjectConnectionId, setNewProjectConnectionId] = useState<string>()
@@ -100,11 +129,35 @@ export function App() {
   } | null>(null)
   const [showArchivedProjects, setShowArchivedProjects] = useState(false)
   const [portForwardConnection, setPortForwardConnection] = useState<Connection | null>(null)
-  const [launchTerminalRequest, setLaunchTerminalRequest] = useState(0)
-  const [openSessionRequest, setOpenSessionRequest] = useState(0)
+  const [launchTerminalRequest, setLaunchTerminalRequest] =
+    useState<WorkspaceRequest | null>(null)
+  const [openSessionRequest, setOpenSessionRequest] =
+    useState<WorkspaceRequest | null>(null)
+  const workspaceRequestSequence = useRef(0)
   const [sidebarContext, setSidebarContext] = useState<SidebarContext | null>(null)
+  const [projectSortMenu, setProjectSortMenu] = useState<{
+    connectionId: string
+    x: number
+    y: number
+  } | null>(null)
+  const [projectIconMenu, setProjectIconMenu] = useState<{
+    project: Project
+    x: number
+    y: number
+  } | null>(null)
+  const [copiedPathProjectId, setCopiedPathProjectId] = useState<string | null>(
+    null
+  )
+  const copiedPathTimer = useRef<number | null>(null)
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
   const [sessionSort] = useSessionSort()
+  const [projectSorts, setProjectSort] = useProjectSorts()
+  const {
+    recency: selectionRecency,
+    recordProjectSelection,
+    recordSessionSelection
+  } = useSelectionRecency()
+  const [collapsedProjectIds, toggleProjectCollapsed] = useCollapsedProjects()
   const [loading, setLoading] = useState(true)
   const [refreshingConnections, setRefreshingConnections] = useState(false)
   const [error, setError] = useState('')
@@ -113,6 +166,26 @@ export function App() {
     const nextProjects = await window.projectConsole.projects.list()
     setProjects(nextProjects)
   }, [])
+
+  const handleLaunchTerminalRequest = useCallback((requestId: number) => {
+    setLaunchTerminalRequest((current) =>
+      consumeWorkspaceRequest(current, requestId)
+    )
+  }, [])
+
+  const handleOpenSessionRequest = useCallback((requestId: number) => {
+    setOpenSessionRequest((current) =>
+      consumeWorkspaceRequest(current, requestId)
+    )
+  }, [])
+
+  function nextWorkspaceRequest(
+    projectId: string,
+    pane: WorkspacePane
+  ): WorkspaceRequest {
+    workspaceRequestSequence.current += 1
+    return { id: workspaceRequestSequence.current, projectId, pane }
+  }
 
   async function refreshSshConnections() {
     setRefreshingConnections(true)
@@ -164,6 +237,7 @@ export function App() {
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
+      if (event.repeat || event.isComposing) return
       if (
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
@@ -171,32 +245,90 @@ export function App() {
       ) {
         event.preventDefault()
         setShowCommandPalette((current) => !current)
+        return
+      }
+      if (
+        splitOpen &&
+        !showArchivedProjects &&
+        selectedProjectId != null &&
+        paneBProjectId != null &&
+        isPaneSwapShortcut(event) &&
+        document.querySelector('[role="dialog"][aria-modal="true"]') == null
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        swapPanes()
       }
     }
     window.addEventListener('keydown', handleShortcut, true)
     return () => window.removeEventListener('keydown', handleShortcut, true)
-  }, [])
+  }, [
+    splitOpen,
+    selectedProjectId,
+    selectedSessionId,
+    paneBProjectId,
+    paneBSessionId,
+    showArchivedProjects
+  ])
 
   const activeProjects = useMemo(
     () => projects.filter((project) => !project.archived),
     [projects]
   )
+  const projectAttentionOrder = useProjectAttentionOrder(activeProjects)
   const archivedProjects = useMemo(
     () => projects.filter((project) => project.archived),
     [projects]
   )
-  const project =
+  const paneAProject =
     !showArchivedProjects
       ? activeProjects.find((item) => item.id === selectedProjectId) ?? null
       : null
-  const connection = connections.find((item) => item.id === project?.connectionId)
+  const paneAConnection = connections.find(
+    (item) => item.id === paneAProject?.connectionId
+  )
+  const paneBProject =
+    !showArchivedProjects && splitOpen
+      ? activeProjects.find((item) => item.id === paneBProjectId) ?? null
+      : null
+  const paneBConnection = connections.find(
+    (item) => item.id === paneBProject?.connectionId
+  )
+  const project = focusedPane === 'b' && splitOpen ? paneBProject : paneAProject
+  const connection = focusedPane === 'b' && splitOpen ? paneBConnection : paneAConnection
+  const projectPath = project
+    ? connection?.kind === 'ssh'
+      ? `${connection.name}:${project.folder}`
+      : project.folder
+    : ''
+  // The session the focused pane is actually showing. Terminals only count once
+  // their tab is open, otherwise a closed-but-still-selected terminal would keep
+  // claiming the status bar.
+  const focusedSessionId =
+    focusedPane === 'b' && splitOpen ? paneBSessionId : selectedSessionId
+  const focusedSession =
+    project?.sessions.find(
+      (session) =>
+        session.id === focusedSessionId &&
+        !session.archived &&
+        (session.kind !== 'terminal' || openSessionIds.has(session.id))
+    ) ?? null
+
+  useEffect(
+    () => () => {
+      if (copiedPathTimer.current != null) {
+        window.clearTimeout(copiedPathTimer.current)
+      }
+    },
+    []
+  )
 
   useEffect(() => {
-    if (!connection || connection.kind !== 'ssh') return
+    if (!paneAConnection || paneAConnection.kind !== 'ssh') return
     let active = true
     const discover = async () => {
       try {
-        await window.projectConsole.terminals.discover(connection.id)
+        await window.projectConsole.terminals.discover(paneAConnection.id)
         if (active) await refresh()
       } catch {
         // Remote discovery is supplemental. Offline hosts must not block the
@@ -209,7 +341,27 @@ export function App() {
       active = false
       window.clearInterval(timer)
     }
-  }, [connection?.id, connection?.kind, refresh])
+  }, [paneAConnection?.id, paneAConnection?.kind, refresh])
+
+  useEffect(() => {
+    if (!paneBConnection || paneBConnection.kind !== 'ssh') return
+    let active = true
+    const discover = async () => {
+      try {
+        await window.projectConsole.terminals.discover(paneBConnection.id)
+        if (active) await refresh()
+      } catch {
+        // Remote discovery is supplemental. Offline hosts must not block the
+        // locally cached project and terminal workspace.
+      }
+    }
+    void discover()
+    const timer = window.setInterval(() => void discover(), 15_000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [paneBConnection?.id, paneBConnection?.kind, refresh])
 
   useEffect(() => {
     if (showArchivedProjects) return
@@ -227,7 +379,8 @@ export function App() {
           first.sessions.filter(
             (session) => !session.archived && isSidebarSession(session)
           ),
-          sessionSort
+          sessionSort,
+          selectionRecency.sessions
         )[0]?.id ?? null
       )
       return
@@ -236,7 +389,8 @@ export function App() {
       selected.sessions.filter(
         (session) => !session.archived && isSidebarSession(session)
       ),
-      sessionSort
+      sessionSort,
+      selectionRecency.sessions
     )
     if (!visible.some((session) => session.id === selectedSessionId)) {
       setSelectedSessionId(visible[0]?.id ?? null)
@@ -246,15 +400,115 @@ export function App() {
     selectedProjectId,
     selectedSessionId,
     sessionSort,
+    selectionRecency.sessions,
     showArchivedProjects
   ])
+
+  useEffect(() => {
+    if (!paneBProjectId) return
+    if (activeProjects.some((item) => item.id === paneBProjectId)) return
+    setPaneBProjectId(null)
+    setPaneBSessionId(null)
+  }, [activeProjects, paneBProjectId])
+
+  function applyPaneSelection(
+    pane: 'a' | 'b',
+    projectId: string | null,
+    sessionId: string | null
+  ) {
+    if (pane === 'b') {
+      setPaneBProjectId(projectId)
+      setPaneBSessionId(sessionId)
+    } else {
+      setSelectedProjectId(projectId)
+      setSelectedSessionId(sessionId)
+    }
+  }
+
+  function focusPaneSelection(projectId: string | null, sessionId: string | null) {
+    applyPaneSelection(
+      splitOpen && focusedPane === 'b' ? 'b' : 'a',
+      projectId,
+      sessionId
+    )
+  }
+
+  function defaultSessionIdFor(target: Project | undefined): string | null {
+    if (!target) return null
+    return (
+      sortSessions(
+        target.sessions.filter(
+          (session) => !session.archived && isSidebarSession(session)
+        ),
+        sessionSort,
+        selectionRecency.sessions
+      )[0]?.id ?? null
+    )
+  }
+
+  function openProjectInPane(id: string, pane: 'a' | 'b') {
+    recordProjectSelection(id)
+    setShowArchivedProjects(false)
+    if (pane === 'b') setSplitOpen(true)
+    setFocusedPane(pane)
+    const defaultSessionId = defaultSessionIdFor(
+      activeProjects.find((item) => item.id === id)
+    )
+    applyPaneSelection(pane, id, defaultSessionId)
+    if (defaultSessionId) openSession(defaultSessionId)
+  }
+
+  function swapPanes() {
+    if (!splitOpen || !selectedProjectId || !paneBProjectId) return
+    const leftProjectId = selectedProjectId
+    const leftSessionId = selectedSessionId
+    setSelectedProjectId(paneBProjectId)
+    setSelectedSessionId(paneBSessionId)
+    setPaneBProjectId(leftProjectId)
+    setPaneBSessionId(leftSessionId)
+    setFocusedPane((current) => (current === 'a' ? 'b' : 'a'))
+  }
+
+  async function openSessionInPane(
+    projectId: string,
+    sessionId: string,
+    pane: 'a' | 'b'
+  ) {
+    recordProjectSelection(projectId)
+    recordSessionSelection(sessionId)
+    setShowArchivedProjects(false)
+    if (pane === 'b') setSplitOpen(true)
+    setFocusedPane(pane)
+    applyPaneSelection(pane, projectId, sessionId)
+    openSession(sessionId)
+    setOpenSessionRequest(nextWorkspaceRequest(projectId, pane))
+    await window.projectConsole.terminals.acknowledge(sessionId)
+    await refresh()
+  }
 
   async function createProject(input: CreateProjectInput) {
     const created = await window.projectConsole.projects.create(input)
     await refresh()
     setShowArchivedProjects(false)
-    setSelectedProjectId(created.id)
-    setSelectedSessionId(null)
+    focusPaneSelection(created.id, null)
+  }
+
+  async function copyProjectPath() {
+    if (!project || !projectPath) return
+    await window.projectConsole.system.copyText(projectPath)
+    setCopiedPathProjectId(project.id)
+    if (copiedPathTimer.current != null) {
+      window.clearTimeout(copiedPathTimer.current)
+    }
+    copiedPathTimer.current = window.setTimeout(() => {
+      setCopiedPathProjectId(null)
+      copiedPathTimer.current = null
+    }, 1_400)
+  }
+
+  async function updateProjectIcon(projectId: string, icon: string | null) {
+    await window.projectConsole.projects.setIcon(projectId, icon)
+    await refresh()
   }
 
   async function renameCurrentProject(name: string) {
@@ -292,8 +546,14 @@ export function App() {
       return
     await window.projectConsole.projects.archive(target.id)
     const nextProject = activeProjects.find((candidate) => candidate.id !== target.id)
-    setSelectedProjectId(nextProject?.id ?? null)
-    setSelectedSessionId(null)
+    if (target.id === selectedProjectId) {
+      setSelectedProjectId(nextProject?.id ?? null)
+      setSelectedSessionId(null)
+    }
+    if (target.id === paneBProjectId) {
+      setPaneBProjectId(nextProject?.id ?? null)
+      setPaneBSessionId(null)
+    }
     await refresh()
   }
 
@@ -301,8 +561,7 @@ export function App() {
     await window.projectConsole.projects.restore(target.id)
     await refresh()
     setShowArchivedProjects(false)
-    setSelectedProjectId(target.id)
-    setSelectedSessionId(null)
+    focusPaneSelection(target.id, null)
   }
 
   async function deleteArchivedProject(target: Project) {
@@ -317,26 +576,23 @@ export function App() {
   }
 
   function selectProject(id: string) {
-    const next = activeProjects.find((item) => item.id === id)
+    recordProjectSelection(id)
     setShowArchivedProjects(false)
-    setSelectedProjectId(id)
-    setSelectedSessionId(
-      next
-        ? sortSessions(
-            next.sessions.filter(
-              (session) => !session.archived && isSidebarSession(session)
-            ),
-            sessionSort
-          )[0]?.id ?? null
-        : null
+    const defaultSessionId = defaultSessionIdFor(
+      activeProjects.find((item) => item.id === id)
     )
+    focusPaneSelection(id, defaultSessionId)
+    if (defaultSessionId) openSession(defaultSessionId)
   }
 
   async function selectSession(projectId: string, sessionId: string) {
+    const pane = splitOpen && focusedPane === 'b' ? 'b' : 'a'
+    recordProjectSelection(projectId)
+    recordSessionSelection(sessionId)
     setShowArchivedProjects(false)
-    setSelectedProjectId(projectId)
-    setSelectedSessionId(sessionId)
-    setOpenSessionRequest((current) => current + 1)
+    focusPaneSelection(projectId, sessionId)
+    openSession(sessionId)
+    setOpenSessionRequest(nextWorkspaceRequest(projectId, pane))
     await window.projectConsole.terminals.acknowledge(sessionId)
     await refresh()
   }
@@ -409,8 +665,9 @@ export function App() {
   }
 
   function openProjectLauncher(target: Project) {
+    const pane = splitOpen && focusedPane === 'b' ? 'b' : 'a'
     selectProject(target.id)
-    setLaunchTerminalRequest((current) => current + 1)
+    setLaunchTerminalRequest(nextWorkspaceRequest(target.id, pane))
   }
 
   const workingCount = useMemo(
@@ -436,6 +693,12 @@ export function App() {
     ? projectTypeRegistry[project.type]
     : projectTypeRegistry.terminal
   const Workspace = typeDefinition.Workspace
+  const PaneAWorkspace = (
+    paneAProject ? projectTypeRegistry[paneAProject.type] : projectTypeRegistry.terminal
+  ).Workspace
+  const PaneBWorkspace = (
+    paneBProject ? projectTypeRegistry[paneBProject.type] : projectTypeRegistry.terminal
+  ).Workspace
 
   const commandPaletteCommands: CommandPaletteCommand[] = [
     {
@@ -620,10 +883,27 @@ export function App() {
             ),
           action: () => selectProject(target.id)
         },
+        ...(splitOpen
+          ? [
+              {
+                id: 'open-left',
+                label: 'Open in left pane',
+                icon: <PanelLeft size={14} />,
+                action: () => openProjectInPane(target.id, 'a')
+              }
+            ]
+          : []),
+        {
+          id: 'open-right',
+          label: splitOpen ? 'Open in right pane' : 'Open in split pane',
+          icon: <PanelRight size={14} />,
+          action: () => openProjectInPane(target.id, 'b')
+        },
         {
           id: 'rename',
           label: 'Rename',
           icon: <Pencil size={14} />,
+          separatorBefore: true,
           action: () => promptRenameProject(target)
         },
         {
@@ -709,10 +989,37 @@ export function App() {
         icon: <TerminalSquare size={14} />,
         action: () => selectSession(owner.id, session.id)
       },
+      ...(splitOpen
+        ? [
+            {
+              id: 'open-left',
+              label: 'Open in left pane',
+              icon: <PanelLeft size={14} />,
+              action: () => openSessionInPane(owner.id, session.id, 'a')
+            }
+          ]
+        : []),
+      {
+        id: 'open-right',
+        label: splitOpen ? 'Open in right pane' : 'Open in split pane',
+        icon: <PanelRight size={14} />,
+        action: () => openSessionInPane(owner.id, session.id, 'b')
+      },
+      ...(openSessionIds.has(session.id)
+        ? [
+            {
+              id: 'close-tab',
+              label: 'Close tab (keeps tmux running)',
+              icon: <X size={14} />,
+              action: () => closeSession(session.id)
+            }
+          ]
+        : []),
       {
         id: 'rename',
         label: 'Rename terminal and tmux',
         icon: <Pencil size={14} />,
+        separatorBefore: true,
         action: () => promptRenameSession(session)
       },
       {
@@ -916,24 +1223,26 @@ export function App() {
           ) : project ? (
             <>
               <strong>{project.name}</strong>
-              <span>
-                {connection?.kind === 'ssh'
-                  ? `${connection.name}:${project.folder}`
-                  : project.folder}
-              </span>
+              <button
+                className={`project-path-copy ${
+                  copiedPathProjectId === project.id ? 'copied' : ''
+                }`}
+                onClick={() => void copyProjectPath().catch(showError)}
+                aria-label={`Copy project path: ${projectPath}`}
+                title={
+                  copiedPathProjectId === project.id
+                    ? 'Copied project path'
+                    : 'Copy project path'
+                }
+              >
+                {projectPath}
+              </button>
             </>
           ) : (
             <strong>PanePilot</strong>
           )}
         </div>
         <div className="top-actions">
-          <button
-            className="secondary-button command-trigger"
-            onClick={() => setShowCommandPalette(true)}
-            title="Open command palette (Command K)"
-          >
-            <CommandIcon size={14} /> <kbd>⌘K</kbd>
-          </button>
           <SpeechControl />
           {project?.latex?.overleafUrl && (
             <button
@@ -967,6 +1276,17 @@ export function App() {
             />
           )}
           <button
+            className={`icon-button ${splitOpen ? 'active' : ''}`}
+            aria-label={splitOpen ? 'Close split view' : 'Split viewing pane'}
+            title={splitOpen ? 'Close split view' : 'Split viewing pane'}
+            onClick={() => {
+              setSplitOpen(!splitOpen)
+              setFocusedPane(splitOpen ? 'a' : 'b')
+            }}
+          >
+            <Columns2 size={16} />
+          </button>
+          <button
             className="icon-button"
             aria-label="Project settings"
             title="Project settings"
@@ -990,8 +1310,14 @@ export function App() {
         </div>
         <div className="sidebar-scroll">
           {connections.map((item) => {
-            const connectionProjects = activeProjects.filter(
-              (candidate) => candidate.connectionId === item.id
+            const connectionSort = projectSortFor(projectSorts, item.id)
+            const connectionProjects = sortProjects(
+              activeProjects.filter(
+                (candidate) => candidate.connectionId === item.id
+              ),
+              connectionSort,
+              selectionRecency.projects,
+              projectAttentionOrder
             )
             if (item.kind === 'ssh' && connectionProjects.length === 0) return null
             return (
@@ -1015,6 +1341,30 @@ export function App() {
                   )}
                   <span>{item.name}</span>
                   <small>{connectionProjects.length}</small>
+                  <button
+                    className="connection-sort-button"
+                    aria-label={`Sort projects on ${item.name}`}
+                    aria-haspopup="menu"
+                    aria-expanded={
+                      projectSortMenu?.connectionId === item.id
+                    }
+                    title={`Sort projects: ${
+                      projectSortOptions.find(
+                        (option) => option.value === connectionSort
+                      )?.label
+                    }`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      const bounds = event.currentTarget.getBoundingClientRect()
+                      setProjectSortMenu({
+                        connectionId: item.id,
+                        x: bounds.right - 184,
+                        y: bounds.bottom + 4
+                      })
+                    }}
+                  >
+                    <ArrowUpDown size={12} />
+                  </button>
                 </div>
                 {connectionProjects.map((candidate) => {
                   const visibleSessions = sortSessions(
@@ -1022,14 +1372,17 @@ export function App() {
                       (session) =>
                         !session.archived && isSidebarSession(session)
                     ),
-                    sessionSort
+                    sessionSort,
+                    selectionRecency.sessions
                   )
+                  const hasSessions = visibleSessions.length > 0
+                  const isCollapsed = collapsedProjectIds.has(candidate.id)
+                  const showSessions = hasSessions && !isCollapsed
                   return (
                     <div className="project-tree" key={candidate.id}>
                       <div
                         className={`project-row ${
-                          candidate.id === selectedProjectId &&
-                          !showArchivedProjects
+                          candidate.id === project?.id && !showArchivedProjects
                             ? 'selected'
                             : ''
                         }`}
@@ -1044,17 +1397,65 @@ export function App() {
                         }}
                       >
                         <button
+                          className="sidebar-collapse-toggle"
+                          disabled={!hasSessions}
+                          aria-label={
+                            isCollapsed
+                              ? `Expand ${candidate.name}`
+                              : `Collapse ${candidate.name}`
+                          }
+                          aria-expanded={hasSessions ? !isCollapsed : undefined}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggleProjectCollapsed(candidate.id)
+                          }}
+                        >
+                          <ChevronRight
+                            size={13}
+                            className={showSessions ? 'chevron-expanded' : ''}
+                          />
+                        </button>
+                        <button
+                          className={`project-glyph ${candidate.type} ${
+                            candidate.id === selectedProjectId &&
+                            !showArchivedProjects
+                              ? 'pane-left'
+                              : ''
+                          } ${
+                            splitOpen && candidate.id === paneBProjectId
+                              ? 'pane-right'
+                              : ''
+                          }`}
+                          aria-label={`Change icon for ${candidate.name}`}
+                          title={projectGlyphTitle(
+                            candidate.name,
+                            candidate.id === selectedProjectId &&
+                              !showArchivedProjects,
+                            splitOpen && candidate.id === paneBProjectId
+                          )}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            const bounds = event.currentTarget.getBoundingClientRect()
+                            setProjectIconMenu({
+                              project: candidate,
+                              x: bounds.right + 6,
+                              y: bounds.top - 6
+                            })
+                          }}
+                        >
+                          <span className="project-glyph-content" aria-hidden="true">
+                            {candidate.icon ??
+                              (candidate.type === 'latex' ? (
+                                <FileText size={12} />
+                              ) : (
+                                candidate.name.slice(0, 1).toUpperCase()
+                              ))}
+                          </span>
+                        </button>
+                        <button
                           className="sidebar-row-main"
                           onClick={() => selectProject(candidate.id)}
                         >
-                          <ChevronRight size={13} />
-                          <span className={`project-glyph ${candidate.type}`}>
-                            {candidate.type === 'latex' ? (
-                              <FileText size={12} />
-                            ) : (
-                              candidate.name.slice(0, 1).toUpperCase()
-                            )}
-                          </span>
                           <span className="row-label">{candidate.name}</span>
                           {candidate.type === 'latex' && visibleSessions.length > 0 && (
                             <small className="project-chat-count">
@@ -1073,18 +1474,33 @@ export function App() {
                           <Pencil size={12} />
                         </button>
                       </div>
-                      {visibleSessions.length > 0 && (
+                      {showSessions && (
                         <div className="session-tree">
                           {visibleSessions.map((session) => (
                             <div
                               key={session.id}
                               className={`session-row ${
-                                candidate.id === selectedProjectId &&
-                                session.id === selectedSessionId &&
-                                !showArchivedProjects
+                                !showArchivedProjects &&
+                                ((candidate.id === selectedProjectId &&
+                                  session.id === selectedSessionId) ||
+                                  (splitOpen &&
+                                    candidate.id === paneBProjectId &&
+                                    session.id === paneBSessionId))
                                   ? 'selected'
                                   : ''
+                              } ${
+                                session.kind === 'terminal' &&
+                                !openSessionIds.has(session.id)
+                                  ? 'tab-closed'
+                                  : 'tab-open'
                               }`}
+                              title={
+                                session.kind !== 'terminal'
+                                  ? undefined
+                                  : openSessionIds.has(session.id)
+                                    ? `${session.name} — open in a pane`
+                                    : `${session.name} — tab closed (tmux still running); click to reopen`
+                              }
                               onContextMenu={(event) => {
                                 event.preventDefault()
                                 setSidebarContext({
@@ -1227,40 +1643,123 @@ export function App() {
             onRename={promptRenameProject}
             onDelete={deleteArchivedProject}
           />
-        ) : project ? (
-          <Workspace
-            project={project}
-            connection={connection}
-            selectedSessionId={selectedSessionId}
-            launchTerminalRequest={launchTerminalRequest}
-            openSessionRequest={openSessionRequest}
-            terminalTransportStates={terminalTransportStates}
-            onSelectSession={setSelectedSessionId}
-            onChanged={refresh}
-          />
         ) : (
-          <div className="welcome">
-            <div className="welcome-art">
-              <div className="orbit orbit-one" />
-              <div className="orbit orbit-two" />
-              <div className="welcome-mark">
-                <Bot size={35} />
-              </div>
-              <Sparkles className="spark spark-one" size={18} />
-              <Sparkles className="spark spark-two" size={13} />
-            </div>
-            <span className="eyebrow">YOUR PROJECT CONTROL CENTER</span>
-            <h1>Keep every agent in view.</h1>
-            <p>
-              Bring local and SSH projects into one place, run agents in persistent
-              terminals, and see exactly when they need you.
-            </p>
-            <button
-              className="primary-button welcome-button"
-              onClick={() => openNewProject()}
+          <div className={`workspace-split ${splitOpen ? 'split' : ''}`}>
+            <div
+              className={`workspace-pane ${
+                splitOpen && focusedPane === 'a' ? 'focused' : ''
+              }`}
+              onMouseDownCapture={() => setFocusedPane('a')}
             >
-              <Plus size={16} /> Add a project
-            </button>
+              {paneAProject ? (
+                <PaneAWorkspace
+                  project={paneAProject}
+                  connection={paneAConnection}
+                  selectedSessionId={selectedSessionId}
+                  launchTerminalRequest={workspaceRequestIdFor(
+                    launchTerminalRequest,
+                    paneAProject.id,
+                    'a'
+                  )}
+                  openSessionRequest={workspaceRequestIdFor(
+                    openSessionRequest,
+                    paneAProject.id,
+                    'a'
+                  )}
+                  terminalTransportStates={terminalTransportStates}
+                  openSessionIds={openSessionIds}
+                  onOpenSession={openSession}
+                  onCloseSession={closeSession}
+                  onSessionSelected={recordSessionSelection}
+                  onLaunchTerminalRequestHandled={handleLaunchTerminalRequest}
+                  onOpenSessionRequestHandled={handleOpenSessionRequest}
+                  onSwapPanes={
+                    splitOpen && paneAProject && paneBProject
+                      ? swapPanes
+                      : undefined
+                  }
+                  onSelectSession={(id) => {
+                    setSelectedSessionId(id)
+                    openSession(id)
+                  }}
+                  onChanged={refresh}
+                />
+              ) : (
+                <div className="welcome">
+                  <div className="welcome-art">
+                    <div className="orbit orbit-one" />
+                    <div className="orbit orbit-two" />
+                    <div className="welcome-mark">
+                      <Bot size={35} />
+                    </div>
+                    <Sparkles className="spark spark-one" size={18} />
+                    <Sparkles className="spark spark-two" size={13} />
+                  </div>
+                  <span className="eyebrow">YOUR PROJECT CONTROL CENTER</span>
+                  <h1>Keep every agent in view.</h1>
+                  <p>
+                    Bring local and SSH projects into one place, run agents in persistent
+                    terminals, and see exactly when they need you.
+                  </p>
+                  <button
+                    className="primary-button welcome-button"
+                    onClick={() => openNewProject()}
+                  >
+                    <Plus size={16} /> Add a project
+                  </button>
+                </div>
+              )}
+            </div>
+            {splitOpen && (
+              <div
+                className={`workspace-pane ${focusedPane === 'b' ? 'focused' : ''}`}
+                onMouseDownCapture={() => setFocusedPane('b')}
+              >
+                {paneBProject ? (
+                  <PaneBWorkspace
+                    project={paneBProject}
+                    connection={paneBConnection}
+                    selectedSessionId={paneBSessionId}
+                    launchTerminalRequest={workspaceRequestIdFor(
+                      launchTerminalRequest,
+                      paneBProject.id,
+                      'b'
+                    )}
+                    openSessionRequest={workspaceRequestIdFor(
+                      openSessionRequest,
+                      paneBProject.id,
+                      'b'
+                    )}
+                    terminalTransportStates={terminalTransportStates}
+                    openSessionIds={openSessionIds}
+                    onOpenSession={openSession}
+                    onCloseSession={closeSession}
+                    onSessionSelected={recordSessionSelection}
+                    onLaunchTerminalRequestHandled={handleLaunchTerminalRequest}
+                    onOpenSessionRequestHandled={handleOpenSessionRequest}
+                    onSwapPanes={paneAProject ? swapPanes : undefined}
+                    onSelectSession={(id) => {
+                      setPaneBSessionId(id)
+                      openSession(id)
+                    }}
+                    onChanged={refresh}
+                  />
+                ) : (
+                  <div className="welcome pane-empty-picker">
+                    <div className="welcome-art">
+                      <div className="orbit orbit-one" />
+                      <div className="orbit orbit-two" />
+                      <div className="welcome-mark">
+                        <Columns2 size={31} />
+                      </div>
+                    </div>
+                    <span className="eyebrow">SECOND PANE</span>
+                    <h1>Pick a project</h1>
+                    <p>Choose a project or terminal from the sidebar to open it here.</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -1269,6 +1768,15 @@ export function App() {
         <div className="status-brand">
           <span className="live-pip" />
           Ready
+          {focusedSession?.dangerousMode && (
+            <span
+              className="status-unsafe"
+              title={`${focusedSession.name} is running with its agent permission checks disabled.`}
+            >
+              <ShieldAlert size={11} />
+              Unsafe · {focusedSession.name}
+            </span>
+          )}
         </div>
         <div className="status-summary">
           <span>
@@ -1346,6 +1854,36 @@ export function App() {
         commands={commandPaletteCommands}
         onClose={() => setShowCommandPalette(false)}
       />
+      {projectSortMenu &&
+        (() => {
+          const targetConnection = connections.find(
+            (item) => item.id === projectSortMenu.connectionId
+          )
+          if (!targetConnection) return null
+          return (
+            <SortMenu
+              x={projectSortMenu.x}
+              y={projectSortMenu.y}
+              label={`Sort ${targetConnection.name} projects`}
+              value={projectSortFor(projectSorts, targetConnection.id)}
+              options={projectSortOptions}
+              onChange={(value) => setProjectSort(targetConnection.id, value)}
+              onClose={() => setProjectSortMenu(null)}
+            />
+          )
+        })()}
+      {projectIconMenu && (
+        <ProjectIconMenu
+          key={projectIconMenu.project.id}
+          project={projectIconMenu.project}
+          x={projectIconMenu.x}
+          y={projectIconMenu.y}
+          onSave={(icon) =>
+            updateProjectIcon(projectIconMenu.project.id, icon)
+          }
+          onClose={() => setProjectIconMenu(null)}
+        />
+      )}
       {sidebarContext && (
         <ContextMenu
           x={sidebarContext.x}
@@ -1364,4 +1902,11 @@ function messageFor(value: unknown): string {
 
 function showError(value: unknown): void {
   window.alert(messageFor(value))
+}
+
+function projectGlyphTitle(name: string, left: boolean, right: boolean): string {
+  if (left && right) return `Change ${name} icon · Open in both panes`
+  if (left) return `Change ${name} icon · Open in the left pane`
+  if (right) return `Change ${name} icon · Open in the right pane`
+  return `Change ${name} icon`
 }

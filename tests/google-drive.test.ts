@@ -16,6 +16,7 @@ import {
   isGoogleDriveRemoteConfig,
   normalizeDriveFolderPath,
   normalizeRcloneRemoteName,
+  parseRclonePublicLink,
   parseRcloneStat,
   rcloneRemotePath
 } from '../src/main/google-drive-helpers'
@@ -83,6 +84,10 @@ describe('rclone Google Drive helpers', () => {
       'https://drive.google.com/drive/my-drive'
     )
     expect(() => googleDriveItemUrl('../bad')).toThrow(/invalid/)
+    expect(parseRclonePublicLink('notice\nhttps://drive.google.com/example\n')).toBe(
+      'https://drive.google.com/example'
+    )
+    expect(() => parseRclonePublicLink('javascript:alert(1)')).toThrow(/unsafe/)
   })
 })
 
@@ -150,6 +155,11 @@ describe('project-scoped rclone persistence and uploads', () => {
           : '[work-drive]\ntype = s3\n'
       }
       if (args[0] === 'copyto') return ''
+      if (args[0] === 'link') {
+        return args.includes('--unlink')
+          ? ''
+          : 'https://drive.google.com/public-paper\n'
+      }
       if (args[1] === 'personal-drive:PanePilot/Research') {
         return '{"ID":"folder-id","Name":"Research","IsDir":true}'
       }
@@ -206,6 +216,38 @@ describe('project-scoped rclone persistence and uploads', () => {
       expect((await service.uploadFile(projectId, 'drafts/paper.tex')).updated).toBe(
         true
       )
+
+      await expect(
+        service.createPublicLink(projectId, 'drafts/paper.tex')
+      ).resolves.toEqual({
+        url: 'https://drive.google.com/public-paper',
+        destination: 'personal-drive:PanePilot/Research/drafts/paper.tex'
+      })
+      expect(calls).toContainEqual([
+        'link',
+        'personal-drive:PanePilot/Research/drafts/paper.tex'
+      ])
+      expect(
+        store
+          .getProject(projectId)
+          ?.activities.find(
+            (activity) => activity.kind === 'google-drive-public-link-created'
+          )?.message
+      ).toContain('https://drive.google.com/public-paper')
+
+      await service.removePublicLink(projectId, 'drafts/paper.tex')
+      expect(calls).toContainEqual([
+        'link',
+        '--unlink',
+        'personal-drive:PanePilot/Research/drafts/paper.tex'
+      ])
+      expect(
+        store
+          .getProject(projectId)
+          ?.activities.find(
+            (activity) => activity.kind === 'google-drive-public-link-removed'
+          )?.message
+      ).toBe('Removed the public Drive link for drafts/paper.tex')
     } finally {
       store.close()
     }

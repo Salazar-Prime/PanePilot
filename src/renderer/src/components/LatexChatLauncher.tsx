@@ -15,6 +15,7 @@ import type {
   LatexSection,
   StartLatexChatInput
 } from '@shared/types'
+import { useModalEscape } from '../lib/modalEscape'
 
 interface Props {
   projectId: string
@@ -41,6 +42,7 @@ export function LatexChatLauncher({
   const [dangerousMode, setDangerousMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  useModalEscape(onClose, true, submitting)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()

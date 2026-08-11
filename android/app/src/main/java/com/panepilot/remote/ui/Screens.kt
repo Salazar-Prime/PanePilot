@@ -58,6 +58,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -468,12 +469,17 @@ fun ServerEditorScreen(
 @Composable
 fun CredentialsScreen(
     profile: ServerProfile,
+    rememberedPassword: String?,
     isBusy: Boolean,
     onBack: () -> Unit,
-    onConnect: (ConnectionSecret) -> Unit
+    onForgetPassword: () -> Unit,
+    onConnect: (ConnectionSecret, Boolean) -> Unit
 ) {
-    var password by remember(profile.id) { mutableStateOf("") }
+    var password by remember(profile.id) { mutableStateOf(rememberedPassword.orEmpty()) }
     var passphrase by remember(profile.id) { mutableStateOf("") }
+    var rememberPassword by remember(profile.id) {
+        mutableStateOf(rememberedPassword != null)
+    }
     val isPassword = profile.authMode == AuthMode.PASSWORD
 
     Column(
@@ -515,17 +521,56 @@ fun CredentialsScreen(
             Spacer(Modifier.height(10.dp))
             Text(
                 if (isPassword) {
-                    "The password is kept in memory only for this connection."
+                    "Stored only when you enable Remember on this phone."
                 } else {
                     "Leave this blank if the private key has no passphrase."
                 },
                 color = Muted,
                 style = MaterialTheme.typography.bodySmall
             )
+            AnimatedVisibility(isPassword) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Slate,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 18.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(15.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Remember on this phone",
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                "Encrypted with Android Keystore. App backups are disabled.",
+                                color = Muted,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Switch(
+                            checked = rememberPassword,
+                            onCheckedChange = { checked ->
+                                rememberPassword = checked
+                                if (!checked) onForgetPassword()
+                            }
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(24.dp))
             Button(
                 onClick = {
-                    onConnect(ConnectionSecret(password = password, keyPassphrase = passphrase))
+                    onConnect(
+                        ConnectionSecret(password = password, keyPassphrase = passphrase),
+                        rememberPassword
+                    )
                 },
                 enabled = !isBusy && (!isPassword || password.isNotEmpty()),
                 modifier = Modifier

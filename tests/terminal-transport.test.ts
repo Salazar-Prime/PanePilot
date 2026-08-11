@@ -28,6 +28,7 @@ const project: Project = {
   id: 'project',
   type: 'terminal',
   name: 'Project',
+  icon: null,
   connectionId: 'ssh:remote',
   folder: '/project',
   repositoryUrl: null,

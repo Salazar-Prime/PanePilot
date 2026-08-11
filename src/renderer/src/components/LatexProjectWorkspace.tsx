@@ -66,6 +66,10 @@ export function LatexProjectWorkspace({
   selectedSessionId,
   launchTerminalRequest,
   openSessionRequest,
+  onLaunchTerminalRequestHandled,
+  onOpenSessionRequestHandled,
+  onSessionSelected,
+  onSwapPanes,
   onSelectSession,
   onChanged
 }: ProjectWorkspaceProps) {
@@ -139,7 +143,10 @@ export function LatexProjectWorkspace({
       label: 'Activity',
       active: tab === 'activity',
       run: () => setTab('activity')
-    }
+    },
+    ...(onSwapPanes
+      ? [{ key: 's', label: 'Swap panes', run: onSwapPanes }]
+      : [])
   ]
   const shortcutSessions = sessions.map((session) => ({
     id: session.id,
@@ -192,12 +199,20 @@ export function LatexProjectWorkspace({
   }, [activeSession?.id])
 
   useEffect(() => {
-    if (launchTerminalRequest > 0) setShowLauncher(true)
-  }, [launchTerminalRequest])
+    setShowLauncher(false)
+  }, [project.id])
 
   useEffect(() => {
-    if (openSessionRequest > 0) setTab('manuscript')
-  }, [openSessionRequest])
+    if (launchTerminalRequest == null) return
+    setShowLauncher(true)
+    onLaunchTerminalRequestHandled(launchTerminalRequest)
+  }, [launchTerminalRequest, onLaunchTerminalRequestHandled])
+
+  useEffect(() => {
+    if (openSessionRequest == null) return
+    setTab('manuscript')
+    onOpenSessionRequestHandled(openSessionRequest)
+  }, [openSessionRequest, onOpenSessionRequestHandled])
 
   const refreshChanges = useCallback(async () => {
     if (!activeSession?.latexChat || activeSession.latexChat.mode !== 'edit') {
@@ -227,6 +242,7 @@ export function LatexProjectWorkspace({
 
   async function selectShortcutSession(id: string) {
     setTab('manuscript')
+    onSessionSelected(id)
     onSelectSession(id)
     await window.projectConsole.terminals.acknowledge(id)
     await onChanged()
@@ -369,6 +385,7 @@ export function LatexProjectWorkspace({
             projectFolder={project.folder}
             activeSessionId={activeSession?.id ?? null}
             onSelectSession={(id) => {
+              onSessionSelected(id)
               onSelectSession(id)
               void window.projectConsole.terminals.acknowledge(id).then(onChanged)
             }}

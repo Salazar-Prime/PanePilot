@@ -40,6 +40,37 @@ class TmuxGatewayTest {
     }
 
     @Test
+    fun `parses the escaped separator emitted by tmux over a shell`() {
+        val separator = TmuxGateway.ESCAPED_FIELD_SEPARATOR
+        val path = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString("/Users/varun/Work/personal/sal3000".toByteArray())
+        val fields = listOf(
+            "Android App",
+            "1",
+            "Working · Tasks 0/3",
+            "node",
+            "0",
+            "1",
+            "1",
+            "0b81366d-bdc5-4d96-aeea-25d568ad3a86",
+            "a64c512b-a1a5-46c8-8d75-b8e43a9fe30f",
+            path,
+            "codex",
+            "2026-07-26T03:32:06.581Z",
+            "1",
+            "terminal",
+            "",
+            ""
+        )
+
+        val sessions = TmuxGateway.parseSessionList(fields.joinToString(separator))
+
+        assertEquals(1, sessions.size)
+        assertEquals("Android App", sessions.single().name)
+        assertEquals("/Users/varun/Work/personal/sal3000", sessions.single().projectPath)
+    }
+
+    @Test
     fun `maps PanePilot title snapshots without treating shells as agents`() {
         assertEquals(
             SessionState.NEEDS_INPUT,

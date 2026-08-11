@@ -10,10 +10,12 @@ import {
   Folder,
   FolderOpen,
   Image as ImageIcon,
+  Link2Off,
   Pencil,
   RefreshCw,
   Save,
   Search,
+  Share2,
   X
 } from 'lucide-react'
 import type {
@@ -90,10 +92,12 @@ function FilesPanelInstance({
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [uploadingToDrive, setUploadingToDrive] = useState(false)
+  const [changingDriveSharing, setChangingDriveSharing] = useState(false)
   const [driveMessage, setDriveMessage] = useState('')
   const [driveUpload, setDriveUpload] = useState<GoogleDriveUploadResult | null>(
     null
   )
+  const [publicDriveLink, setPublicDriveLink] = useState<string | null>(null)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const finderActionRef = useRef<{ dispose(): void } | null>(null)
   const activeFinderPathRef = useRef<string | null>(null)
@@ -113,6 +117,7 @@ function FilesPanelInstance({
   useEffect(() => {
     setDriveMessage('')
     setDriveUpload(null)
+    setPublicDriveLink(null)
   }, [preview?.path])
 
   function updateOpenFile(
@@ -461,6 +466,55 @@ function FilesPanelInstance({
     }
   }
 
+  async function createPublicDriveLink() {
+    if (!driveUpload || !preview) return
+    setChangingDriveSharing(true)
+    setError('')
+    try {
+      const result = await window.projectConsole.googleDrive.createPublicLink(
+        project.id,
+        preview.path
+      )
+      setPublicDriveLink(result.url)
+      await window.projectConsole.system.copyText(result.url)
+      setDriveMessage(`Created and copied a public link for ${driveUpload.name}`)
+      void onChanged?.().catch(() => undefined)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setChangingDriveSharing(false)
+    }
+  }
+
+  async function copyPublicDriveLink() {
+    if (!publicDriveLink || !driveUpload) return
+    try {
+      await window.projectConsole.system.copyText(publicDriveLink)
+      setDriveMessage(`Copied the public link for ${driveUpload.name}`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    }
+  }
+
+  async function removePublicDriveLink() {
+    if (!publicDriveLink || !preview || !driveUpload) return
+    setChangingDriveSharing(true)
+    setError('')
+    try {
+      await window.projectConsole.googleDrive.removePublicLink(
+        project.id,
+        preview.path
+      )
+      setPublicDriveLink(null)
+      setDriveMessage(`Stopped public sharing for ${driveUpload.name}`)
+      void onChanged?.().catch(() => undefined)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setChangingDriveSharing(false)
+    }
+  }
+
   async function showPathInFinder(filePath: string) {
     setError('')
     try {
@@ -651,6 +705,36 @@ function FilesPanelInstance({
                     >
                       <ExternalLink size={13} /> Open in Drive
                     </button>
+                    {publicDriveLink ? (
+                      <>
+                        <button
+                          className="secondary-button"
+                          onClick={() => void copyPublicDriveLink()}
+                          title="Copy the public link; anyone with it can open the file"
+                        >
+                          <Share2 size={13} /> Copy public link
+                        </button>
+                        <button
+                          className="secondary-button"
+                          onClick={() => void removePublicDriveLink()}
+                          disabled={changingDriveSharing}
+                          title="Remove public access created by PanePilot"
+                        >
+                          <Link2Off size={13} />
+                          {changingDriveSharing ? 'Stopping…' : 'Stop sharing'}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        className="secondary-button"
+                        onClick={() => void createPublicDriveLink()}
+                        disabled={changingDriveSharing}
+                        title="Create a public link that anyone with the link can open"
+                      >
+                        <Share2 size={13} />
+                        {changingDriveSharing ? 'Creating…' : 'Create public link'}
+                      </button>
+                    )}
                   </>
                 )}
                 {project.connectionId === 'local' && (

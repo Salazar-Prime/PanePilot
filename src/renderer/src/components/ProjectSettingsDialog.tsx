@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FileText, Folder, Github, Link2, X } from 'lucide-react'
 import type { Connection, Project } from '@shared/types'
+import { useModalEscape } from '../lib/modalEscape'
 
 interface Props {
   project: Project
@@ -26,6 +27,7 @@ export function ProjectSettingsDialog({
   const [overleafUrl, setOverleafUrl] = useState(project.latex?.overleafUrl ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  useModalEscape(onClose, true, saving)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()

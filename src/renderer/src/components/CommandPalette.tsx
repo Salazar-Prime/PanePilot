@@ -4,6 +4,7 @@ import {
   filterCommands,
   type SearchableCommand
 } from '../lib/commandPalette'
+import { useModalEscape } from '../lib/modalEscape'
 
 export interface CommandPaletteCommand extends SearchableCommand {
   section: string
@@ -26,6 +27,7 @@ export function CommandPalette({ open, commands, onClose }: Props) {
     () => filterCommands(commands, query).slice(0, 80),
     [commands, query]
   )
+  useModalEscape(onClose, open)
 
   useEffect(() => {
     if (!open) return
@@ -69,10 +71,7 @@ export function CommandPalette({ open, commands, onClose }: Props) {
               setSelectedIndex(0)
             }}
             onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.preventDefault()
-                onClose()
-              } else if (event.key === 'ArrowDown') {
+              if (event.key === 'ArrowDown') {
                 event.preventDefault()
                 setSelectedIndex((current) =>
                   results.length === 0 ? 0 : (current + 1) % results.length

@@ -12,6 +12,7 @@ import {
   X
 } from 'lucide-react'
 import type { GoogleDriveStatus, Project } from '@shared/types'
+import { useModalEscape } from '../lib/modalEscape'
 
 interface Props {
   project: Project
@@ -29,6 +30,7 @@ export function GoogleDriveControl({ project, openRequest = null }: Props) {
   const [loadingRemotes, setLoadingRemotes] = useState(false)
   const [copied, setCopied] = useState('')
   const [error, setError] = useState('')
+  useModalEscape(() => setOpen(false), open, working)
 
   async function loadStatus() {
     const next = await window.projectConsole.googleDrive.status(project.id)

@@ -140,6 +140,12 @@ function registerIpc(): void {
   ipcMain.handle('projects:rename', (_event, projectId: string, name: string) => {
     store.renameProject(projectId, name)
   })
+  ipcMain.handle(
+    'projects:set-icon',
+    (_event, projectId: string, icon: string | null) => {
+      store.setProjectIcon(projectId, icon)
+    }
+  )
   ipcMain.handle('projects:archive', (_event, projectId: string) => {
     store.archiveProject(projectId, true)
   })
@@ -418,6 +424,16 @@ function registerIpc(): void {
     'google-drive:upload-file',
     (_event, projectId: string, relativePath: string) =>
       googleDrive.uploadFile(projectId, relativePath)
+  )
+  ipcMain.handle(
+    'google-drive:create-public-link',
+    (_event, projectId: string, relativePath: string) =>
+      googleDrive.createPublicLink(projectId, relativePath)
+  )
+  ipcMain.handle(
+    'google-drive:remove-public-link',
+    (_event, projectId: string, relativePath: string) =>
+      googleDrive.removePublicLink(projectId, relativePath)
   )
 
   ipcMain.handle('port-forwards:list', (_event, connectionId: string) => {

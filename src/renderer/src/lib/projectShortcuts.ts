@@ -95,6 +95,15 @@ function isModifierKey(key: string): boolean {
   return key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta'
 }
 
+export function isPaneSwapShortcut(event: ShortcutEvent): boolean {
+  return (
+    (event.metaKey || event.ctrlKey) &&
+    !event.altKey &&
+    event.shiftKey &&
+    event.code === 'Backslash'
+  )
+}
+
 export function directSessionIndex(event: ShortcutEvent): number | null {
   if (
     !(event.metaKey || event.ctrlKey) ||

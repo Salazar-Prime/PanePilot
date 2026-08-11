@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { X } from 'lucide-react'
+import { useModalEscape } from '../lib/modalEscape'
 
 interface Props {
   title: string
@@ -25,14 +26,7 @@ export function RenameDialog({
   const [name, setName] = useState(initialValue)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !saving) onClose()
-    }
-    document.addEventListener('keydown', closeOnEscape)
-    return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [onClose, saving])
+  useModalEscape(onClose, true, saving)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()

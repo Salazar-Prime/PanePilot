@@ -19,6 +19,7 @@ import type {
   RemoteFolderListing
 } from '@shared/types'
 import { projectTypeRegistry } from '../projectTypeRegistry'
+import { useModalEscape } from '../lib/modalEscape'
 
 interface Props {
   connections: Connection[]
@@ -52,6 +53,7 @@ export function NewProjectDialog({
   const [remoteLoading, setRemoteLoading] = useState(false)
   const connection = connections.find((item) => item.id === connectionId)
   const definition = projectTypeRegistry[type]
+  useModalEscape(onClose, true, submitting)
 
   useEffect(() => {
     if (!nameEdited && folder) {

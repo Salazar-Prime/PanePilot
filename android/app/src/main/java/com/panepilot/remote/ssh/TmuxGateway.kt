@@ -64,7 +64,12 @@ class TmuxGateway(private val ssh: SshConnection) {
         val newline = result.stdout.indexOf('\n')
         val metadataLine = if (newline >= 0) result.stdout.substring(0, newline) else ""
         val transcript = if (newline >= 0) result.stdout.substring(newline + 1) else result.stdout
-        val metadata = metadataLine.trimEnd('\r').split(FIELD_SEPARATOR, limit = 2)
+        val cleanedMetadata = metadataLine.trimEnd('\r')
+        val metadata = if (cleanedMetadata.contains(FIELD_SEPARATOR)) {
+            cleanedMetadata.split(FIELD_SEPARATOR, limit = 2)
+        } else {
+            cleanedMetadata.split(ESCAPED_FIELD_SEPARATOR, limit = 2)
+        }
         return PaneSnapshot(
             paneTitle = metadata.getOrElse(0) { "" },
             paneDead = metadata.getOrElse(1) { "0" } == "1",
@@ -111,6 +116,7 @@ class TmuxGateway(private val ssh: SshConnection) {
 
     companion object {
         const val FIELD_SEPARATOR = '\u001f'
+        const val ESCAPED_FIELD_SEPARATOR = "\\037"
         private const val MAX_MESSAGE_BYTES = 32 * 1024
         private val UUID_PATTERN =
             Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", RegexOption.IGNORE_CASE)
@@ -158,7 +164,11 @@ class TmuxGateway(private val ssh: SshConnection) {
         }
 
         private fun parseSession(line: String): PanePilotSession? {
-            val fields = line.split(FIELD_SEPARATOR)
+            val fields = if (line.contains(FIELD_SEPARATOR)) {
+                line.split(FIELD_SEPARATOR)
+            } else {
+                line.split(ESCAPED_FIELD_SEPARATOR)
+            }
             if (fields.size != 16 || fields[5] != "1" || fields[6] != "1") return null
             val name = fields[0]
             val attached = fields[1].toIntOrNull() ?: return null

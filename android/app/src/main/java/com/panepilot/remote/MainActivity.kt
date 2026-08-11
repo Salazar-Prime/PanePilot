@@ -86,11 +86,24 @@ class MainActivity : ComponentActivity() {
 
                             is AppScreen.Credentials -> {
                                 appViewModel.profile(screen.profileId)?.let { profile ->
+                                    val rememberedPassword = remember(screen.profileId) {
+                                        appViewModel.rememberedPassword(screen.profileId)
+                                    }
                                     CredentialsScreen(
                                         profile = profile,
+                                        rememberedPassword = rememberedPassword,
                                         isBusy = state.isBusy,
                                         onBack = appViewModel::goBack,
-                                        onConnect = { appViewModel.connect(profile.id, it) }
+                                        onForgetPassword = {
+                                            appViewModel.forgetPassword(profile.id)
+                                        },
+                                        onConnect = { secret, rememberPassword ->
+                                            appViewModel.connect(
+                                                profile.id,
+                                                secret,
+                                                rememberPassword
+                                            )
+                                        }
                                     )
                                 }
                             }

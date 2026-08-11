@@ -1,18 +1,3 @@
-/* Project-scoped Drive and the Cmd+K switchboard share PanePilot's compact,
-   instrument-panel vocabulary: quiet chrome with one clear connection signal. */
-.command-trigger {
-  width: 54px;
-  height: 28px;
-  padding: 0 8px;
-  color: #7f8796;
-}
-
-.command-trigger kbd {
-  color: #aeb6c7;
-  font-family: "SFMono-Regular", "Cascadia Code", monospace;
-  font-size: 9px;
-}
-
 .drive-header-button {
   position: relative;
 }
@@ -430,14 +415,12 @@
 }
 
 @media (max-width: 1080px) {
-  .command-trigger,
   .drive-header-button {
     width: 30px;
     padding: 0;
     font-size: 0;
   }
 
-  .command-trigger kbd,
   .drive-header-button > i {
     display: none;
   }

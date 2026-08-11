@@ -29,6 +29,8 @@ const api: ProjectConsoleApi = {
     create: (input: CreateProjectInput) => ipcRenderer.invoke('projects:create', input),
     rename: (projectId: string, name: string) =>
       ipcRenderer.invoke('projects:rename', projectId, name),
+    setIcon: (projectId: string, icon: string | null) =>
+      ipcRenderer.invoke('projects:set-icon', projectId, icon),
     archive: (projectId: string) => ipcRenderer.invoke('projects:archive', projectId),
     restore: (projectId: string) => ipcRenderer.invoke('projects:restore', projectId),
     delete: (projectId: string) => ipcRenderer.invoke('projects:delete', projectId),
@@ -151,7 +153,19 @@ const api: ProjectConsoleApi = {
     openFolder: (projectId: string) =>
       ipcRenderer.invoke('google-drive:open-folder', projectId),
     uploadFile: (projectId: string, relativePath: string) =>
-      ipcRenderer.invoke('google-drive:upload-file', projectId, relativePath)
+      ipcRenderer.invoke('google-drive:upload-file', projectId, relativePath),
+    createPublicLink: (projectId: string, relativePath: string) =>
+      ipcRenderer.invoke(
+        'google-drive:create-public-link',
+        projectId,
+        relativePath
+      ),
+    removePublicLink: (projectId: string, relativePath: string) =>
+      ipcRenderer.invoke(
+        'google-drive:remove-public-link',
+        projectId,
+        relativePath
+      )
   },
   remoteFolders: {
     list: (connectionId: string, path?: string) =>

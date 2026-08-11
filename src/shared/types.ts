@@ -75,6 +75,7 @@ export interface Project {
   id: string
   type: ProjectType
   name: string
+  icon: string | null
   connectionId: string
   folder: string
   repositoryUrl: string | null
@@ -405,6 +406,11 @@ export interface GoogleDriveUploadResult {
   updated: boolean
 }
 
+export interface GoogleDrivePublicLinkResult {
+  url: string
+  destination: string
+}
+
 export interface ProjectConsoleApi {
   connections: {
     list(): Promise<Connection[]>
@@ -415,6 +421,7 @@ export interface ProjectConsoleApi {
     list(): Promise<Project[]>
     create(input: CreateProjectInput): Promise<Project>
     rename(projectId: string, name: string): Promise<void>
+    setIcon(projectId: string, icon: string | null): Promise<void>
     archive(projectId: string): Promise<void>
     restore(projectId: string): Promise<void>
     delete(projectId: string): Promise<void>
@@ -485,6 +492,11 @@ export interface ProjectConsoleApi {
       projectId: string,
       relativePath: string
     ): Promise<GoogleDriveUploadResult>
+    createPublicLink(
+      projectId: string,
+      relativePath: string
+    ): Promise<GoogleDrivePublicLinkResult>
+    removePublicLink(projectId: string, relativePath: string): Promise<void>
   }
   remoteFolders: {
     list(connectionId: string, path?: string): Promise<RemoteFolderListing>

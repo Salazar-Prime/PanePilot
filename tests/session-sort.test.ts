@@ -63,4 +63,13 @@ describe('session sorting', () => {
       sortSessions([newer, attention], 'attention').map((item) => item.name)
     ).toEqual(['Question', 'Zulu'])
   })
+
+  it('puts the most recently selected unpinned terminal first', () => {
+    expect(
+      sortSessions([newer, older], 'recent', {
+        [newer.id]: 10,
+        [older.id]: 20
+      }).map((item) => item.name)
+    ).toEqual(['Alpha', 'Zulu'])
+  })
 })

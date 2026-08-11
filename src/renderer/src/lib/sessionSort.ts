@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { AgentState, TerminalSession } from '@shared/types'
+import {
+  compareSelectionRecency,
+  type SelectionRecencyMap
+} from './selectionRecency'
 
 export type SessionSort = 'recent' | 'oldest' | 'name' | 'attention'
 
@@ -31,7 +35,8 @@ function storedSort(): SessionSort {
 
 export function sortSessions(
   sessions: TerminalSession[],
-  order: SessionSort
+  order: SessionSort,
+  selectionRecency: SelectionRecencyMap = {}
 ): TerminalSession[] {
   return [...sessions].sort((left, right) => {
     if (left.pinned !== right.pinned) return left.pinned ? -1 : 1
@@ -42,6 +47,14 @@ export function sortSessions(
     if (order === 'attention') {
       const priority = STATE_ORDER.indexOf(left.state) - STATE_ORDER.indexOf(right.state)
       if (priority !== 0) return priority
+    }
+    if (order === 'recent') {
+      const selectionOrder = compareSelectionRecency(
+        left.id,
+        right.id,
+        selectionRecency
+      )
+      if (selectionOrder !== 0) return selectionOrder
     }
     return Date.parse(right.createdAt) - Date.parse(left.createdAt)
   })

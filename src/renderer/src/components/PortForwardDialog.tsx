@@ -10,6 +10,7 @@ import {
   X
 } from 'lucide-react'
 import type { Connection, ConnectionTestResult, PortForward } from '@shared/types'
+import { useModalEscape } from '../lib/modalEscape'
 
 interface Props {
   connection: Connection
@@ -26,6 +27,7 @@ export function PortForwardDialog({ connection, onClose }: Props) {
   const [busy, setBusy] = useState(false)
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null)
   const [testing, setTesting] = useState(false)
+  useModalEscape(onClose, true, busy || testing)
 
   const refresh = useCallback(async () => {
     try {

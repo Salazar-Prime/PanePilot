@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Bot, ShieldAlert, Sparkles, TerminalSquare, X } from 'lucide-react'
 import type { LaunchProfile, StartTerminalInput } from '@shared/types'
+import { useModalEscape } from '../lib/modalEscape'
 
 const profiles: Array<{
   id: LaunchProfile
@@ -27,6 +28,7 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const isAgent = profile === 'codex' || profile === 'claude'
+  useModalEscape(onClose, true, submitting)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -133,6 +135,7 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
               Cancel
             </button>
             <button
+              type="submit"
               className="primary-button"
               disabled={submitting}
             >

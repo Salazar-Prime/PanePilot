@@ -13,6 +13,7 @@ import type { Project, ProjectAction } from '@shared/types'
 import { ManagedTerminal } from './ManagedTerminal'
 import { StatusDot } from './StatusDot'
 import type { TerminalFileTarget } from '../lib/terminalFileLinks'
+import { useModalEscape } from '../lib/modalEscape'
 
 interface Props {
   project: Project
@@ -286,6 +287,7 @@ function ActionEditor({
   const [command, setCommand] = useState(action?.command ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  useModalEscape(onClose, true, saving)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -367,6 +369,7 @@ function ActionEditor({
               Cancel
             </button>
             <button
+              type="submit"
               className="primary-button"
               disabled={saving || !name.trim() || !command.trim()}
             >

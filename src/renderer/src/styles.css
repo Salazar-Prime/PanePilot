@@ -110,17 +110,30 @@ select:focus-visible {
 
 .project-identity strong {
   color: #f0f1f5;
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
 }
 
-.project-identity span {
+.project-path-copy {
   max-width: 430px;
   overflow: hidden;
+  padding: 1px 0 2px;
   color: #717887;
+  border: 0;
+  border-bottom: 1px dotted #596273;
+  background: transparent;
+  cursor: copy;
   font-family: "SFMono-Regular", "Cascadia Code", monospace;
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.project-path-copy:hover,
+.project-path-copy.copied {
+  color: #aab5dc;
+  border-bottom-color: #8294d9;
 }
 
 .top-actions {
@@ -222,6 +235,25 @@ select:focus-visible {
   font-size: 9px;
 }
 
+.connection-sort-button {
+  display: grid;
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  place-items: center;
+  padding: 0;
+  color: #596273;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+}
+
+.connection-sort-button:hover,
+.connection-sort-button:focus-visible {
+  color: #b9c4ed;
+  background: #252b39;
+}
+
 .project-tree {
   margin-top: 2px;
 }
@@ -263,17 +295,99 @@ select:focus-visible {
   color: #555c69;
 }
 
+.sidebar-collapse-toggle {
+  display: grid;
+  width: 16px;
+  height: 100%;
+  flex: 0 0 16px;
+  place-items: center;
+  padding: 0;
+  color: #555c69;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sidebar-collapse-toggle:hover:not(:disabled) {
+  color: #9aa1af;
+}
+
+.sidebar-collapse-toggle:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.sidebar-collapse-toggle svg {
+  transition: transform 0.15s ease;
+}
+
+.sidebar-collapse-toggle svg.chevron-expanded {
+  transform: rotate(90deg);
+}
+
 .project-glyph {
+  position: relative;
   display: grid;
   width: 20px;
   height: 20px;
+  overflow: hidden;
   flex: 0 0 auto;
   place-items: center;
+  padding: 0;
   color: #b7c0ff;
+  border: 0;
   border-radius: 5px;
   background: #323b69;
-  font-size: 9px;
+  cursor: pointer;
+  font-size: 11px;
   font-weight: 750;
+}
+
+.project-glyph:hover {
+  box-shadow: 0 0 0 1px #7180b8;
+}
+
+.project-glyph::before,
+.project-glyph::after {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  content: "";
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.project-glyph::before {
+  left: 0;
+  background: #6f82e8;
+}
+
+.project-glyph::after {
+  right: 0;
+  background: #3da696;
+}
+
+.project-glyph.pane-left::before,
+.project-glyph.pane-right::after {
+  opacity: 1;
+}
+
+.project-glyph-content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: inherit;
+}
+
+.project-glyph.pane-left .project-glyph-content,
+.project-glyph.pane-right .project-glyph-content {
+  color: #f0f3ff;
+  text-shadow: 0 1px 2px #080b12aa;
 }
 
 .row-label {
@@ -381,6 +495,33 @@ select:focus-visible {
     #090b10;
 }
 
+.workspace-split {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.workspace-pane {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 50%;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-split.split .workspace-pane + .workspace-pane {
+  border-left: 1px solid #242832;
+}
+
+.workspace-split.split .workspace-pane.focused {
+  box-shadow: inset 0 2px 0 #7398ff;
+}
+
+.pane-empty-picker .welcome-mark {
+  color: #7c86a8;
+}
+
 .status-bar {
   grid-area: status;
   display: flex;
@@ -404,6 +545,27 @@ select:focus-visible {
 
 .status-brand {
   gap: 6px;
+}
+
+/* Replaces the per-tab "unsafe" badge: the warning only concerns the terminal
+   currently in focus, so it is shown once here instead of on every tab. */
+.status-unsafe {
+  display: flex;
+  overflow: hidden;
+  max-width: 340px;
+  align-items: center;
+  padding: 1px 6px;
+  margin-left: 6px;
+  gap: 4px;
+  color: #ffb18d;
+  border: 1px solid #633924;
+  border-radius: 4px;
+  background: #351f16;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .status-summary {
@@ -523,6 +685,37 @@ select:focus-visible {
   background: #0e1016;
   font-size: 11px;
   text-align: left;
+  cursor: grab;
+}
+
+.terminal-tab:active {
+  cursor: grabbing;
+}
+
+.terminal-tab.dragging {
+  opacity: 0.34;
+}
+
+.terminal-tab.drop-before::before,
+.terminal-tab.drop-after::after {
+  position: absolute;
+  z-index: 8;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: #91a6ff;
+  box-shadow: 0 0 8px #7189ffcc;
+  content: "";
+  pointer-events: none;
+}
+
+.terminal-tab.drop-before::before {
+  left: -1px;
+}
+
+.terminal-tab.drop-after::after {
+  right: -1px;
 }
 
 .terminal-tab:hover {
@@ -547,7 +740,12 @@ select:focus-visible {
   color: inherit;
   border: 0;
   background: transparent;
+  cursor: grab;
   text-align: left;
+}
+
+.terminal-tab.dragging .terminal-tab-select {
+  cursor: grabbing;
 }
 
 .terminal-tab-select > span:not(.status-chip) {
@@ -559,7 +757,8 @@ select:focus-visible {
 }
 
 .tab-menu-button,
-.tab-reconnect-button {
+.tab-reconnect-button,
+.tab-close-button {
   display: grid;
   width: 25px;
   height: 26px;
@@ -579,46 +778,87 @@ select:focus-visible {
   color: #9eabf2;
 }
 
+.tab-close-button {
+  margin-right: 6px;
+}
+
 .terminal-tab:hover .tab-menu-button,
 .terminal-tab.active .tab-menu-button,
 .terminal-tab:hover .tab-reconnect-button,
 .terminal-tab.active .tab-reconnect-button,
+.terminal-tab:hover .tab-close-button,
+.terminal-tab.active .tab-close-button,
 .tab-reconnect-button:focus-visible {
   opacity: 1;
 }
 
 .tab-menu-button:hover,
-.tab-reconnect-button:hover {
+.tab-reconnect-button:hover,
+.tab-close-button:hover {
   color: #c9d1ff;
   background: #272c37;
 }
 
-.unsafe-badge {
-  padding: 2px 4px;
-  color: #ffb18d;
-  border: 1px solid #633924;
-  border-radius: 4px;
-  background: #351f16;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+.sort-menu {
+  position: fixed;
+  z-index: 220;
+  display: flex;
+  padding: 4px;
+  flex-direction: column;
+  color: #aeb5c2;
+  border: 1px solid #343c4b;
+  border-radius: 8px;
+  background: #13171f;
+  box-shadow: 0 16px 42px #00000099, inset 0 1px 0 #ffffff08;
+}
+
+.sort-menu > header {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: #677186;
+  border-bottom: 1px solid #282e3a;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 7px;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.new-terminal-button {
-  display: grid;
-  width: 39px;
-  flex: 0 0 39px;
-  place-items: center;
-  color: #777f8d;
+.sort-menu > header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sort-menu > button {
+  display: flex;
+  height: 31px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  color: #9aa3b2;
   border: 0;
-  border-left: 1px solid #1e222a;
-  background: #101219;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 10px;
+  text-align: left;
 }
 
-.new-terminal-button:hover {
-  color: #d0d4dd;
-  background: #171a22;
+.sort-menu > button svg {
+  color: transparent;
+}
+
+.sort-menu > button:hover,
+.sort-menu > button.selected {
+  color: #d9deea;
+  background: #202633;
+}
+
+.sort-menu > button.selected svg {
+  color: #8ea2f2;
 }
 
 .popover-menu {
@@ -1962,6 +2202,11 @@ select:focus-visible {
   background: #20242d;
 }
 
+.icon-button.active {
+  color: #b9c5ff;
+  background: #232b47;
+}
+
 .primary-button,
 .secondary-button {
   height: 32px;
@@ -2416,7 +2661,7 @@ select:focus-visible {
     --sidebar-width: 225px;
   }
 
-  .project-identity span,
+  .project-path-copy,
   .header-button.secondary-button {
     display: none;
   }
@@ -2513,6 +2758,32 @@ select:focus-visible {
   transform: rotate(-18deg);
 }
 
+/* Open terminals get an accent rail; closed ones dim back. Deliberately not a
+   dot — the row already leads with a StatusDot, and a second circle read as
+   noise rather than as a separate signal. */
+.session-row {
+  position: relative;
+}
+
+.session-row.tab-open::before {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: #7398ff;
+  content: "";
+}
+
+.session-row.tab-closed .sidebar-row-main {
+  opacity: 0.45;
+}
+
+.session-row.tab-closed:hover .sidebar-row-main {
+  opacity: 0.75;
+}
+
 .sidebar-footer-actions {
   border-top: 1px solid #1f232c;
 }
@@ -2577,31 +2848,6 @@ select:focus-visible {
 .new-project-actions .refresh-connections-button:hover {
   color: #cbd0dc;
   background: #13161d;
-}
-
-.session-sort-control {
-  display: flex;
-  height: 100%;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  padding: 0 7px;
-  color: #555d6b;
-  border-left: 1px solid #1e222a;
-  background: #0f1117;
-  font-size: 8px;
-  text-transform: uppercase;
-}
-
-.session-sort-control select {
-  width: 96px;
-  padding: 0 3px;
-  color: #858d9a;
-  border: 0;
-  outline: none;
-  background: transparent;
-  font-size: 9px;
-  text-transform: none;
 }
 
 .session-archive-button {
@@ -4332,6 +4578,11 @@ button.type-switcher {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .project-glyph::before,
+  .project-glyph::after {
+    transition: none;
+  }
+
   .latex-change-added,
   .latex-change-modified,
   .latex-deleted-zone {

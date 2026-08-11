@@ -21,6 +21,7 @@ import type {
   TerminalSession,
   TerminalSessionKind
 } from '../shared/types'
+import { normalizeProjectIcon } from '../shared/project-icon'
 import type {
   PanePilotTmuxLatexMetadata,
   PanePilotTmuxMetadata
@@ -49,6 +50,7 @@ type ProjectRow = {
   id: string
   type: ProjectType
   name: string
+  icon: string | null
   connection_id: string
   folder: string
   repository_url: string | null
@@ -438,6 +440,7 @@ export class Store {
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL DEFAULT 'terminal',
         name TEXT NOT NULL,
+        icon TEXT,
         connection_id TEXT NOT NULL REFERENCES connections(id),
         folder TEXT NOT NULL,
         repository_url TEXT,
@@ -608,6 +611,7 @@ export class Store {
     this.ensureColumn('connections', 'ssh_alias', 'TEXT')
     this.ensureColumn('projects', 'created_at', `TEXT NOT NULL DEFAULT ''`)
     this.ensureColumn('projects', 'archived', 'INTEGER NOT NULL DEFAULT 0')
+    this.ensureColumn('projects', 'icon', 'TEXT')
     this.ensureColumn(
       'terminal_sessions',
       'session_kind',
@@ -696,7 +700,7 @@ export class Store {
         ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 12;
+      PRAGMA user_version = 13;
     `)
     this.migrateLegacyTerminalOutput()
   }
@@ -926,6 +930,22 @@ export class Store {
     this.addActivity(id, null, 'project-renamed', `Renamed project to ${cleaned}`)
   }
 
+  setProjectIcon(id: string, value: string | null): void {
+    const project = this.getProject(id)
+    if (!project) throw new Error('Project not found.')
+    const icon = normalizeProjectIcon(value)
+    if (icon === project.icon) return
+    this.db
+      .prepare('UPDATE projects SET icon = ?, updated_at = ? WHERE id = ?')
+      .run(icon, now(), id)
+    this.addActivity(
+      id,
+      null,
+      'project-icon-updated',
+      icon ? `Changed the project icon to ${icon}` : 'Reset the project icon'
+    )
+  }
+
   archiveProject(id: string, archived: boolean): void {
     const project = this.getProject(id)
     if (!project) throw new Error('Project not found.')
@@ -966,7 +986,7 @@ export class Store {
   getProject(id: string): Project | null {
     const row = this.db
       .prepare(
-        `SELECT id, type, name, connection_id, folder, repository_url, state, archived,
+        `SELECT id, type, name, icon, connection_id, folder, repository_url, state, archived,
                 created_at, updated_at
          FROM projects WHERE id = ?`
       )
@@ -978,7 +998,7 @@ export class Store {
   listProjects(): Project[] {
     const rows = this.db
       .prepare(
-        `SELECT id, type, name, connection_id, folder, repository_url, state, archived,
+        `SELECT id, type, name, icon, connection_id, folder, repository_url, state, archived,
                 created_at, updated_at
          FROM projects ORDER BY updated_at DESC`
       )
@@ -1395,6 +1415,7 @@ export class Store {
       id: row.id,
       type: row.type,
       name: row.name,
+      icon: row.icon,
       connectionId: row.connection_id,
       folder: row.folder,
       repositoryUrl: row.repository_url,
@@ -2454,6 +2475,31 @@ export class Store {
       `${existing ? 'Updated' : 'Uploaded'} ${input.relativePath} in Google Drive · ${input.webViewLink}`
     )
     return this.getGoogleDriveFile(input.projectId, input.relativePath)!
+  }
+
+  recordGoogleDrivePublicLink(
+    projectId: string,
+    relativePath: string,
+    url: string
+  ): void {
+    this.addActivity(
+      projectId,
+      null,
+      'google-drive-public-link-created',
+      `Created a public Drive link for ${relativePath} · ${url}`
+    )
+  }
+
+  recordGoogleDrivePublicLinkRemoved(
+    projectId: string,
+    relativePath: string
+  ): void {
+    this.addActivity(
+      projectId,
+      null,
+      'google-drive-public-link-removed',
+      `Removed the public Drive link for ${relativePath}`
+    )
   }
 
   deleteGoogleDriveFile(projectId: string, relativePath: string): void {

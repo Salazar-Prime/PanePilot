@@ -5,6 +5,7 @@ import { delimiter, join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { shell } from 'electron'
 import type {
+  GoogleDrivePublicLinkResult,
   GoogleDriveStatus,
   GoogleDriveUploadResult
 } from '../shared/types'
@@ -16,6 +17,7 @@ import {
   isGoogleDriveRemoteConfig,
   normalizeDriveFolderPath,
   normalizeRcloneRemoteName,
+  parseRclonePublicLink,
   parseRcloneStat,
   rcloneRemotePath
 } from './google-drive-helpers'
@@ -274,6 +276,49 @@ export class GoogleDriveService {
         await rm(temporaryDirectory, { recursive: true, force: true })
       }
     }
+  }
+
+  async createPublicLink(
+    projectId: string,
+    relativePath: string
+  ): Promise<GoogleDrivePublicLinkResult> {
+    const destination = this.uploadedFileDestination(projectId, relativePath)
+    const executable = this.requireExecutable()
+    const url = parseRclonePublicLink(
+      await this.runner(
+        executable,
+        ['link', destination],
+        RCLONE_COMMAND_TIMEOUT_MS
+      )
+    )
+    this.store.recordGoogleDrivePublicLink(projectId, relativePath, url)
+    return { url, destination }
+  }
+
+  async removePublicLink(projectId: string, relativePath: string): Promise<void> {
+    const destination = this.uploadedFileDestination(projectId, relativePath)
+    const executable = this.requireExecutable()
+    await this.runner(
+      executable,
+      ['link', '--unlink', destination],
+      RCLONE_COMMAND_TIMEOUT_MS
+    )
+    this.store.recordGoogleDrivePublicLinkRemoved(projectId, relativePath)
+  }
+
+  private uploadedFileDestination(projectId: string, relativePath: string): string {
+    if (!this.store.getProject(projectId)) throw new Error('Project not found.')
+    const driveConnection = this.store.getGoogleDriveConnection(projectId)
+    if (!driveConnection) {
+      throw new Error('Connect an rclone Google Drive folder to this project first.')
+    }
+    if (!this.store.getGoogleDriveFile(projectId, relativePath)) {
+      throw new Error('Upload this file to Google Drive before creating a public link.')
+    }
+    return rcloneRemotePath(
+      driveConnection.remoteName,
+      driveUploadPath(driveConnection.folderPath, relativePath)
+    )
   }
 
   private requireExecutable(): string {

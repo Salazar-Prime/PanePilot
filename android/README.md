@@ -12,6 +12,7 @@ SQLite database. Tmux remains authoritative for live-session presence.
 
 - Multiple manually configured SSH servers
 - Password or imported private-key authentication
+- Optional password storage encrypted with Android Keystore
 - SSH host-key verification and saved `known_hosts`
 - PanePilot session discovery grouped by project folder
 - Codex progress state from the tmux pane title
@@ -31,6 +32,22 @@ does not create, rename, stop, archive, or delete sessions.
 
 PanePilot tags only tmux-backed sessions. Plain PTY fallback sessions cannot be
 discovered from another device.
+
+There is no separate project-import step. Project groups are derived from the
+`@panepilot_project_path` metadata on live sessions, so every tagged session visible
+to the SSH user's default tmux server appears automatically.
+
+## Tailscale connections
+
+Using a Tailscale IP keeps the SSH server private to the tailnet, but ordinary SSH on
+the destination still requires a password or SSH key. Enable **Remember on this
+phone** to encrypt the password with Android Keystore and reuse it on later
+connections, or import a dedicated private key.
+
+Tailscale SSH can replace SSH passwords with tailnet identity when its server
+component and access policy are configured. On macOS, its server component requires
+the open-source `tailscale` + `tailscaled` variant rather than the standard macOS
+client. See the [Tailscale SSH documentation](https://tailscale.com/docs/features/tailscale-ssh).
 
 ## Build and install from the command line
 
@@ -82,7 +99,10 @@ If a legitimate server is rebuilt and its host key changes, edit that server and
 
 ## Security and behavior
 
-- Passwords and private-key passphrases stay in memory only for the active connection.
+- Passwords stay in memory unless **Remember on this phone** is enabled. Remembered
+  passwords are encrypted using a non-exportable Android Keystore key, and Android
+  backup is disabled for the app.
+- Private-key passphrases always stay in memory only for the active connection.
 - Imported private keys live in Android's app-private storage and are removed when the
   server profile is deleted.
 - Message text is sent as SSH channel input to `tmux load-buffer`; it is not interpolated
