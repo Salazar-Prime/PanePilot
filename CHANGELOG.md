@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0 — 2026-08-11
+
+This release adds:
+
+- A read-only Git status and history pane for local and SSH projects, with grouped
+  working-tree changes, conflicts, staging state, upstream ahead/behind counts,
+  stashes, and a bounded all-branch commit graph.
+- A toolbar Git indicator that summarizes repository state without taking Git locks
+  or modifying the project repository.
+- A privacy-oriented output policy for Codex terminals: raw terminal output stays in
+  a bounded application-lifetime replay buffer instead of being continuously saved
+  to SQLite. Exact provider thread IDs and Codex's own archive remain the durable
+  recovery source; other terminal profiles retain saved-output behavior.
+
+The v0.5.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It remains
+unsigned and unnotarized. PanePilot Remote remains source-only in this release.
+
 ## 0.4.0 — 2026-08-10
 
 This release adds:
