@@ -5,6 +5,7 @@ import './styles.css'
 import './drive-command.css'
 import './speech.css'
 import './latex-pdf.css'
+import './git-pane.css'
 import { App } from './components/App'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

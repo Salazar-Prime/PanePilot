@@ -32,6 +32,7 @@ import {
   writeLocalFile
 } from './file-service'
 import { GoogleDriveService } from './google-drive-service'
+import { GitService } from './git'
 import { LatexProjectService } from './latex-project-service'
 import { normalizeOptionalWebUrl } from './latex-paths'
 import { PortForwardManager, testSshConnection } from './port-forward-manager'
@@ -62,6 +63,7 @@ let latex: LatexProjectService
 let metadata: ProjectMetadataService
 let speech: SpeechService
 let googleDrive: GoogleDriveService
+let gitService: GitService
 
 // Keep the existing application-data identity when the packaged product name is PanePilot.
 app.setName('PanePilot')
@@ -168,6 +170,14 @@ function registerIpc(): void {
     if (!/^https?:\/\//i.test(url)) throw new Error('Only web repository URLs can be opened.')
     await shell.openExternal(url)
   })
+  ipcMain.handle('git:status', (_event, projectId: string) =>
+    gitService.status(projectId)
+  )
+  ipcMain.handle(
+    'git:commits',
+    (_event, projectId: string, offset?: number, limit?: number) =>
+      gitService.commits(projectId, offset, limit)
+  )
 
   ipcMain.handle('terminals:start', (_event, input: StartTerminalInput) => terminals.start(input))
   ipcMain.handle('actions:sync', (_event, projectId: string) =>
@@ -583,6 +593,7 @@ if (!ownsSingleInstanceLock) {
       latex = new LatexProjectService(store, terminals)
       speech = new SpeechService(store)
       googleDrive = new GoogleDriveService(store)
+      gitService = new GitService(store)
       portForwards = new PortForwardManager(store, () => {
         mainWindow?.webContents.send('port-forward:changed')
       })

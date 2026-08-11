@@ -39,6 +39,11 @@ const api: ProjectConsoleApi = {
     chooseFolder: () => ipcRenderer.invoke('projects:choose-folder'),
     openRepository: (url: string) => ipcRenderer.invoke('projects:open-repository', url)
   },
+  git: {
+    status: (projectId: string) => ipcRenderer.invoke('git:status', projectId),
+    commits: (projectId: string, offset?: number, limit?: number) =>
+      ipcRenderer.invoke('git:commits', projectId, offset, limit)
+  },
   terminals: {
     start: (input: StartTerminalInput) => ipcRenderer.invoke('terminals:start', input),
     discover: (connectionId?: string) =>

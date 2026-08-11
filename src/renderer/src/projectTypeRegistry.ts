@@ -34,6 +34,7 @@ export interface ProjectTypeDefinition {
     | 'terminal'
     | 'files'
     | 'repository'
+    | 'git'
     | 'agent-history'
     | 'latex-editor'
     | 'agent-chat'
@@ -62,6 +63,7 @@ export const projectTypeRegistry: Record<ProjectType, ProjectTypeDefinition> = {
       'files',
       'google-drive',
       'repository',
+      'git',
       'agent-history'
     ],
     Workspace: TerminalProjectWorkspace,
@@ -81,6 +83,7 @@ export const projectTypeRegistry: Record<ProjectType, ProjectTypeDefinition> = {
       'files',
       'google-drive',
       'repository',
+      'git',
       'agent-history',
       'terminal'
     ],

@@ -14,6 +14,7 @@ import {
   FileText,
   Flag,
   FolderOpen,
+  GitBranch,
   Github,
   Laptop,
   Menu,
@@ -40,6 +41,7 @@ import {
 import type {
   Connection,
   CreateProjectInput,
+  GitRepositoryStatus,
   Project,
   ProjectType,
   TerminalSession,
@@ -74,6 +76,7 @@ import {
 } from './CommandPalette'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 import { GoogleDriveControl } from './GoogleDriveControl'
+import { GitPane } from './GitPane'
 import { NewProjectDialog } from './NewProjectDialog'
 import { PortForwardDialog } from './PortForwardDialog'
 import { ProjectIconMenu } from './ProjectIconMenu'
@@ -122,6 +125,11 @@ export function App() {
   const [newProjectType, setNewProjectType] = useState<ProjectType>('terminal')
   const [showTypeMenu, setShowTypeMenu] = useState(false)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
+  const [gitPaneOpen, setGitPaneOpen] = useState(false)
+  const [gitStatus, setGitStatus] = useState<GitRepositoryStatus | null>(null)
+  const [gitStatusLoading, setGitStatusLoading] = useState(false)
+  const [gitStatusError, setGitStatusError] = useState('')
+  const gitStatusRequest = useRef(0)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [driveDialogRequest, setDriveDialogRequest] = useState<{
     projectId: string
@@ -295,6 +303,9 @@ export function App() {
     (item) => item.id === paneBProject?.connectionId
   )
   const project = focusedPane === 'b' && splitOpen ? paneBProject : paneAProject
+  const projectSupportsGit = project
+    ? projectTypeRegistry[project.type].capabilities.includes('git')
+    : false
   const connection = focusedPane === 'b' && splitOpen ? paneBConnection : paneAConnection
   const projectPath = project
     ? connection?.kind === 'ssh'
@@ -313,6 +324,45 @@ export function App() {
         !session.archived &&
         (session.kind !== 'terminal' || openSessionIds.has(session.id))
     ) ?? null
+
+  const refreshGitStatus = useCallback(async () => {
+    const projectId = project?.id
+    if (!projectId || showArchivedProjects || !projectSupportsGit) {
+      gitStatusRequest.current += 1
+      setGitStatus(null)
+      setGitStatusError('')
+      setGitStatusLoading(false)
+      return
+    }
+    const request = ++gitStatusRequest.current
+    setGitStatusLoading(true)
+    try {
+      const nextStatus = await window.projectConsole.git.status(projectId)
+      if (request !== gitStatusRequest.current) return
+      setGitStatus(nextStatus)
+      setGitStatusError('')
+    } catch (caught) {
+      if (request !== gitStatusRequest.current) return
+      setGitStatusError(messageFor(caught))
+    } finally {
+      if (request === gitStatusRequest.current) setGitStatusLoading(false)
+    }
+  }, [project?.id, projectSupportsGit, showArchivedProjects])
+
+  useEffect(() => {
+    gitStatusRequest.current += 1
+    setGitStatus(null)
+    setGitStatusError('')
+    if (!project || showArchivedProjects || !projectSupportsGit) return
+    void refreshGitStatus()
+    const refreshOnFocus = () => void refreshGitStatus()
+    const timer = window.setInterval(() => void refreshGitStatus(), 12_000)
+    window.addEventListener('focus', refreshOnFocus)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refreshOnFocus)
+    }
+  }, [project?.id, projectSupportsGit, refreshGitStatus, showArchivedProjects])
 
   useEffect(
     () => () => {
@@ -721,6 +771,19 @@ export function App() {
             icon: <Settings size={15} />,
             action: () => setShowProjectSettings(true)
           },
+          ...(projectSupportsGit
+            ? [
+                {
+                  id: 'action:git-pane',
+                  section: 'Actions',
+                  label: gitPaneOpen ? 'Close Git pane' : 'Open Git pane',
+                  detail: `View working changes and commit graph for ${project.name}`,
+                  keywords: ['source control', 'status', 'history', 'branch'],
+                  icon: <GitBranch size={15} />,
+                  action: () => setGitPaneOpen((current) => !current)
+                }
+              ]
+            : []),
           {
             id: 'action:google-drive',
             section: 'Actions',
@@ -1151,8 +1214,17 @@ export function App() {
     )
   }
 
+  const gitPaneVisible =
+    gitPaneOpen && project != null && projectSupportsGit && !showArchivedProjects
+  const gitTone = gitToolbarTone(gitStatus, gitStatusError)
+  const gitBadge = gitToolbarBadge(gitStatus)
+
   return (
-    <div className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
+    <div
+      className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'} ${
+        gitPaneVisible ? 'git-pane-open' : ''
+      }`}
+    >
       <header className="top-bar">
         <div className="traffic-spacer" />
         <button
@@ -1285,6 +1357,25 @@ export function App() {
             }}
           >
             <Columns2 size={16} />
+          </button>
+          <button
+            className={`icon-button git-toolbar-button ${gitTone} ${
+              gitPaneVisible ? 'active' : ''
+            }`}
+            aria-label={gitPaneVisible ? 'Close Git pane' : 'Open Git pane'}
+            aria-pressed={gitPaneVisible}
+            title={gitToolbarTitle(gitStatus, gitStatusError, gitStatusLoading)}
+            disabled={!project || !projectSupportsGit || showArchivedProjects}
+            onClick={() => setGitPaneOpen((current) => !current)}
+          >
+            <GitBranch size={16} />
+            {gitBadge ? (
+              <span className="git-toolbar-badge" aria-hidden="true">
+                {gitBadge}
+              </span>
+            ) : (gitTone === 'clean' || gitTone === 'error') ? (
+              <span className="git-toolbar-dot" aria-hidden="true" />
+            ) : null}
           </button>
           <button
             className="icon-button"
@@ -1764,6 +1855,19 @@ export function App() {
         )}
       </main>
 
+      {gitPaneVisible && project && (
+        <GitPane
+          key={project.id}
+          projectId={project.id}
+          projectName={project.name}
+          status={gitStatus}
+          statusLoading={gitStatusLoading}
+          statusError={gitStatusError}
+          onRefreshStatus={refreshGitStatus}
+          onClose={() => setGitPaneOpen(false)}
+        />
+      )}
+
       <footer className="status-bar">
         <div className="status-brand">
           <span className="live-pip" />
@@ -1902,6 +2006,57 @@ function messageFor(value: unknown): string {
 
 function showError(value: unknown): void {
   window.alert(messageFor(value))
+}
+
+function gitToolbarTone(
+  status: GitRepositoryStatus | null,
+  error: string
+): 'idle' | 'error' | 'conflict' | 'staged' | 'untracked' | 'changed' | 'ahead' | 'clean' {
+  if (error) return 'error'
+  if (!status?.isRepository) return 'idle'
+  if (status.changes.some((change) => change.conflicted)) return 'conflict'
+  if (status.changes.some((change) => change.staged)) return 'staged'
+  if (status.changes.some((change) => change.untracked)) return 'untracked'
+  if (status.changes.length > 0) return 'changed'
+  if (status.ahead > 0 || status.behind > 0) return 'ahead'
+  return 'clean'
+}
+
+function gitToolbarBadge(status: GitRepositoryStatus | null): string | null {
+  if (!status?.isRepository) return null
+  if (status.changes.length > 0) {
+    return status.changes.length > 99 ? '99+' : String(status.changes.length)
+  }
+  if (status.ahead > 0) return `↑${status.ahead > 9 ? '9+' : status.ahead}`
+  if (status.behind > 0) return `↓${status.behind > 9 ? '9+' : status.behind}`
+  return null
+}
+
+function gitToolbarTitle(
+  status: GitRepositoryStatus | null,
+  error: string,
+  loading: boolean
+): string {
+  if (error) return `Git status unavailable: ${error}`
+  if (!status) return loading ? 'Reading Git status…' : 'Open Git pane'
+  if (!status.isRepository) return status.message ?? 'No Git repository'
+  const parts = [status.branch ?? `detached ${status.head?.slice(0, 8) ?? 'HEAD'}`]
+  const conflicts = status.changes.filter((change) => change.conflicted).length
+  const staged = status.changes.filter(
+    (change) => !change.conflicted && change.staged
+  ).length
+  const untracked = status.changes.filter((change) => change.untracked).length
+  const working = status.changes.filter(
+    (change) => !change.conflicted && !change.untracked && change.workingTree
+  ).length
+  if (status.clean) parts.push('clean')
+  if (conflicts > 0) parts.push(`${conflicts} conflicted`)
+  if (staged > 0) parts.push(`${staged} staged`)
+  if (working > 0) parts.push(`${working} modified`)
+  if (untracked > 0) parts.push(`${untracked} untracked`)
+  if (status.ahead > 0) parts.push(`${status.ahead} ahead`)
+  if (status.behind > 0) parts.push(`${status.behind} behind`)
+  return `Git: ${parts.join(' · ')}`
 }
 
 function projectGlyphTitle(name: string, left: boolean, right: boolean): string {

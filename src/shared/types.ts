@@ -89,6 +89,58 @@ export interface Project {
   activities: Activity[]
 }
 
+export type GitChangeKind =
+  | 'added'
+  | 'copied'
+  | 'deleted'
+  | 'modified'
+  | 'renamed'
+  | 'type-changed'
+  | 'unmerged'
+
+export interface GitFileChange {
+  path: string
+  previousPath: string | null
+  staged: GitChangeKind | null
+  workingTree: GitChangeKind | null
+  untracked: boolean
+  conflicted: boolean
+}
+
+export interface GitRepositoryStatus {
+  isRepository: boolean
+  root: string | null
+  branch: string | null
+  detached: boolean
+  head: string | null
+  upstream: string | null
+  ahead: number
+  behind: number
+  stashCount: number
+  clean: boolean
+  changes: GitFileChange[]
+  message: string | null
+  refreshedAt: string
+}
+
+export interface GitCommit {
+  hash: string
+  shortHash: string
+  parents: string[]
+  decorations: string[]
+  author: string
+  authoredAt: string
+  subject: string
+  graph: string
+}
+
+export interface GitCommitPage {
+  commits: GitCommit[]
+  offset: number
+  total: number
+  hasMore: boolean
+}
+
 export interface CreateProjectBaseInput {
   name: string
   connectionId: string
@@ -428,6 +480,10 @@ export interface ProjectConsoleApi {
     updateRepository(projectId: string, url: string | null): Promise<void>
     chooseFolder(): Promise<string | null>
     openRepository(url: string): Promise<void>
+  }
+  git: {
+    status(projectId: string): Promise<GitRepositoryStatus>
+    commits(projectId: string, offset?: number, limit?: number): Promise<GitCommitPage>
   }
   terminals: {
     start(input: StartTerminalInput): Promise<TerminalSession>

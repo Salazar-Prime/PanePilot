@@ -39,15 +39,20 @@ select:focus-visible {
 
 .app-shell {
   --sidebar-width: 264px;
+  --git-pane-width: 0px;
   display: grid;
   grid-template:
-    "top top" 52px
-    "sidebar main" minmax(0, 1fr)
-    "status status" 26px / var(--sidebar-width) minmax(0, 1fr);
+    "top top top" 52px
+    "sidebar main git" minmax(0, 1fr)
+    "status status status" 26px / var(--sidebar-width) minmax(0, 1fr) var(--git-pane-width);
   width: 100%;
   height: 100%;
   color: #d8dbe4;
   background: #090b10;
+}
+
+.app-shell.git-pane-open {
+  --git-pane-width: clamp(350px, 28vw, 410px);
 }
 
 .app-shell.sidebar-collapsed {

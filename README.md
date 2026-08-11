@@ -75,6 +75,16 @@ terminal output cannot create a false working state.
 Project and terminal metadata, saved output, and activity are stored in
 `~/Library/Application Support/project-console/project-console.sqlite` on macOS.
 
+## Git status and history
+
+The branch icon beside Project settings opens a read-only Git pane for the focused
+project. Its badge and color distinguish conflicts, staged changes, untracked or
+modified files, ahead/behind state, and a clean tree. The pane groups working-tree
+changes and renders the all-branch commit graph; large histories load in bounded pages
+with **Load older commits**. Local and SSH-backed projects are supported, and these
+status/history reads run with Git optional locks disabled so PanePilot does not update
+the repository.
+
 ## Google Drive uploads
 
 Google Drive uploads use [rclone](https://rclone.org/drive/), so rclone owns the OAuth
