@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type UIEvent
+} from 'react'
 import {
   AlertTriangle,
   ArrowDown,
@@ -16,6 +23,7 @@ import type {
   GitFileChange,
   GitRepositoryStatus
 } from '@shared/types'
+import { shouldLoadOlderGitCommits } from '../lib/gitPane'
 
 const COMMIT_PAGE_SIZE = 80
 
@@ -194,11 +202,14 @@ export function GitPane({
   const [commitLoading, setCommitLoading] = useState(false)
   const [commitError, setCommitError] = useState('')
   const requestSequence = useRef(0)
+  const commitLoadingRef = useRef(false)
 
   const loadCommits = useCallback(
     async (reset: boolean) => {
+      if (!reset && commitLoadingRef.current) return
       const request = ++requestSequence.current
       const offset = reset ? 0 : commits.length
+      commitLoadingRef.current = true
       setCommitLoading(true)
       if (reset) setCommitError('')
       try {
@@ -215,7 +226,10 @@ export function GitPane({
         if (request !== requestSequence.current) return
         setCommitError(error instanceof Error ? error.message : String(error))
       } finally {
-        if (request === requestSequence.current) setCommitLoading(false)
+        if (request === requestSequence.current) {
+          commitLoadingRef.current = false
+          setCommitLoading(false)
+        }
       }
     },
     [commits.length, projectId]
@@ -244,6 +258,14 @@ export function GitPane({
 
   async function refreshAll() {
     await Promise.all([onRefreshStatus(), loadCommits(true)])
+  }
+
+  function handlePaneScroll(event: UIEvent<HTMLDivElement>) {
+    if (!hasMore || commitLoadingRef.current) return
+    const { scrollTop, clientHeight, scrollHeight } = event.currentTarget
+    if (shouldLoadOlderGitCommits(scrollTop, clientHeight, scrollHeight)) {
+      void loadCommits(false)
+    }
   }
 
   return (
@@ -299,7 +321,7 @@ export function GitPane({
           <p>{status.message}</p>
         </div>
       ) : status ? (
-        <>
+        <div className="git-pane-scroll" onScroll={handlePaneScroll}>
           <section className="git-branch-card">
             <div className="git-current-branch">
               <GitBranch size={14} />
@@ -408,7 +430,7 @@ export function GitPane({
               )}
             </div>
           </section>
-        </>
+        </div>
       ) : null}
     </aside>
   )

@@ -87,6 +87,15 @@
   height: 27px;
 }
 
+.git-pane-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #343b4b transparent;
+  scrollbar-width: thin;
+}
+
 .git-pane-loading,
 .git-pane-empty {
   display: flex;
@@ -187,8 +196,6 @@
 
 .git-working-tree {
   flex: 0 0 auto;
-  max-height: 44%;
-  overflow-y: auto;
   border-bottom: 1px solid #20252e;
 }
 
@@ -359,15 +366,19 @@
 
 .git-history {
   display: flex;
-  min-height: 0;
-  flex: 1;
+  flex: 0 0 auto;
   flex-direction: column;
 }
 
 .git-history-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   height: 46px;
   flex: 0 0 46px;
   border-bottom: 1px solid #1d222b;
+  background: #0c0f15f5;
+  backdrop-filter: blur(10px);
 }
 
 .git-history-heading > svg {
@@ -375,9 +386,6 @@
 }
 
 .git-commit-list {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
   padding: 5px 0 14px;
 }
 

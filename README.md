@@ -80,10 +80,11 @@ Project and terminal metadata, saved output, and activity are stored in
 The branch icon beside Project settings opens a read-only Git pane for the focused
 project. Its badge and color distinguish conflicts, staged changes, untracked or
 modified files, ahead/behind state, and a clean tree. The pane groups working-tree
-changes and renders the all-branch commit graph; large histories load in bounded pages
-with **Load older commits**. Local and SSH-backed projects are supported, and these
-status/history reads run with Git optional locks disabled so PanePilot does not update
-the repository.
+changes and renders the all-branch commit graph in one continuous scrolling view.
+Large histories load another bounded page as you approach the bottom, with **Load
+older commits** retained as a fallback. Local and SSH-backed projects are supported,
+and these status/history reads run with Git optional locks disabled so PanePilot does
+not update the repository.
 
 ## Google Drive uploads
 
