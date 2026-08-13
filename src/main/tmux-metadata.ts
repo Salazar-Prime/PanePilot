@@ -42,6 +42,7 @@ const VALID_SESSION_KINDS = new Set<TerminalSessionKind>([
   'terminal',
   'action',
   'project-qna',
+  'temporary-chat',
   'latex-chat'
 ])
 const VALID_LATEX_SCOPES = new Set<LatexChatScope>(['project', 'section'])
@@ -306,7 +307,8 @@ function parseMetadata(values: Map<string, string>): PanePilotTmuxMetadata | nul
   }
   if (
     (sessionKind === 'action' && profile !== 'custom') ||
-    (sessionKind === 'project-qna' && profile !== 'codex')
+    ((sessionKind === 'project-qna' || sessionKind === 'temporary-chat') &&
+      profile !== 'codex')
   ) {
     return null
   }

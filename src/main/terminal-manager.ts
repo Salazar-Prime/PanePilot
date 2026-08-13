@@ -632,6 +632,42 @@ export class TerminalManager {
     this.delete(existing.id)
   }
 
+  startTemporaryCodexChat(projectId: string): TerminalSession {
+    const project = this.store.getProject(projectId)
+    if (!project || project.archived) throw new Error('Choose an active project.')
+    this.requireProjectTmux(projectId, 'Temporary Codex chats')
+    const chatNumber =
+      project.sessions.filter((session) => session.kind === 'temporary-chat')
+        .length + 1
+    return this.startSession(
+      {
+        projectId,
+        name: generatedTerminalName(`Quick chat ${chatNumber}`),
+        profile: 'codex',
+        dangerousMode: false
+      },
+      'temporary-chat',
+      undefined,
+      true
+    )
+  }
+
+  sendTemporaryCodexChatPrompt(sessionId: string, prompt: string): void {
+    const session = this.requireSession(sessionId)
+    if (session.kind !== 'temporary-chat' || session.profile !== 'codex') {
+      throw new Error('Temporary Codex chat not found.')
+    }
+    this.sendPrompt(sessionId, prompt)
+  }
+
+  clearTemporaryCodexChat(sessionId: string): void {
+    const session = this.requireSession(sessionId)
+    if (session.kind !== 'temporary-chat') {
+      throw new Error('Temporary Codex chat not found.')
+    }
+    this.delete(sessionId)
+  }
+
   private startSession(
     input: StartTerminalInput,
     kind: TerminalSessionKind,
@@ -666,11 +702,19 @@ export class TerminalManager {
     const tmuxAvailable =
       tmuxAlreadyConfirmed || this.connectionHasTmux(connection)
     if (
-      (kind === 'action' || kind === 'project-qna') &&
+      (kind === 'action' ||
+        kind === 'project-qna' ||
+        kind === 'temporary-chat') &&
       !tmuxAvailable
     ) {
+      const capability =
+        kind === 'action'
+          ? 'Actions'
+          : kind === 'project-qna'
+            ? 'Project Q&A'
+            : 'Temporary Codex chats'
       throw new Error(
-        `${kind === 'action' ? 'Actions' : 'Project Q&A'} require tmux on this connection.`
+        `${capability} require tmux on this connection.`
       )
     }
     const profileLabel =
@@ -685,7 +729,8 @@ export class TerminalManager {
       (session) =>
         session.profile === input.profile &&
         session.kind !== 'action' &&
-        session.kind !== 'project-qna'
+        session.kind !== 'project-qna' &&
+        session.kind !== 'temporary-chat'
     ).length
     const requestedName = input.name ? validatedTerminalName(input.name) : null
     let sessionName = requestedName || `${profileLabel} ${sameProfileCount + 1}`

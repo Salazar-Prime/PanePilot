@@ -11,6 +11,7 @@ export type TerminalSessionKind =
   | 'terminal'
   | 'action'
   | 'project-qna'
+  | 'temporary-chat'
   | 'latex-chat'
 export type LatexChatMode = 'ask' | 'edit'
 export type LatexChatScope = 'project' | 'section'
@@ -527,6 +528,11 @@ export interface ProjectConsoleApi {
   projectQna: {
     start(projectId: string): Promise<TerminalSession>
     reset(projectId: string): Promise<void>
+    sendPrompt(sessionId: string, prompt: string): Promise<void>
+  }
+  temporaryChats: {
+    start(projectId: string): Promise<TerminalSession>
+    clear(sessionId: string): Promise<void>
     sendPrompt(sessionId: string, prompt: string): Promise<void>
   }
   notes: {

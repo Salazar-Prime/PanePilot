@@ -210,6 +210,18 @@ function registerIpc(): void {
       terminals.sendProjectQnaPrompt(sessionId, prompt)
     }
   )
+  ipcMain.handle('temporary-chats:start', (_event, projectId: string) =>
+    terminals.startTemporaryCodexChat(projectId)
+  )
+  ipcMain.handle('temporary-chats:clear', (_event, sessionId: string) => {
+    terminals.clearTemporaryCodexChat(sessionId)
+  })
+  ipcMain.handle(
+    'temporary-chats:send-prompt',
+    (_event, sessionId: string, prompt: string) => {
+      terminals.sendTemporaryCodexChatPrompt(sessionId, prompt)
+    }
+  )
   ipcMain.handle('terminals:discover', (_event, connectionId?: string) =>
     terminals.reconcileRemoteSessions(connectionId)
   )

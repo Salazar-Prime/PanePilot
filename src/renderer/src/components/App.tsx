@@ -18,6 +18,7 @@ import {
   Github,
   Laptop,
   Menu,
+  MessageSquarePlus,
   MessageSquareText,
   Network,
   PanelLeft,
@@ -91,6 +92,7 @@ import { SortMenu } from './SortMenu'
 import { SpeechControl } from './SpeechControl'
 import { StatusDot } from './StatusDot'
 import { TerminalProfileIcon } from './TerminalProfileIcon'
+import { TemporaryChatsPanel } from './TemporaryChatsPanel'
 
 type SidebarContext =
   | { kind: 'connection'; connection: Connection; x: number; y: number }
@@ -137,6 +139,11 @@ export function App() {
   const [gitStatusError, setGitStatusError] = useState('')
   const gitStatusRequest = useRef(0)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
+  const [temporaryChatPanel, setTemporaryChatPanel] = useState<{
+    projectId: string
+    createRequest: number | null
+  } | null>(null)
+  const temporaryChatRequestSequence = useRef(0)
   const [driveDialogRequest, setDriveDialogRequest] = useState<{
     projectId: string
     nonce: number
@@ -313,6 +320,11 @@ export function App() {
     () => projects.filter((project) => project.archived),
     [projects]
   )
+  const temporaryChatProject = temporaryChatPanel
+    ? activeProjects.find(
+        (candidate) => candidate.id === temporaryChatPanel.projectId
+      ) ?? null
+    : null
   const paneAProject =
     !showArchivedProjects
       ? activeProjects.find((item) => item.id === selectedProjectId) ?? null
@@ -745,6 +757,14 @@ export function App() {
     setLaunchTerminalRequest(nextWorkspaceRequest(target.id, pane))
   }
 
+  function openTemporaryChats(target: Project, create = false) {
+    if (create) temporaryChatRequestSequence.current += 1
+    setTemporaryChatPanel({
+      projectId: target.id,
+      createRequest: create ? temporaryChatRequestSequence.current : null
+    })
+  }
+
   const workingCount = useMemo(
     () =>
       activeProjects
@@ -809,6 +829,24 @@ export function App() {
                 }
               ]
             : []),
+          {
+            id: 'action:temporary-chats',
+            section: 'Actions',
+            label: 'Open quick Codex chats',
+            detail: `Temporary chats for ${project.name}`,
+            keywords: ['scratch', 'ephemeral', 'temporary', 'codex', 'chat'],
+            icon: <MessageSquarePlus size={15} />,
+            action: () => openTemporaryChats(project)
+          },
+          {
+            id: 'action:new-temporary-chat',
+            section: 'Actions',
+            label: 'New quick Codex chat',
+            detail: `Create a temporary chat for ${project.name}`,
+            keywords: ['scratch', 'ephemeral', 'temporary', 'codex', 'chat'],
+            icon: <Plus size={15} />,
+            action: () => openTemporaryChats(project, true)
+          },
           {
             id: 'action:google-drive',
             section: 'Actions',
@@ -1345,6 +1383,31 @@ export function App() {
             onChange={setAppearanceScale}
           />
           <SpeechControl />
+          {project && (
+            <button
+              className={`icon-button temporary-chat-toolbar-button ${
+                temporaryChatPanel?.projectId === project.id ? 'active' : ''
+              }`}
+              aria-label="Open quick Codex chats"
+              title="Quick Codex chats"
+              onClick={() => openTemporaryChats(project)}
+            >
+              <MessageSquarePlus size={16} />
+              {project.sessions.filter(
+                (session) =>
+                  session.kind === 'temporary-chat' && !session.archived
+              ).length > 0 && (
+                <span aria-hidden="true">
+                  {
+                    project.sessions.filter(
+                      (session) =>
+                        session.kind === 'temporary-chat' && !session.archived
+                    ).length
+                  }
+                </span>
+              )}
+            </button>
+          )}
           {project?.latex?.overleafUrl && (
             <button
               className="secondary-button header-button overleaf-button"
@@ -1980,6 +2043,15 @@ export function App() {
         <PortForwardDialog
           connection={portForwardConnection}
           onClose={() => setPortForwardConnection(null)}
+        />
+      )}
+      {temporaryChatProject && temporaryChatPanel && (
+        <TemporaryChatsPanel
+          key={temporaryChatProject.id}
+          project={temporaryChatProject}
+          createRequest={temporaryChatPanel.createRequest}
+          onChanged={refresh}
+          onClose={() => setTemporaryChatPanel(null)}
         />
       )}
       <CommandPalette

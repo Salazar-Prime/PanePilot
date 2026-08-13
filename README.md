@@ -128,6 +128,12 @@ file's public sharing state.
 Press **Command-K** (or **Control-K**) to open the command palette for projects,
 terminals, and common project actions.
 
+The message-plus button beside the audio control opens project-scoped **Quick Codex
+chats**. You can also open the collection or create a new chat from Command-K. These
+tmux-backed chats stay out of ordinary terminal tabs, survive restarts, and remain
+available until you choose **Clear**. Clearing removes PanePilot's session and saved
+output while leaving Codex's own conversation archive untouched.
+
 The **Aa** toolbar control changes the complete interface—including terminal and
 Monaco text—between Compact (90%), Standard (100%), Comfortable (110%), and Large
 (125%). The client-local choice survives restarts. Command/Control with plus or minus

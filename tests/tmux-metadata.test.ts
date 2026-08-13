@@ -133,6 +133,16 @@ describe('PanePilot tmux metadata', () => {
       })
   })
 
+  it('round-trips a temporary Codex chat as a distinct managed session', () => {
+    const value = metadata({ sessionKind: 'temporary-chat' })
+
+    expect(parseTmuxSessionList(tmuxListLine(value, 'Quick chat 1'))[0])
+      .toMatchObject({
+        name: 'Quick chat 1',
+        metadata: value
+      })
+  })
+
   it('builds shell-safe set and unset commands for session options', () => {
     const command = tmuxMetadataShellCommand(
       metadata({ providerSessionId: null }),
@@ -400,6 +410,53 @@ describe('tmux discovery persistence', () => {
       expect(migrated.getSessionTmuxMetadataVersion(session.id)).toBe(1)
     } finally {
       migrated.close()
+    }
+  })
+
+  it('persists temporary chats without colliding with the project Q&A slot', () => {
+    appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-temporary-chats-'))
+    const store = new Store(appDataPath)
+    try {
+      store.syncConnections([])
+      const project = store.createProject({
+        type: 'terminal',
+        name: 'Local project',
+        connectionId: 'local',
+        folder: '/tmp/project',
+        repositoryUrl: null
+      })
+      const first = store.createSession({
+        projectId: project.id,
+        kind: 'temporary-chat',
+        name: 'Quick chat 1',
+        profile: 'codex',
+        providerSessionName: null,
+        customCommand: null,
+        backend: 'tmux',
+        tmuxName: 'Quick chat 1',
+        dangerousMode: false
+      })
+      const second = store.createSession({
+        projectId: project.id,
+        kind: 'temporary-chat',
+        name: 'Quick chat 2',
+        profile: 'codex',
+        providerSessionName: null,
+        customCommand: null,
+        backend: 'tmux',
+        tmuxName: 'Quick chat 2',
+        dangerousMode: false
+      })
+
+      expect(store.getProject(project.id)?.sessions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: first.id, kind: 'temporary-chat' }),
+          expect.objectContaining({ id: second.id, kind: 'temporary-chat' })
+        ])
+      )
+      expect(store.getProjectQnaSession(project.id)).toBeNull()
+    } finally {
+      store.close()
     }
   })
 })

@@ -458,7 +458,7 @@ export class Store {
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
         session_kind TEXT NOT NULL DEFAULT 'terminal'
-          CHECK (session_kind IN ('terminal', 'action', 'project-qna', 'latex-chat')),
+          CHECK (session_kind IN ('terminal', 'action', 'project-qna', 'temporary-chat', 'latex-chat')),
         name TEXT NOT NULL,
         profile TEXT NOT NULL,
         provider_session_id TEXT,
@@ -663,6 +663,7 @@ export class Store {
     if (activityColumns.has('content')) {
       this.db.exec(`UPDATE activities SET message = content WHERE message = ''`)
     }
+    this.ensureTemporaryChatSessionKind()
 
     this.db.exec(`
       UPDATE terminal_sessions
@@ -705,7 +706,7 @@ export class Store {
         ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 13;
+      PRAGMA user_version = 14;
     `)
     this.migrateLegacyTerminalOutput()
   }
@@ -796,6 +797,65 @@ export class Store {
         );
       `)
     })
+  }
+
+  private ensureTemporaryChatSessionKind(): void {
+    const row = this.db
+      .prepare(
+        `SELECT sql FROM sqlite_master
+         WHERE type = 'table' AND name = 'terminal_sessions'`
+      )
+      .get() as { sql: string | null } | undefined
+    if (row?.sql?.includes("'temporary-chat'")) return
+
+    this.db.exec('PRAGMA foreign_keys = OFF')
+    try {
+      this.inTransaction(() => {
+        this.db.exec(`
+          CREATE TABLE terminal_sessions_with_temporary_chat (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            session_kind TEXT NOT NULL DEFAULT 'terminal'
+              CHECK (session_kind IN ('terminal', 'action', 'project-qna', 'temporary-chat', 'latex-chat')),
+            name TEXT NOT NULL,
+            profile TEXT NOT NULL,
+            provider_session_id TEXT,
+            provider_session_name TEXT,
+            custom_command TEXT,
+            backend TEXT NOT NULL,
+            tmux_name TEXT,
+            state TEXT NOT NULL DEFAULT 'idle',
+            dangerous_mode INTEGER NOT NULL DEFAULT 0,
+            tmux_metadata_version INTEGER NOT NULL DEFAULT 0,
+            archived INTEGER NOT NULL DEFAULT 0,
+            pinned INTEGER NOT NULL DEFAULT 0,
+            flagged INTEGER NOT NULL DEFAULT 0,
+            output TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          );
+          INSERT INTO terminal_sessions_with_temporary_chat
+            (id, project_id, session_kind, name, profile, provider_session_id,
+             provider_session_name, custom_command, backend, tmux_name, state,
+             dangerous_mode, tmux_metadata_version, archived, pinned, flagged,
+             output, created_at, updated_at)
+          SELECT id, project_id, session_kind, name, profile, provider_session_id,
+                 provider_session_name, custom_command, backend, tmux_name, state,
+                 dangerous_mode, tmux_metadata_version, archived, pinned, flagged,
+                 output, created_at, updated_at
+          FROM terminal_sessions;
+          DROP TABLE terminal_sessions;
+          ALTER TABLE terminal_sessions_with_temporary_chat
+            RENAME TO terminal_sessions;
+        `)
+      })
+    } finally {
+      this.db.exec('PRAGMA foreign_keys = ON')
+    }
+    const violations = this.db.prepare('PRAGMA foreign_key_check').all()
+    if (violations.length > 0) {
+      throw new Error('Terminal session migration left invalid references.')
+    }
   }
 
   private tableColumns(table: string): Set<string> {

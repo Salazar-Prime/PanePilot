@@ -118,6 +118,14 @@ const api: ProjectConsoleApi = {
     sendPrompt: (sessionId: string, prompt: string) =>
       ipcRenderer.invoke('project-qna:send-prompt', sessionId, prompt)
   },
+  temporaryChats: {
+    start: (projectId: string) =>
+      ipcRenderer.invoke('temporary-chats:start', projectId),
+    clear: (sessionId: string) =>
+      ipcRenderer.invoke('temporary-chats:clear', sessionId),
+    sendPrompt: (sessionId: string, prompt: string) =>
+      ipcRenderer.invoke('temporary-chats:send-prompt', sessionId, prompt)
+  },
   notes: {
     list: (projectId: string) => ipcRenderer.invoke('notes:list', projectId),
     create: (projectId: string, name: string) =>
