@@ -893,11 +893,22 @@ export class TerminalManager {
     ) {
       return false
     }
+    const synced = await this.writeSessionMetadata(project, session, connection)
+    if (!synced || this.shuttingDown) return false
+    this.store.markSessionTmuxMetadataManaged(session.id)
+    return true
+  }
+
+  private async writeSessionMetadata(
+    project: Project,
+    session: TerminalSession,
+    connection: Connection
+  ): Promise<boolean> {
+    if (session.backend !== 'tmux' || !session.tmuxName) return false
     const tmuxCommand = this.tmuxPathForConnection(connection)
     if (!tmuxCommand) return false
-    const metadata = this.metadataForSession(project, session)
     const command = tmuxMetadataShellCommand(
-      metadata,
+      this.metadataForSession(project, session),
       session.tmuxName,
       true,
       tmuxCommand
@@ -928,8 +939,6 @@ export class TerminalManager {
           }
         )
       }
-      if (this.shuttingDown) return false
-      this.store.markSessionTmuxMetadataManaged(session.id)
       return true
     } catch {
       return false
@@ -1366,6 +1375,59 @@ export class TerminalManager {
     const runtime = this.runtimes.get(sessionId)
     const latest = this.store.getSession(sessionId)
     if (runtime && latest) runtime.session = latest
+  }
+
+  async transferSession(
+    sessionId: string,
+    targetProjectId: string
+  ): Promise<TerminalSession> {
+    const session = this.requireSession(sessionId)
+    if (session.kind !== 'terminal' || session.archived) {
+      throw new Error('Only active ordinary terminal sessions can be transferred.')
+    }
+    const sourceProject = this.store.getProject(session.projectId)
+    const targetProject = this.store.getProject(targetProjectId)
+    if (!sourceProject || !targetProject || targetProject.archived) {
+      throw new Error('Choose an active destination project.')
+    }
+    if (sourceProject.id === targetProject.id) return session
+    if (sourceProject.connectionId !== targetProject.connectionId) {
+      throw new Error('A terminal can only move to a project on the same machine.')
+    }
+    const connection = this.store.getConnection(sourceProject.connectionId)
+    if (!connection) throw new Error('Project connection not found.')
+    const liveTmuxSession =
+      session.backend === 'tmux' &&
+      session.tmuxName != null &&
+      this.tmuxSessionExists(connection, session.tmuxName)
+    if (
+      liveTmuxSession &&
+      !(await this.writeSessionMetadata(targetProject, session, connection))
+    ) {
+      throw new Error(
+        'Could not retag the live tmux session for the destination project.'
+      )
+    }
+
+    let transferred: TerminalSession
+    try {
+      transferred = this.store.transferSession(sessionId, targetProjectId)
+    } catch (error) {
+      if (liveTmuxSession) {
+        await this.writeSessionMetadata(sourceProject, session, connection)
+      }
+      throw error
+    }
+    if (liveTmuxSession) {
+      this.store.markSessionTmuxMetadataManaged(sessionId)
+    }
+    const runtime = this.runtimes.get(sessionId)
+    if (runtime) runtime.session = transferred
+    this.getWindow()?.webContents.send('terminal:metadata', {
+      sessionId,
+      projectId: targetProjectId
+    })
+    return transferred
   }
 
   setPinned(sessionId: string, pinned: boolean): void {

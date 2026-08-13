@@ -13,6 +13,7 @@ import {
   ExternalLink,
   FileText,
   Flag,
+  FolderInput,
   FolderOpen,
   GitBranch,
   Github,
@@ -93,6 +94,7 @@ import { SpeechControl } from './SpeechControl'
 import { StatusDot } from './StatusDot'
 import { TerminalProfileIcon } from './TerminalProfileIcon'
 import { TemporaryChatsPanel } from './TemporaryChatsPanel'
+import { TransferSessionDialog } from './TransferSessionDialog'
 
 type SidebarContext =
   | { kind: 'connection'; connection: Connection; x: number; y: number }
@@ -171,6 +173,10 @@ export function App() {
   )
   const copiedPathTimer = useRef<number | null>(null)
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
+  const [transferTarget, setTransferTarget] = useState<{
+    project: Project
+    session: TerminalSession
+  } | null>(null)
   const [sessionSort] = useSessionSort()
   const [projectSorts, setProjectSort] = useProjectSorts()
   const {
@@ -607,6 +613,20 @@ export function App() {
   async function promptRenameProject(target: Project) {
     setSidebarContext(null)
     setRenameTarget({ kind: 'project', project: target })
+  }
+
+  function promptTransferSession(owner: Project, session: TerminalSession) {
+    setSidebarContext(null)
+    setTransferTarget({ project: owner, session })
+  }
+
+  async function transferSessionToProject(targetProjectId: string) {
+    if (!transferTarget) return
+    const sessionId = transferTarget.session.id
+    await window.projectConsole.terminals.transfer(sessionId, targetProjectId)
+    setTransferTarget(null)
+    await refresh()
+    await selectSession(targetProjectId, sessionId)
   }
 
   async function promptRenameSession(session: TerminalSession) {
@@ -1147,6 +1167,17 @@ export function App() {
         icon: <Pencil size={14} />,
         separatorBefore: true,
         action: () => promptRenameSession(session)
+      },
+      {
+        id: 'transfer',
+        label: 'Transfer session to project',
+        icon: <FolderInput size={14} />,
+        disabled: !activeProjects.some(
+          (candidate) =>
+            candidate.id !== owner.id &&
+            candidate.connectionId === owner.connectionId
+        ),
+        action: () => promptTransferSession(owner, session)
       },
       {
         id: 'pin',
@@ -1861,6 +1892,9 @@ export function App() {
                       ? swapPanes
                       : undefined
                   }
+                  onTransferSession={(session) =>
+                    promptTransferSession(paneAProject, session)
+                  }
                   onSelectSession={(id) => {
                     setSelectedSessionId(id)
                     openSession(id)
@@ -1921,6 +1955,9 @@ export function App() {
                     onLaunchTerminalRequestHandled={handleLaunchTerminalRequest}
                     onOpenSessionRequestHandled={handleOpenSessionRequest}
                     onSwapPanes={paneAProject ? swapPanes : undefined}
+                    onTransferSession={(session) =>
+                      promptTransferSession(paneBProject, session)
+                    }
                     onSelectSession={(id) => {
                       setPaneBSessionId(id)
                       openSession(id)
@@ -2052,6 +2089,15 @@ export function App() {
           createRequest={temporaryChatPanel.createRequest}
           onChanged={refresh}
           onClose={() => setTemporaryChatPanel(null)}
+        />
+      )}
+      {transferTarget && (
+        <TransferSessionDialog
+          session={transferTarget.session}
+          sourceProject={transferTarget.project}
+          projects={activeProjects}
+          onTransfer={transferSessionToProject}
+          onClose={() => setTransferTarget(null)}
         />
       )}
       <CommandPalette

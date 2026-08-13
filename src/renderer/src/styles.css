@@ -2711,6 +2711,69 @@ select:focus-visible {
   font-size: 11px;
 }
 
+.transfer-session-modal {
+  width: min(560px, 100%);
+}
+
+.transfer-session-source {
+  display: flex;
+  padding: 13px;
+  align-items: center;
+  gap: 10px;
+  color: #92a5ff;
+  border: 1px solid #303849;
+  border-radius: 9px;
+  background: #171c27;
+}
+
+.transfer-session-source > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.transfer-session-source strong {
+  overflow: hidden;
+  color: #e2e5eb;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transfer-session-source small {
+  color: #788292;
+  font-size: 10px;
+}
+
+.transfer-session-note {
+  margin: 4px 0 18px;
+  color: #727b89;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.transfer-session-empty {
+  display: flex;
+  padding: 20px 8px 2px;
+  align-items: center;
+  flex-direction: column;
+  color: #747d8b;
+  text-align: center;
+}
+
+.transfer-session-empty strong {
+  color: #d5d9e0;
+  font-size: 13px;
+}
+
+.transfer-session-empty p {
+  max-width: 360px;
+  margin: 8px 0 17px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
 .field input,
 .field select {
   height: 37px;

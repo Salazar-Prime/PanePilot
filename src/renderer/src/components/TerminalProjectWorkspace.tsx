@@ -6,6 +6,7 @@ import {
   FileText,
   Files,
   Flag,
+  FolderInput,
   History,
   MessageCircleQuestion,
   MessageSquareText,
@@ -90,6 +91,7 @@ export function TerminalProjectWorkspace({
   onLaunchTerminalRequestHandled,
   onOpenSessionRequestHandled,
   onSwapPanes,
+  onTransferSession,
   onSelectSession,
   onChanged
 }: ProjectWorkspaceProps) {
@@ -788,6 +790,16 @@ export function TerminalProjectWorkspace({
                     />
                     {session.flagged ? 'Remove flag' : 'Flag for later'}
                   </button>
+                  {onTransferSession && (
+                    <button
+                      onClick={() => {
+                        setMenu(null)
+                        onTransferSession(session)
+                      }}
+                    >
+                      <FolderInput size={14} /> Transfer to project
+                    </button>
+                  )}
                   {providerSessionReference && (
                     <button
                       onClick={() =>

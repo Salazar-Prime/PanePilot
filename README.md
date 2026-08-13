@@ -162,6 +162,12 @@ promotes a project. That promotion is sticky: resolving the attention state does
 not move the project back down, while a later attention event can promote another
 project above it.
 
+Right-click an ordinary terminal in the sidebar or use its tab menu to **Transfer
+session to project**. Destinations are limited to active projects on the same local
+or SSH machine. PanePilot moves the tab and retags live tmux metadata; an already
+running process keeps its current working directory until it is force reloaded or
+resumed.
+
 Click a project's sidebar glyph to replace its initial with one Unicode symbol
 or emoji. In split view, violet on the glyph's left half marks the left pane and
 teal on its right half marks the right pane. The larger project name in the top

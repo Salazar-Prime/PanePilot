@@ -2313,6 +2313,47 @@ export class Store {
     this.addActivity(session.projectId, id, 'terminal-renamed', `Renamed terminal to ${name}`)
   }
 
+  transferSession(id: string, targetProjectId: string): TerminalSession {
+    const session = this.requireSession(id)
+    if (session.kind !== 'terminal') {
+      throw new Error('Only ordinary terminal sessions can be transferred.')
+    }
+    const sourceProject = this.getProject(session.projectId)
+    const targetProject = this.getProject(targetProjectId)
+    if (!sourceProject || !targetProject || targetProject.archived) {
+      throw new Error('Choose an active destination project.')
+    }
+    if (sourceProject.id === targetProject.id) return session
+    if (sourceProject.connectionId !== targetProject.connectionId) {
+      throw new Error('A terminal can only move to a project on the same machine.')
+    }
+    const timestamp = now()
+    this.inTransaction(() => {
+      this.db
+        .prepare(
+          `UPDATE terminal_sessions
+           SET project_id = ?, pinned = 0, updated_at = ?
+           WHERE id = ?`
+        )
+        .run(targetProject.id, timestamp, id)
+      this.addActivity(
+        sourceProject.id,
+        id,
+        'terminal-transferred-out',
+        `Transferred ${session.name} to ${targetProject.name}`
+      )
+      this.addActivity(
+        targetProject.id,
+        id,
+        'terminal-transferred-in',
+        `Received ${session.name} from ${sourceProject.name}`
+      )
+      this.updateProjectState(sourceProject.id)
+      this.updateProjectState(targetProject.id)
+    })
+    return this.requireSession(id)
+  }
+
   setSessionPinned(id: string, pinned: boolean): void {
     const session = this.requireSession(id)
     if (session.pinned === pinned) return

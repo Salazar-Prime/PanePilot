@@ -3,6 +3,7 @@ import type {
   Connection,
   Project,
   ProjectType,
+  TerminalSession,
   TerminalTransportState
 } from '@shared/types'
 import { LatexProjectWorkspace } from './components/LatexProjectWorkspace'
@@ -22,6 +23,7 @@ export interface ProjectWorkspaceProps {
   onLaunchTerminalRequestHandled(id: number): void
   onOpenSessionRequestHandled(id: number): void
   onSwapPanes?(): void
+  onTransferSession?(session: TerminalSession): void
   onSelectSession(id: string): void
   onChanged(): Promise<void>
 }

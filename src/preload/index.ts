@@ -65,6 +65,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('terminals:force-reload-agent', sessionId),
     rename: (sessionId: string, name: string) =>
       ipcRenderer.invoke('terminals:rename', sessionId, name),
+    transfer: (sessionId: string, targetProjectId: string) =>
+      ipcRenderer.invoke('terminals:transfer', sessionId, targetProjectId),
     setPinned: (sessionId: string, pinned: boolean) =>
       ipcRenderer.invoke('terminals:set-pinned', sessionId, pinned),
     setFlagged: (sessionId: string, flagged: boolean) =>

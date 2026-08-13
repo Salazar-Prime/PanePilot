@@ -506,6 +506,7 @@ export interface ProjectConsoleApi {
     resumeAgent(sessionId: string): Promise<void>
     forceReloadAgent(sessionId: string): Promise<void>
     rename(sessionId: string, name: string): Promise<void>
+    transfer(sessionId: string, targetProjectId: string): Promise<TerminalSession>
     setPinned(sessionId: string, pinned: boolean): Promise<void>
     setFlagged(sessionId: string, flagged: boolean): Promise<void>
     stop(sessionId: string): Promise<void>

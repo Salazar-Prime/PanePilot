@@ -290,6 +290,11 @@ function registerIpc(): void {
   ipcMain.handle('terminals:rename', (_event, sessionId: string, name: string) => {
     terminals.rename(sessionId, name)
   })
+  ipcMain.handle(
+    'terminals:transfer',
+    (_event, sessionId: string, targetProjectId: string) =>
+      terminals.transferSession(sessionId, targetProjectId)
+  )
   ipcMain.handle('terminals:set-pinned', (_event, sessionId: string, pinned: boolean) => {
     terminals.setPinned(sessionId, pinned)
   })
