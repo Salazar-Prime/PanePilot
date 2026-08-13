@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webFrame } from 'electron'
 import type {
   ConnectGoogleDriveInput,
   CreatePortForwardInput,
@@ -230,7 +230,13 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('system:open-project-folder', projectId),
     printCurrentWindow: (pageCount: number) =>
       ipcRenderer.invoke('system:print-current-window', pageCount),
-    openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url)
+    openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url),
+    setZoomFactor: (factor: number) => {
+      const safeFactor = Number.isFinite(factor)
+        ? Math.min(1.25, Math.max(0.9, factor))
+        : 1
+      webFrame.setZoomFactor(safeFactor)
+    }
   }
 }
 

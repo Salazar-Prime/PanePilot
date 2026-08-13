@@ -48,6 +48,10 @@ import type {
   TerminalTransportState
 } from '@shared/types'
 import { isAttentionState } from '../lib/status'
+import {
+  nextAppearanceScale,
+  useAppearanceScale
+} from '../lib/appearanceScale'
 import { useOpenSessions } from '../lib/openSessions'
 import { isPaneSwapShortcut } from '../lib/projectShortcuts'
 import {
@@ -70,6 +74,7 @@ import {
 } from '../lib/workspaceRequest'
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
+import { AppearanceControl } from './AppearanceControl'
 import {
   CommandPalette,
   type CommandPaletteCommand
@@ -107,6 +112,7 @@ function isSidebarSession(session: TerminalSession): boolean {
 }
 
 export function App() {
+  const [appearanceScale, setAppearanceScale] = useAppearanceScale()
   const [connections, setConnections] = useState<Connection[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [terminalTransportStates, setTerminalTransportStates] = useState<
@@ -249,6 +255,24 @@ export function App() {
       if (
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
+        !event.shiftKey &&
+        ['+', '=', '-', '0'].includes(event.key)
+      ) {
+        event.preventDefault()
+        if (event.key === '0') setAppearanceScale(1)
+        else {
+          setAppearanceScale(
+            nextAppearanceScale(
+              appearanceScale,
+              event.key === '-' ? -1 : 1
+            )
+          )
+        }
+        return
+      }
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
         event.key.toLocaleLowerCase() === 'k'
       ) {
         event.preventDefault()
@@ -276,7 +300,8 @@ export function App() {
     selectedSessionId,
     paneBProjectId,
     paneBSessionId,
-    showArchivedProjects
+    showArchivedProjects,
+    appearanceScale
   ])
 
   const activeProjects = useMemo(
@@ -1315,6 +1340,10 @@ export function App() {
           )}
         </div>
         <div className="top-actions">
+          <AppearanceControl
+            scale={appearanceScale}
+            onChange={setAppearanceScale}
+          />
           <SpeechControl />
           {project?.latex?.overleafUrl && (
             <button

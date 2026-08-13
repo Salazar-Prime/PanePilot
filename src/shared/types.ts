@@ -603,5 +603,6 @@ export interface ProjectConsoleApi {
     openProjectFolder(projectId: string): Promise<void>
     printCurrentWindow(pageCount: number): Promise<void>
     openExternal(url: string): Promise<void>
+    setZoomFactor(factor: number): void
   }
 }

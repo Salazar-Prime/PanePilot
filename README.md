@@ -128,6 +128,11 @@ file's public sharing state.
 Press **Command-K** (or **Control-K**) to open the command palette for projects,
 terminals, and common project actions.
 
+The **Aa** toolbar control changes the complete interface—including terminal and
+Monaco text—between Compact (90%), Standard (100%), Comfortable (110%), and Large
+(125%). The client-local choice survives restarts. Command/Control with plus or minus
+steps through those sizes; Command/Control-0 resets to Standard.
+
 Press **Command-/** (or **Control-/**) to reveal the focused project's keyboard
 KeyTips. While they are visible, use `T` for terminals, `A` for Actions, `Q` for
 project Q&A, `N` for Notes, `F` for Files, `C` for chat history, and `H` for Activity.

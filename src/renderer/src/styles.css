@@ -148,6 +148,131 @@ select:focus-visible {
   margin-left: auto;
 }
 
+.appearance-control {
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.appearance-popover {
+  position: absolute;
+  z-index: 90;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 250px;
+  overflow: hidden;
+  color: #cfd5df;
+  border: 1px solid #303744;
+  border-radius: 10px;
+  background: #11151c;
+  box-shadow: 0 18px 50px #0000008a, inset 0 1px 0 #ffffff08;
+}
+
+.appearance-popover header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px;
+  border-bottom: 1px solid #252b35;
+  background: linear-gradient(120deg, #171d28, #11151c 70%);
+}
+
+.appearance-popover header > div,
+.appearance-options button span {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.appearance-popover header strong,
+.appearance-options strong {
+  color: #e5e8ee;
+  font-size: 11px;
+}
+
+.appearance-popover header small,
+.appearance-options small {
+  color: #747e8c;
+  font-size: 8px;
+}
+
+.appearance-popover header > span {
+  color: #aab8f1;
+  font: 700 11px "SFMono-Regular", "Cascadia Code", monospace;
+}
+
+.appearance-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px 7px;
+}
+
+.appearance-stepper button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  color: #aeb7c5;
+  border: 1px solid #303744;
+  border-radius: 6px;
+  background: #171c24;
+}
+
+.appearance-stepper button:disabled {
+  opacity: 0.35;
+}
+
+.appearance-stepper > div {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+}
+
+.appearance-stepper i {
+  width: 9px;
+  height: 3px;
+  border-radius: 4px;
+  background: #313846;
+}
+
+.appearance-stepper i.filled {
+  background: #7f91e5;
+  box-shadow: 0 0 7px #6679d455;
+}
+
+.appearance-options {
+  display: grid;
+  padding: 4px 7px 8px;
+}
+
+.appearance-options button {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 9px;
+  color: #77808e;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+}
+
+.appearance-options button:hover,
+.appearance-options button.selected {
+  color: #aebeff;
+  background: #1a202c;
+}
+
+.appearance-popover footer {
+  padding: 8px 13px;
+  color: #626d7c;
+  border-top: 1px solid #252b35;
+  font: 8px "SFMono-Regular", "Cascadia Code", monospace;
+}
+
 .sidebar {
   grid-area: sidebar;
   display: flex;

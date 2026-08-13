@@ -72,6 +72,7 @@ These are owner-approved decisions and should be treated as product invariants u
 45. Codex raw terminal output is application-lifetime state, not durable workspace data. PanePilot keeps a bounded in-memory replay buffer for live usability but does not continuously save Codex output in SQLite. Restart and reboot recovery rely on the exact provider thread ID and Codex’s own archive. Other terminal profiles retain their existing saved-output behavior.
 46. Markdown files in the Files workspace default to a sanitized GitHub-style rendered preview while retaining a per-tab Monaco Source mode. Edit enters Source, Preview renders the current unsaved draft, terminal file links with a line target enter Source, and relative Markdown links/images remain bounded to the current local or SSH project. External links open through the validated system-browser IPC path.
 47. Each uploaded Google Drive file persists the last PanePilot-created public-link URL beside its private Drive item link. The Files header labels the uploaded file Private or Public across file switches and app restarts; creating or revoking public sharing updates that label and the stored link immediately.
+48. Application readability is client-local and controls Electron's renderer zoom as one bounded scale, so interface text, xterm, Monaco, and rendered documents grow together without separate drifting preferences. Comfortable 110% is the first-run default; the toolbar and Command/Control + plus, minus, or zero expose 90%, 100%, 110%, and 125% choices.
 
 ## Agent lifecycle semantics
 
