@@ -25,8 +25,13 @@ import type {
   Project
 } from '@shared/types'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
+import { isMarkdownPath } from '../lib/markdown'
 import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
 import { Editor, monaco } from '../lib/monaco'
+import {
+  MarkdownPreview,
+  type MarkdownPreviewAnchor
+} from './MarkdownPreview'
 
 interface FilesPanelProps {
   project: Project
@@ -49,6 +54,11 @@ interface OpenFileTab {
   preview: FilePreview
   draft: string
   editing: boolean
+  viewMode: 'preview' | 'source'
+}
+
+interface PendingMarkdownAnchor extends MarkdownPreviewAnchor {
+  path: string
 }
 
 const filesPanelCache = new Map<string, FilesPanelSnapshot>()
@@ -98,12 +108,15 @@ function FilesPanelInstance({
     null
   )
   const [publicDriveLink, setPublicDriveLink] = useState<string | null>(null)
+  const [markdownAnchor, setMarkdownAnchor] =
+    useState<PendingMarkdownAnchor | null>(null)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const finderActionRef = useRef<{ dispose(): void } | null>(null)
   const activeFinderPathRef = useRef<string | null>(null)
   const pendingRevealRef = useRef<ProjectFileOpenRequest | null>(null)
   const initialPathRef = useRef(initialPath)
   const listingRequestRef = useRef(0)
+  const markdownLinkRequestRef = useRef(0)
   const path = listing.path
   const entries = listing.entries
   const loaded = listing.loaded
@@ -112,6 +125,8 @@ function FilesPanelInstance({
   const preview = activeFile?.preview ?? null
   const draft = activeFile?.draft ?? ''
   const editing = activeFile?.editing ?? false
+  const markdown = Boolean(preview && isMarkdownPath(preview.path))
+  const viewMode = activeFile?.viewMode ?? (markdown ? 'preview' : 'source')
   activeFinderPathRef.current = preview?.path ?? null
 
   useEffect(() => {
@@ -226,17 +241,29 @@ function FilesPanelInstance({
   const searchingPaths = Boolean(searchQuery.trim())
   const displayedEntries = uniqueEntries(searchingPaths ? searchResults : entries)
 
-  function addOpenFile(nextPreview: FilePreview): void {
+  function addOpenFile(
+    nextPreview: FilePreview,
+    requestedViewMode?: 'preview' | 'source'
+  ): void {
     setOpenFiles((current) => {
       if (current.some((file) => file.preview.path === nextPreview.path)) {
-        return current
+        return requestedViewMode
+          ? current.map((file) =>
+              file.preview.path === nextPreview.path
+                ? { ...file, viewMode: requestedViewMode }
+                : file
+            )
+          : current
       }
       return [
         ...current,
         {
           preview: nextPreview,
           draft: nextPreview.content,
-          editing: false
+          editing: false,
+          viewMode:
+            requestedViewMode ??
+            (isMarkdownPath(nextPreview.path) ? 'preview' : 'source')
         }
       ]
     })
@@ -245,6 +272,7 @@ function FilesPanelInstance({
   }
 
   async function openFile(filePath: string) {
+    setMarkdownAnchor(null)
     const existingFile = openFiles.find(
       (file) => file.preview.path === filePath
     )
@@ -280,7 +308,10 @@ function FilesPanelInstance({
     }
   }
 
-  async function openLinkedPath(openRequest: ProjectFileOpenRequest) {
+  async function openLinkedPath(
+    openRequest: ProjectFileOpenRequest,
+    requestedAnchor: PendingMarkdownAnchor | null = null
+  ) {
     const listingRequest = ++listingRequestRef.current
     setLoading(true)
     setError('')
@@ -298,11 +329,16 @@ function FilesPanelInstance({
       })
       if (result.kind === 'directory') {
         pendingRevealRef.current = null
+        setMarkdownAnchor(null)
         return
       }
       if (!result.preview) throw new Error('The file could not be previewed.')
       pendingRevealRef.current = openRequest
-      addOpenFile(result.preview)
+      setMarkdownAnchor(requestedAnchor)
+      addOpenFile(
+        result.preview,
+        openRequest.line == null ? undefined : 'source'
+      )
     } catch (caught) {
       if (listingRequest !== listingRequestRef.current) return
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -387,7 +423,14 @@ function FilesPanelInstance({
       revealRequestedPosition()
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [preview?.path, openFileRequest?.requestId])
+  }, [preview?.path, openFileRequest?.requestId, viewMode])
+
+  useEffect(() => {
+    if (!markdown || viewMode !== 'preview') return
+    editorRef.current = null
+    finderActionRef.current?.dispose()
+    finderActionRef.current = null
+  }, [markdown, viewMode, preview?.path])
 
   useEffect(() => {
     setDriveMessage('')
@@ -528,6 +571,23 @@ function FilesPanelInstance({
     if (preview) await showPathInFinder(preview.path)
   }
 
+  function openMarkdownProjectPath(
+    filePath: string,
+    fragment: string | null
+  ): void {
+    const requestId = ++markdownLinkRequestRef.current
+    void openLinkedPath(
+      {
+        projectId: project.id,
+        requestId,
+        path: filePath,
+        line: null,
+        column: null
+      },
+      fragment ? { path: filePath, fragment, requestId } : null
+    )
+  }
+
   return (
     <div className="files-layout">
       <aside className="file-browser">
@@ -642,6 +702,7 @@ function FilesPanelInstance({
                     onClick={() => {
                       setActiveFilePath(file.preview.path)
                       pendingRevealRef.current = null
+                      setMarkdownAnchor(null)
                     }}
                   >
                     {file.preview.imageMimeType ? (
@@ -683,6 +744,38 @@ function FilesPanelInstance({
               )}
               {driveMessage && (
                 <small className="drive-upload-result">{driveMessage}</small>
+              )}
+              {markdown && (
+                <div
+                  className="preview-mode-switch"
+                  role="group"
+                  aria-label="Markdown view"
+                >
+                  <button
+                    className={viewMode === 'preview' ? 'active' : ''}
+                    aria-pressed={viewMode === 'preview'}
+                    onClick={() =>
+                      updateOpenFile(preview.path, (file) => ({
+                        ...file,
+                        viewMode: 'preview'
+                      }))
+                    }
+                  >
+                    Preview
+                  </button>
+                  <button
+                    className={viewMode === 'source' ? 'active' : ''}
+                    aria-pressed={viewMode === 'source'}
+                    onClick={() =>
+                      updateOpenFile(preview.path, (file) => ({
+                        ...file,
+                        viewMode: 'source'
+                      }))
+                    }
+                  >
+                    Source
+                  </button>
+                </div>
               )}
               <div className="preview-actions">
                 {driveUpload && (
@@ -802,7 +895,8 @@ function FilesPanelInstance({
                       onClick={() =>
                         updateOpenFile(preview.path, (file) => ({
                           ...file,
-                          editing: true
+                          editing: true,
+                          viewMode: 'source'
                         }))
                       }
                     >
@@ -825,6 +919,19 @@ function FilesPanelInstance({
               </div>
             ) : preview.binary ? (
               <div className="preview-empty">Binary files can’t be previewed.</div>
+            ) : markdown && viewMode === 'preview' ? (
+              <MarkdownPreview
+                projectId={project.id}
+                path={preview.path}
+                content={editing ? draft : preview.content}
+                anchor={
+                  markdownAnchor?.path === preview.path
+                    ? markdownAnchor
+                    : null
+                }
+                onOpenProjectPath={openMarkdownProjectPath}
+                onError={setError}
+              />
             ) : (
               <div className="file-editor-shell">
                 <Editor

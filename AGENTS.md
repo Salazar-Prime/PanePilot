@@ -70,6 +70,7 @@ These are owner-approved decisions and should be treated as product invariants u
 43. Any Codex or Claude chat tab can be force reloaded in place, including one that never connected or linked a provider ID. PanePilot closes only that tab’s exact backend session and recreates tmux with the same name and unsafe-mode setting. It resumes the exact stored or newly discovered provider session ID when available; otherwise it starts a fresh provider chat in the same tab.
 44. Git is a read-only, folder-backed capability for local and SSH projects. The focused project’s toolbar indicator summarizes conflicts, staged changes, untracked/working changes, and ahead/behind state. Its toggleable right pane uses one continuous scroll surface for working-tree groups and the all-branch commit graph; approaching the bottom loads another bounded history page, with a manual fallback. It never mutates the repository.
 45. Codex raw terminal output is application-lifetime state, not durable workspace data. PanePilot keeps a bounded in-memory replay buffer for live usability but does not continuously save Codex output in SQLite. Restart and reboot recovery rely on the exact provider thread ID and Codex’s own archive. Other terminal profiles retain their existing saved-output behavior.
+46. Markdown files in the Files workspace default to a sanitized GitHub-style rendered preview while retaining a per-tab Monaco Source mode. Edit enters Source, Preview renders the current unsaved draft, terminal file links with a line target enter Source, and relative Markdown links/images remain bounded to the current local or SSH project. External links open through the validated system-browser IPC path.
 
 ## Agent lifecycle semantics
 
@@ -280,7 +281,7 @@ Known scaling limitation: search currently scans the in-memory parsed conversati
 - File previews are truncated at 1 MB.
 - Project notes are separate UTF-8 Markdown files under `.panepilot/notes`, each capped at 1 MB. The metadata and notes directories and note files reject symlink targets; local and remote writes replace files atomically.
 - The file preview toolbar can download the authoritative saved file through a native Save dialog. Local files are copied directly; remote files are streamed over SSH without applying the 1 MB Monaco preview limit.
-- File previews use a locally bundled Monaco editor with language detection. Editing requires an explicit Edit action and saving is bounded to existing files no larger than 1 MB.
+- File previews use a locally bundled Monaco editor with language detection. Markdown adds a sanitized GitHub-style Preview/Source mode; relative project images use the same bounded preview IPC and secure external images may load without a referrer. Editing requires an explicit Edit action and saving is bounded to existing files no larger than 1 MB.
 - Terminal links recognize project-contained path-like text and optional line/column suffixes. Clicking a link switches to Files, opens the authoritative file in Monaco, and reveals the requested line and column when present.
 - Relative terminal links resolve against the project folder.
 - Repository URLs are currently auto-discovered only for local projects.

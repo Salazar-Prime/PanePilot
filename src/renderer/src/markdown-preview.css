@@ -1,0 +1,431 @@
+.markdown-preview-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #0d1117;
+  scrollbar-color: #30363d transparent;
+  scrollbar-width: thin;
+}
+
+.markdown-body {
+  width: min(100%, 980px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 36px 44px 64px;
+  color: #f0f6fc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  font-size: 16px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body > :first-child {
+  margin-top: 0 !important;
+}
+
+.markdown-body > :last-child {
+  margin-bottom: 0 !important;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  position: relative;
+  margin-top: 24px;
+  margin-bottom: 16px;
+  color: #f0f6fc;
+  font-weight: 600;
+  line-height: 1.25;
+  scroll-margin-top: 18px;
+}
+
+.markdown-body h1,
+.markdown-body h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid #21262d;
+}
+
+.markdown-body h1 {
+  font-size: 2em;
+}
+
+.markdown-body h2 {
+  font-size: 1.5em;
+}
+
+.markdown-body h3 {
+  font-size: 1.25em;
+}
+
+.markdown-body h4 {
+  font-size: 1em;
+}
+
+.markdown-body h5 {
+  font-size: 0.875em;
+}
+
+.markdown-body h6 {
+  color: #8b949e;
+  font-size: 0.85em;
+}
+
+.markdown-heading-anchor {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  display: grid;
+  width: 28px;
+  height: 100%;
+  place-items: start center;
+  padding-top: 0.08em;
+  color: #58a6ff;
+  opacity: 0;
+  text-decoration: none;
+}
+
+.markdown-body :is(h1, h2, h3, h4, h5, h6):hover .markdown-heading-anchor,
+.markdown-heading-anchor:focus-visible {
+  opacity: 1;
+}
+
+.markdown-heading-anchor span {
+  font-size: 0.75em;
+  font-weight: 500;
+}
+
+.markdown-body p,
+.markdown-body blockquote,
+.markdown-body ul,
+.markdown-body ol,
+.markdown-body dl,
+.markdown-body table,
+.markdown-body pre,
+.markdown-body details {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.markdown-body a {
+  color: #58a6ff;
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body strong {
+  font-weight: 600;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 2em;
+}
+
+.markdown-body li + li {
+  margin-top: 0.25em;
+}
+
+.markdown-body li > p {
+  margin-top: 16px;
+}
+
+.markdown-body li.task-list-item,
+.markdown-body li:has(> input[type="checkbox"]:first-child) {
+  list-style: none;
+}
+
+.markdown-body input[type="checkbox"] {
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0 0.5em 0.15em -1.45em;
+  vertical-align: middle;
+  accent-color: #238636;
+}
+
+.markdown-body blockquote {
+  padding: 0 1em;
+  color: #8b949e;
+  border-left: 0.25em solid #30363d;
+}
+
+.markdown-body blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body hr {
+  height: 0.25em;
+  margin: 24px 0;
+  padding: 0;
+  border: 0;
+  background: #21262d;
+}
+
+.markdown-body code,
+.markdown-body tt {
+  margin: 0;
+  padding: 0.2em 0.4em;
+  border-radius: 6px;
+  background: rgb(110 118 129 / 40%);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 85%;
+}
+
+.markdown-body pre {
+  overflow: auto;
+  padding: 16px;
+  border-radius: 6px;
+  background: #161b22;
+  font-size: 85%;
+  line-height: 1.45;
+  scrollbar-color: #30363d transparent;
+  scrollbar-width: thin;
+}
+
+.markdown-body pre code {
+  display: inline;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  font-size: 100%;
+  line-height: inherit;
+  word-wrap: normal;
+}
+
+.markdown-body table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow: auto;
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 6px 13px;
+  border: 1px solid #30363d;
+}
+
+.markdown-body th {
+  font-weight: 600;
+}
+
+.markdown-body tr {
+  border-top: 1px solid #21262d;
+  background: #0d1117;
+}
+
+.markdown-body tr:nth-child(2n) {
+  background: #161b22;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  box-sizing: content-box;
+  border-radius: 6px;
+  background: #0d1117;
+}
+
+.markdown-body img.markdown-image-unavailable {
+  display: inline-block;
+  min-width: 84px;
+  min-height: 28px;
+  padding: 8px;
+  color: #8b949e;
+  border: 1px dashed #30363d;
+  object-fit: contain;
+}
+
+.markdown-body kbd {
+  display: inline-block;
+  padding: 3px 5px;
+  color: #c9d1d9;
+  border: 1px solid #6e7681;
+  border-bottom-color: #6e7681;
+  border-radius: 6px;
+  background: #161b22;
+  box-shadow: inset 0 -1px 0 #6e7681;
+  font: 11px "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  line-height: 10px;
+  vertical-align: middle;
+}
+
+.markdown-body details {
+  display: block;
+}
+
+.markdown-body summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.markdown-alert {
+  margin-bottom: 16px;
+  padding: 8px 16px;
+  border-left: 0.25em solid var(--markdown-alert-color);
+  color: #c9d1d9;
+}
+
+.markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px !important;
+  color: var(--markdown-alert-color);
+  font-weight: 600;
+}
+
+.markdown-alert-icon {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.markdown-alert-note {
+  --markdown-alert-color: #4493f8;
+}
+
+.markdown-alert-tip {
+  --markdown-alert-color: #3fb950;
+}
+
+.markdown-alert-important {
+  --markdown-alert-color: #ab7df8;
+}
+
+.markdown-alert-warning {
+  --markdown-alert-color: #d29922;
+}
+
+.markdown-alert-caution {
+  --markdown-alert-color: #f85149;
+}
+
+.markdown-body .hljs-comment,
+.markdown-body .hljs-quote {
+  color: #8b949e;
+}
+
+.markdown-body .hljs-keyword,
+.markdown-body .hljs-selector-tag,
+.markdown-body .hljs-literal,
+.markdown-body .hljs-type {
+  color: #ff7b72;
+}
+
+.markdown-body .hljs-title,
+.markdown-body .hljs-title.function_,
+.markdown-body .hljs-section {
+  color: #d2a8ff;
+}
+
+.markdown-body .hljs-string,
+.markdown-body .hljs-attr,
+.markdown-body .hljs-template-tag,
+.markdown-body .hljs-template-variable {
+  color: #a5d6ff;
+}
+
+.markdown-body .hljs-number,
+.markdown-body .hljs-symbol,
+.markdown-body .hljs-bullet,
+.markdown-body .hljs-variable,
+.markdown-body .hljs-regexp {
+  color: #79c0ff;
+}
+
+.markdown-body .hljs-built_in,
+.markdown-body .hljs-params,
+.markdown-body .hljs-meta {
+  color: #ffa657;
+}
+
+.markdown-body .hljs-addition {
+  color: #aff5b4;
+  background: rgb(46 160 67 / 15%);
+}
+
+.markdown-body .hljs-deletion {
+  color: #ffdcd7;
+  background: rgb(248 81 73 / 15%);
+}
+
+.preview-mode-switch {
+  display: flex;
+  height: 27px;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: #090b10;
+}
+
+.preview-mode-switch button {
+  min-width: 54px;
+  padding: 0 9px;
+  color: #7d8590;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 9px;
+}
+
+.preview-mode-switch button:hover {
+  color: #c9d1d9;
+}
+
+.preview-mode-switch button.active {
+  color: #f0f6fc;
+  background: #21262d;
+}
+
+.preview-mode-switch button:focus-visible,
+.markdown-body a:focus-visible,
+.markdown-body summary:focus-visible {
+  outline: 2px solid #58a6ff;
+  outline-offset: 2px;
+}
+
+.preview-header .preview-actions {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.preview-header .preview-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.preview-header .preview-actions > button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1100px) {
+  .markdown-body {
+    padding-right: 28px;
+    padding-left: 36px;
+  }
+}
