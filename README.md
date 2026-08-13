@@ -97,6 +97,13 @@ links open the target inside the project, relative images are loaded through Pan
 bounded local/SSH file preview, and web links open in the system browser. Raw HTML is
 sanitized before rendering.
 
+The Files explorer toolbar can create an empty file or folder in the current
+directory. Right-click an explorer entry for copy-path, rename, download, or nested
+creation actions. The same copy-path, rename, and download commands are available in
+Monaco's context menu and in the file preview header. Local paths copy as absolute
+paths; SSH paths include their alias. Rename never overwrites an existing entry, and
+unsaved Monaco drafts follow the renamed path without being saved implicitly.
+
 ## Google Drive uploads
 
 Google Drive uploads use [rclone](https://rclone.org/drive/), so rclone owns the OAuth

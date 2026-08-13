@@ -547,6 +547,13 @@ export interface ProjectConsoleApi {
   files: {
     list(projectId: string, relativePath?: string): Promise<FileEntry[]>
     search(projectId: string, query: string): Promise<FileEntry[]>
+    createFile(projectId: string, parentPath: string, name: string): Promise<string>
+    createDirectory(
+      projectId: string,
+      parentPath: string,
+      name: string
+    ): Promise<string>
+    rename(projectId: string, relativePath: string, name: string): Promise<string>
     preview(projectId: string, relativePath: string): Promise<FilePreview>
     open(projectId: string, relativePath: string): Promise<FileOpenResult>
     save(projectId: string, relativePath: string, content: string): Promise<void>

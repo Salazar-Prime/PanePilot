@@ -23,11 +23,14 @@ import type {
 } from '../shared/types'
 import { ConversationIndexer } from './conversation-indexer'
 import {
+  createLocalDirectory,
+  createLocalFile,
   downloadLocalFile,
   listLocalFiles,
   openLocalPath,
   previewLocalFile,
   resolveLocalFilePath,
+  renameLocalEntry,
   searchLocalFiles,
   writeLocalFile
 } from './file-service'
@@ -40,11 +43,14 @@ import { ProjectMetadataService } from './project-metadata-service'
 import { projectTypeServices } from './project-type-services'
 import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import {
+  createRemoteDirectory,
+  createRemoteFile,
   downloadRemoteFile,
   listRemoteFilesAsync,
   listRemoteFolders,
   openRemotePath,
   previewRemoteFileAsync,
+  renameRemoteEntry,
   searchRemoteFiles,
   writeRemoteFileAsync
 } from './remote-file-service'
@@ -334,6 +340,58 @@ function registerIpc(): void {
       ? searchLocalFiles(project.folder, query)
       : searchRemoteFiles(connection.sshAlias!, project.folder, query)
   })
+
+  ipcMain.handle(
+    'files:create-file',
+    async (_event, projectId: string, parentPath: string, name: string) => {
+      const project = store.getProject(projectId)
+      if (!project) throw new Error('Project not found.')
+      const connection = store.getConnection(project.connectionId)
+      if (!connection) throw new Error('Project connection not found.')
+      return connection.kind === 'local'
+        ? createLocalFile(project.folder, parentPath, name)
+        : createRemoteFile(
+            connection.sshAlias!,
+            project.folder,
+            parentPath,
+            name
+          )
+    }
+  )
+  ipcMain.handle(
+    'files:create-directory',
+    async (_event, projectId: string, parentPath: string, name: string) => {
+      const project = store.getProject(projectId)
+      if (!project) throw new Error('Project not found.')
+      const connection = store.getConnection(project.connectionId)
+      if (!connection) throw new Error('Project connection not found.')
+      return connection.kind === 'local'
+        ? createLocalDirectory(project.folder, parentPath, name)
+        : createRemoteDirectory(
+            connection.sshAlias!,
+            project.folder,
+            parentPath,
+            name
+          )
+    }
+  )
+  ipcMain.handle(
+    'files:rename',
+    async (_event, projectId: string, relativePath: string, name: string) => {
+      const project = store.getProject(projectId)
+      if (!project) throw new Error('Project not found.')
+      const connection = store.getConnection(project.connectionId)
+      if (!connection) throw new Error('Project connection not found.')
+      return connection.kind === 'local'
+        ? renameLocalEntry(project.folder, relativePath, name)
+        : renameRemoteEntry(
+            connection.sshAlias!,
+            project.folder,
+            relativePath,
+            name
+          )
+    }
+  )
 
   ipcMain.handle('notes:list', (_event, projectId: string) =>
     metadata.listNotes(projectId)

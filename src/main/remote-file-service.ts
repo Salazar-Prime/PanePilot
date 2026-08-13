@@ -267,6 +267,60 @@ with open(target, "wb") as handle:
 print("{}")
 `
 
+const MUTATE_ENTRY_SCRIPT = String.raw`
+import json, os, sys
+payload = json.load(sys.stdin)
+root = os.path.realpath(os.path.expanduser(payload["root"]))
+action = payload["action"]
+name = (payload.get("name") or "").strip()
+if (
+    not name or name in (".", "..") or len(name) > 255 or
+    "/" in name or "\\" in name or
+    any(ord(character) < 32 or ord(character) == 127 for character in name)
+):
+    raise RuntimeError("Enter a valid file or folder name without path separators.")
+
+def require_inside(path):
+    if os.path.commonpath([root, path]) != root:
+        raise RuntimeError("The requested path is outside the project folder.")
+
+if action in ("create-file", "create-directory"):
+    parent = os.path.realpath(os.path.join(root, payload.get("parentPath") or "."))
+    require_inside(parent)
+    if not os.path.isdir(parent):
+        raise RuntimeError("Choose a project folder for the new item.")
+    target = os.path.join(parent, name)
+    require_inside(target)
+    if os.path.lexists(target):
+        raise RuntimeError("A file or folder with that name already exists.")
+    if action == "create-file":
+        with open(target, "xb"):
+            pass
+    else:
+        os.mkdir(target)
+elif action == "rename":
+    unresolved = os.path.join(root, payload["relativePath"])
+    if os.path.islink(unresolved):
+        raise RuntimeError("Symbolic links cannot be renamed from PanePilot.")
+    source = os.path.realpath(unresolved)
+    require_inside(source)
+    if source == root:
+        raise RuntimeError("The project folder itself cannot be renamed here.")
+    if not os.path.exists(source):
+        raise RuntimeError("The requested file or folder does not exist.")
+    target = os.path.join(os.path.dirname(source), name)
+    require_inside(target)
+    if target != source and os.path.lexists(target):
+        raise RuntimeError("A file or folder with that name already exists.")
+    if target != source:
+        os.rename(source, target)
+else:
+    raise RuntimeError("Unsupported file operation.")
+
+relative = os.path.relpath(target, root).replace(os.sep, "/")
+print(json.dumps({"path": "." if relative == "." else relative}, separators=(",", ":")))
+`
+
 const DOWNLOAD_FILE_SCRIPT = String.raw`
 import json, os, sys
 payload = json.load(sys.stdin)
@@ -585,6 +639,58 @@ export async function writeRemoteFileAsync(
     WRITE_FILE_SCRIPT,
     { root, relativePath, content }
   )
+}
+
+async function mutateRemoteEntry(
+  sshAlias: string,
+  root: string,
+  payload: Record<string, unknown>
+): Promise<string> {
+  const result = await runRemotePythonAsync<{ path: string }>(
+    sshAlias,
+    MUTATE_ENTRY_SCRIPT,
+    { root, ...payload }
+  )
+  return result.path
+}
+
+export function createRemoteFile(
+  sshAlias: string,
+  root: string,
+  parentPath: string,
+  name: string
+): Promise<string> {
+  return mutateRemoteEntry(sshAlias, root, {
+    action: 'create-file',
+    parentPath,
+    name
+  })
+}
+
+export function createRemoteDirectory(
+  sshAlias: string,
+  root: string,
+  parentPath: string,
+  name: string
+): Promise<string> {
+  return mutateRemoteEntry(sshAlias, root, {
+    action: 'create-directory',
+    parentPath,
+    name
+  })
+}
+
+export function renameRemoteEntry(
+  sshAlias: string,
+  root: string,
+  relativePath: string,
+  name: string
+): Promise<string> {
+  return mutateRemoteEntry(sshAlias, root, {
+    action: 'rename',
+    relativePath,
+    name
+  })
 }
 
 export async function downloadRemoteFile(

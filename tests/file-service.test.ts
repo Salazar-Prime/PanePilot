@@ -4,14 +4,18 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  createLocalDirectory,
+  createLocalFile,
   openLocalPath,
   previewLocalFile,
+  renameLocalEntry,
   resolveLocalFilePath,
   searchLocalFiles,
   writeLocalFile
@@ -100,6 +104,51 @@ describe('local file editing', () => {
     expect(() => resolveLocalFilePath(root, '../outside.txt')).toThrow(
       'outside the project folder'
     )
+  })
+
+  it('creates and renames project files and folders without overwriting', () => {
+    const root = mkdtempSync(join(tmpdir(), 'panepilot-file-mutations-'))
+    temporaryRoots.push(root)
+
+    expect(createLocalDirectory(root, '.', 'docs')).toBe('docs')
+    expect(createLocalFile(root, 'docs', 'draft.md')).toBe(
+      join('docs', 'draft.md')
+    )
+    writeLocalFile(root, 'docs/draft.md', '# Draft\n')
+    expect(renameLocalEntry(root, 'docs/draft.md', 'README.md')).toBe(
+      join('docs', 'README.md')
+    )
+    expect(readFileSync(join(root, 'docs', 'README.md'), 'utf8')).toBe(
+      '# Draft\n'
+    )
+    expect(renameLocalEntry(root, 'docs', 'guide')).toBe('guide')
+    expect(readFileSync(join(root, 'guide', 'README.md'), 'utf8')).toBe(
+      '# Draft\n'
+    )
+    expect(() => createLocalFile(root, 'guide', 'README.md')).toThrow(
+      'already exists'
+    )
+  })
+
+  it('rejects unsafe mutation names, traversal, and symbolic-link renames', () => {
+    const container = mkdtempSync(join(tmpdir(), 'panepilot-file-mutation-bounds-'))
+    temporaryRoots.push(container)
+    const root = join(container, 'project')
+    mkdirSync(root)
+    const outside = join(container, 'outside.txt')
+    writeFileSync(outside, 'outside')
+    symlinkSync(outside, join(root, 'outside-link'))
+
+    expect(() => createLocalFile(root, '.', '../outside.txt')).toThrow(
+      'without path separators'
+    )
+    expect(() => renameLocalEntry(root, '../outside.txt', 'inside.txt')).toThrow(
+      'outside the project folder'
+    )
+    expect(() => renameLocalEntry(root, 'outside-link', 'renamed.txt')).toThrow(
+      'Symbolic links'
+    )
+    expect(readFileSync(outside, 'utf8')).toBe('outside')
   })
 })
 

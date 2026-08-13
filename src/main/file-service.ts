@@ -1,12 +1,15 @@
 import {
   copyFileSync,
   closeSync,
+  existsSync,
   lstatSync,
+  mkdirSync,
   openSync,
   promises as fs,
   readSync,
   readdirSync,
   realpathSync,
+  renameSync,
   statSync,
   writeFileSync
 } from 'node:fs'
@@ -34,6 +37,24 @@ function boundedPath(root: string, requested = '.'): string {
     throw new Error('The requested path is outside the project folder.')
   }
   return candidate
+}
+
+function validatedEntryName(rawName: string): string {
+  const name = rawName.trim()
+  if (
+    !name ||
+    name === '.' ||
+    name === '..' ||
+    name.length > 255 ||
+    /[/\\\u0000-\u001f\u007f]/.test(name)
+  ) {
+    throw new Error('Enter a valid file or folder name without path separators.')
+  }
+  return name
+}
+
+function relativeProjectPath(root: string, target: string): string {
+  return relative(realpathSync(root), target) || '.'
 }
 
 export function resolveLocalFilePath(root: string, requested: string): string {
@@ -206,6 +227,62 @@ export function writeLocalFile(root: string, requested: string, content: string)
     throw new Error('PanePilot only edits files up to 1 MB.')
   }
   writeFileSync(filePath, content, 'utf8')
+}
+
+export function createLocalFile(
+  root: string,
+  requestedParent: string,
+  rawName: string
+): string {
+  const parent = boundedPath(root, requestedParent)
+  if (!statSync(parent).isDirectory()) {
+    throw new Error('Choose a project folder for the new file.')
+  }
+  const target = resolve(parent, validatedEntryName(rawName))
+  if (existsSync(target)) throw new Error('A file or folder with that name already exists.')
+  const descriptor = openSync(target, 'wx', 0o644)
+  closeSync(descriptor)
+  return relativeProjectPath(root, target)
+}
+
+export function createLocalDirectory(
+  root: string,
+  requestedParent: string,
+  rawName: string
+): string {
+  const parent = boundedPath(root, requestedParent)
+  if (!statSync(parent).isDirectory()) {
+    throw new Error('Choose a project folder for the new directory.')
+  }
+  const target = resolve(parent, validatedEntryName(rawName))
+  if (existsSync(target)) throw new Error('A file or folder with that name already exists.')
+  mkdirSync(target)
+  return relativeProjectPath(root, target)
+}
+
+export function renameLocalEntry(
+  root: string,
+  requested: string,
+  rawName: string
+): string {
+  const realRoot = realpathSync(root)
+  const unresolved = resolve(realRoot, requested)
+  if (
+    unresolved !== realRoot &&
+    !unresolved.startsWith(`${realRoot}${sep}`)
+  ) {
+    throw new Error('The requested path is outside the project folder.')
+  }
+  if (lstatSync(unresolved).isSymbolicLink()) {
+    throw new Error('Symbolic links cannot be renamed from PanePilot.')
+  }
+  const source = boundedPath(root, requested)
+  if (source === realRoot) throw new Error('The project folder itself cannot be renamed here.')
+  const target = resolve(dirname(source), validatedEntryName(rawName))
+  if (target === source) return relativeProjectPath(root, source)
+  if (existsSync(target)) throw new Error('A file or folder with that name already exists.')
+  renameSync(source, target)
+  return relativeProjectPath(root, target)
 }
 
 export function downloadLocalFile(

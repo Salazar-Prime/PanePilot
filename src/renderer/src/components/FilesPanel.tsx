@@ -7,8 +7,10 @@ import {
   ExternalLink,
   File,
   FileCode2,
+  FilePlus2,
   Folder,
   FolderOpen,
+  FolderPlus,
   Globe2,
   Image as ImageIcon,
   Link2Off,
@@ -27,7 +29,7 @@ import type {
   GoogleDriveUploadResult,
   Project
 } from '@shared/types'
-import { addShowInFinderAction } from '../lib/monacoFinderAction'
+import { addFileManagementActions } from '../lib/monacoFinderAction'
 import { isMarkdownPath } from '../lib/markdown'
 import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
 import { Editor, monaco } from '../lib/monaco'
@@ -35,6 +37,11 @@ import {
   MarkdownPreview,
   type MarkdownPreviewAnchor
 } from './MarkdownPreview'
+import { ContextMenu } from './ContextMenu'
+import {
+  FileEntryDialog,
+  type FileEntryDialogMode
+} from './FileEntryDialog'
 
 interface FilesPanelProps {
   project: Project
@@ -62,6 +69,12 @@ interface OpenFileTab {
 
 interface PendingMarkdownAnchor extends MarkdownPreviewAnchor {
   path: string
+}
+
+interface FileEntryDialogRequest {
+  mode: FileEntryDialogMode
+  parentPath: string
+  entry: FileEntry | null
 }
 
 const filesPanelCache = new Map<string, FilesPanelSnapshot>()
@@ -115,6 +128,13 @@ function FilesPanelInstance({
   const [publicDriveLink, setPublicDriveLink] = useState<string | null>(null)
   const [markdownAnchor, setMarkdownAnchor] =
     useState<PendingMarkdownAnchor | null>(null)
+  const [fileEntryDialog, setFileEntryDialog] =
+    useState<FileEntryDialogRequest | null>(null)
+  const [entryMenu, setEntryMenu] = useState<{
+    entry: FileEntry
+    x: number
+    y: number
+  } | null>(null)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const finderActionRef = useRef<{ dispose(): void } | null>(null)
   const activeFinderPathRef = useRef<string | null>(null)
@@ -490,15 +510,108 @@ function FilesPanelInstance({
 
   async function download() {
     if (!preview) return
+    await downloadPath(preview.path)
+  }
+
+  async function downloadPath(filePath: string) {
     setDownloading(true)
     setError('')
     try {
-      await window.projectConsole.files.download(project.id, preview.path)
+      await window.projectConsole.files.download(project.id, filePath)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
       setDownloading(false)
     }
+  }
+
+  async function copyFilePath(filePath: string) {
+    setError('')
+    try {
+      await window.projectConsole.system.copyText(
+        copyableProjectPath(project, filePath)
+      )
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    }
+  }
+
+  function requestCreate(mode: 'create-file' | 'create-directory', parentPath = path) {
+    setEntryMenu(null)
+    setFileEntryDialog({ mode, parentPath, entry: null })
+  }
+
+  function requestRename(entry: FileEntry) {
+    setEntryMenu(null)
+    setFileEntryDialog({
+      mode: 'rename',
+      parentPath: parentPathFor(entry.path),
+      entry
+    })
+  }
+
+  async function applyFileEntryOperation(name: string) {
+    if (!fileEntryDialog) return
+    setError('')
+    if (fileEntryDialog.mode === 'create-file') {
+      const createdPath = await window.projectConsole.files.createFile(
+        project.id,
+        fileEntryDialog.parentPath,
+        name
+      )
+      setSearchQuery('')
+      await openLinkedPath({
+        projectId: project.id,
+        requestId: ++markdownLinkRequestRef.current,
+        path: createdPath,
+        line: null,
+        column: null
+      })
+      return
+    }
+    if (fileEntryDialog.mode === 'create-directory') {
+      await window.projectConsole.files.createDirectory(
+        project.id,
+        fileEntryDialog.parentPath,
+        name
+      )
+      setSearchQuery('')
+      await load(fileEntryDialog.parentPath)
+      return
+    }
+
+    const entry = fileEntryDialog.entry
+    if (!entry) return
+    const nextPath = await window.projectConsole.files.rename(
+      project.id,
+      entry.path,
+      name
+    )
+    const previousPath = entry.path
+    setOpenFiles((current) =>
+      current.map((file) => {
+        const remapped = remapDescendantPath(
+          file.preview.path,
+          previousPath,
+          nextPath
+        )
+        return remapped === file.preview.path
+          ? file
+          : { ...file, preview: { ...file.preview, path: remapped } }
+      })
+    )
+    setActiveFilePath((current) =>
+      current == null
+        ? null
+        : remapDescendantPath(current, previousPath, nextPath)
+    )
+    setSearchQuery('')
+    const nextListingPath = remapDescendantPath(
+      path,
+      previousPath,
+      nextPath
+    )
+    await load(nextListingPath)
   }
 
   async function uploadToDrive() {
@@ -655,19 +768,37 @@ function FilesPanelInstance({
               </span>
             ))}
           </div>
-          <button
-            className="icon-button"
-            onClick={() => {
-              if (searchingPaths) {
-                setSearchRevision((current) => current + 1)
-              } else {
-                void load()
-              }
-            }}
-            aria-label={searchingPaths ? 'Refresh file search' : 'Refresh files'}
-          >
-            <RefreshCw size={15} className={loading || searching ? 'spin' : ''} />
-          </button>
+          <div className="file-browser-actions">
+            <button
+              className="icon-button"
+              onClick={() => requestCreate('create-file')}
+              aria-label={`Create file in ${path}`}
+              title="New file"
+            >
+              <FilePlus2 size={15} />
+            </button>
+            <button
+              className="icon-button"
+              onClick={() => requestCreate('create-directory')}
+              aria-label={`Create folder in ${path}`}
+              title="New folder"
+            >
+              <FolderPlus size={15} />
+            </button>
+            <button
+              className="icon-button"
+              onClick={() => {
+                if (searchingPaths) {
+                  setSearchRevision((current) => current + 1)
+                } else {
+                  void load()
+                }
+              }}
+              aria-label={searchingPaths ? 'Refresh file search' : 'Refresh files'}
+            >
+              <RefreshCw size={15} className={loading || searching ? 'spin' : ''} />
+            </button>
+          </div>
         </div>
         <div className="file-search">
           <Search size={14} />
@@ -714,6 +845,14 @@ function FilesPanelInstance({
                 key={entry.path}
                 className={`file-row ${preview?.path === entry.path ? 'selected' : ''}`}
                 onClick={() => void openEntry(entry)}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  setEntryMenu({
+                    entry,
+                    x: event.clientX,
+                    y: event.clientY
+                  })
+                }}
               >
                 {entry.kind === 'directory' ? <Folder size={16} /> : <File size={16} />}
                 <span>{searchingPaths ? entry.path : entry.name}</span>
@@ -894,6 +1033,27 @@ function FilesPanelInstance({
                     )}
                   </>
                 )}
+                <button
+                  className="secondary-button"
+                  onClick={() => void copyFilePath(preview.path)}
+                  title="Copy the full project file path"
+                >
+                  <Copy size={13} /> Copy path
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() =>
+                    requestRename({
+                      name: fileName(preview.path),
+                      path: preview.path,
+                      kind: 'file',
+                      size: null
+                    })
+                  }
+                  title="Rename the saved project file"
+                >
+                  <Pencil size={13} /> Rename
+                </button>
                 {project.connectionId === 'local' && (
                   <button
                     className="secondary-button"
@@ -1012,15 +1172,33 @@ function FilesPanelInstance({
                   onMount={(editor) => {
                     editorRef.current = editor
                     finderActionRef.current?.dispose()
-                    if (project.connectionId === 'local') {
-                      finderActionRef.current = addShowInFinderAction(
-                        editor,
-                        async () => {
-                          const filePath = activeFinderPathRef.current
-                          if (filePath) await showPathInFinder(filePath)
-                        }
-                      )
-                    }
+                    finderActionRef.current = addFileManagementActions(editor, {
+                      copyPath: async () => {
+                        const filePath = activeFinderPathRef.current
+                        if (filePath) await copyFilePath(filePath)
+                      },
+                      rename: () => {
+                        const filePath = activeFinderPathRef.current
+                        if (!filePath) return
+                        requestRename({
+                          name: fileName(filePath),
+                          path: filePath,
+                          kind: 'file',
+                          size: null
+                        })
+                      },
+                      download: async () => {
+                        const filePath = activeFinderPathRef.current
+                        if (filePath) await downloadPath(filePath)
+                      },
+                      showInFinder:
+                        project.connectionId === 'local'
+                          ? async () => {
+                              const filePath = activeFinderPathRef.current
+                              if (filePath) await showPathInFinder(filePath)
+                            }
+                          : undefined
+                    })
                     revealRequestedPosition(editor)
                   }}
                   options={{
@@ -1049,6 +1227,81 @@ function FilesPanelInstance({
           </div>
         )}
       </main>
+      {entryMenu && (
+        <ContextMenu
+          x={entryMenu.x}
+          y={entryMenu.y}
+          items={[
+            {
+              id: 'open',
+              label: entryMenu.entry.kind === 'directory' ? 'Open folder' : 'Open file',
+              icon:
+                entryMenu.entry.kind === 'directory' ? (
+                  <FolderOpen size={14} />
+                ) : (
+                  <FileCode2 size={14} />
+                ),
+              action: () => openEntry(entryMenu.entry)
+            },
+            {
+              id: 'copy-path',
+              label: 'Copy path',
+              icon: <Copy size={14} />,
+              action: () => copyFilePath(entryMenu.entry.path)
+            },
+            {
+              id: 'rename',
+              label: 'Rename…',
+              icon: <Pencil size={14} />,
+              action: () => requestRename(entryMenu.entry)
+            },
+            ...(entryMenu.entry.kind === 'file'
+              ? [
+                  {
+                    id: 'download',
+                    label: 'Download…',
+                    icon: <Download size={14} />,
+                    action: () => downloadPath(entryMenu.entry.path)
+                  }
+                ]
+              : [
+                  {
+                    id: 'new-file',
+                    label: 'New file here…',
+                    icon: <FilePlus2 size={14} />,
+                    separatorBefore: true,
+                    action: () =>
+                      requestCreate('create-file', entryMenu.entry.path)
+                  },
+                  {
+                    id: 'new-folder',
+                    label: 'New folder here…',
+                    icon: <FolderPlus size={14} />,
+                    action: () =>
+                      requestCreate('create-directory', entryMenu.entry.path)
+                  }
+                ])
+          ]}
+          onClose={() => setEntryMenu(null)}
+        />
+      )}
+      {fileEntryDialog && (
+        <FileEntryDialog
+          mode={fileEntryDialog.mode}
+          location={
+            fileEntryDialog.mode === 'rename'
+              ? fileEntryDialog.entry?.path ?? fileEntryDialog.parentPath
+              : fileEntryDialog.parentPath
+          }
+          initialValue={
+            fileEntryDialog.mode === 'rename'
+              ? fileEntryDialog.entry?.name
+              : ''
+          }
+          onSubmit={applyFileEntryOperation}
+          onClose={() => setFileEntryDialog(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1061,6 +1314,29 @@ function formatBytes(bytes: number): string {
 
 function fileName(path: string): string {
   return path.split('/').at(-1) || path
+}
+
+function parentPathFor(path: string): string {
+  return path.split('/').slice(0, -1).join('/') || '.'
+}
+
+function remapDescendantPath(
+  candidate: string,
+  previousPath: string,
+  nextPath: string
+): string {
+  if (candidate === previousPath) return nextPath
+  return candidate.startsWith(`${previousPath}/`)
+    ? `${nextPath}${candidate.slice(previousPath.length)}`
+    : candidate
+}
+
+function copyableProjectPath(project: Project, relativePath: string): string {
+  const folder = project.folder.replace(/\/+$/, '')
+  const fullPath = relativePath === '.' ? folder : `${folder}/${relativePath}`
+  return project.connectionId === 'local'
+    ? fullPath
+    : `${project.connectionId.replace(/^ssh:/, '')}:${fullPath}`
 }
 
 function languageForPath(path: string): string {

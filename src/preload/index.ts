@@ -146,6 +146,12 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('files:list', projectId, relativePath),
     search: (projectId: string, query: string) =>
       ipcRenderer.invoke('files:search', projectId, query),
+    createFile: (projectId: string, parentPath: string, name: string) =>
+      ipcRenderer.invoke('files:create-file', projectId, parentPath, name),
+    createDirectory: (projectId: string, parentPath: string, name: string) =>
+      ipcRenderer.invoke('files:create-directory', projectId, parentPath, name),
+    rename: (projectId: string, relativePath: string, name: string) =>
+      ipcRenderer.invoke('files:rename', projectId, relativePath, name),
     preview: (projectId: string, relativePath: string) =>
       ipcRenderer.invoke('files:preview', projectId, relativePath),
     open: (projectId: string, relativePath: string) =>

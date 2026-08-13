@@ -1548,6 +1548,18 @@ select:focus-visible {
   padding: 0 7px 0 12px;
 }
 
+.file-browser-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+}
+
+.file-browser-actions .icon-button {
+  width: 26px;
+  height: 26px;
+}
+
 .breadcrumbs {
   display: flex;
   min-width: 0;
@@ -1797,9 +1809,12 @@ select:focus-visible {
 
 .preview-actions {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 6px;
   margin-left: auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .preview-actions .primary-button,
@@ -1813,6 +1828,32 @@ select:focus-visible {
 .file-editor-shell {
   min-height: 0;
   flex: 1;
+}
+
+.file-entry-modal {
+  width: min(450px, 100%);
+}
+
+.file-entry-location {
+  display: flex;
+  min-width: 0;
+  padding: 9px 10px;
+  align-items: center;
+  gap: 8px;
+  color: #8295ef;
+  border: 1px solid #2d3441;
+  border-radius: 7px;
+  background: #0d1017;
+}
+
+.file-entry-location span {
+  min-width: 0;
+  overflow: hidden;
+  color: #747e8d;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-image-preview {
