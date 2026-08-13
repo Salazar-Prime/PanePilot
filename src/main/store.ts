@@ -178,6 +178,7 @@ type GoogleDriveFileRow = {
   relative_path: string
   drive_file_id: string
   web_view_link: string
+  public_link_url: string | null
   updated_at: string
 }
 
@@ -206,6 +207,7 @@ export interface StoredGoogleDriveFile {
   relativePath: string
   driveFileId: string
   webViewLink: string
+  publicLinkUrl: string | null
   updatedAt: string
 }
 
@@ -412,6 +414,7 @@ function mapGoogleDriveFile(row: GoogleDriveFileRow): StoredGoogleDriveFile {
     relativePath: row.relative_path,
     driveFileId: row.drive_file_id,
     webViewLink: row.web_view_link,
+    publicLinkUrl: row.public_link_url,
     updatedAt: row.updated_at
   }
 }
@@ -595,6 +598,7 @@ export class Store {
         relative_path TEXT NOT NULL,
         drive_file_id TEXT NOT NULL,
         web_view_link TEXT NOT NULL,
+        public_link_url TEXT,
         updated_at TEXT NOT NULL,
         PRIMARY KEY (project_id, relative_path)
       );
@@ -608,6 +612,7 @@ export class Store {
 
     this.ensureAgentEventDeleteCascade()
     this.ensureGoogleDriveRcloneSchema()
+    this.ensureColumn('google_drive_files', 'public_link_url', 'TEXT')
     this.ensureColumn('connections', 'ssh_alias', 'TEXT')
     this.ensureColumn('projects', 'created_at', `TEXT NOT NULL DEFAULT ''`)
     this.ensureColumn('projects', 'archived', 'INTEGER NOT NULL DEFAULT 0')
@@ -785,6 +790,7 @@ export class Store {
           relative_path TEXT NOT NULL,
           drive_file_id TEXT NOT NULL,
           web_view_link TEXT NOT NULL,
+          public_link_url TEXT,
           updated_at TEXT NOT NULL,
           PRIMARY KEY (project_id, relative_path)
         );
@@ -2436,7 +2442,8 @@ export class Store {
   ): StoredGoogleDriveFile | null {
     const row = this.db
       .prepare(
-        `SELECT project_id, relative_path, drive_file_id, web_view_link, updated_at
+        `SELECT project_id, relative_path, drive_file_id, web_view_link,
+                public_link_url, updated_at
          FROM google_drive_files WHERE project_id = ? AND relative_path = ?`
       )
       .get(projectId, relativePath) as GoogleDriveFileRow | undefined
@@ -2482,6 +2489,13 @@ export class Store {
     relativePath: string,
     url: string
   ): void {
+    this.db
+      .prepare(
+        `UPDATE google_drive_files
+         SET public_link_url = ?, updated_at = ?
+         WHERE project_id = ? AND relative_path = ?`
+      )
+      .run(url, now(), projectId, relativePath)
     this.addActivity(
       projectId,
       null,
@@ -2494,6 +2508,13 @@ export class Store {
     projectId: string,
     relativePath: string
   ): void {
+    this.db
+      .prepare(
+        `UPDATE google_drive_files
+         SET public_link_url = NULL, updated_at = ?
+         WHERE project_id = ? AND relative_path = ?`
+      )
+      .run(now(), projectId, relativePath)
     this.addActivity(
       projectId,
       null,

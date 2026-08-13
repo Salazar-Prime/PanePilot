@@ -418,6 +418,11 @@ function registerIpc(): void {
   ipcMain.handle('google-drive:status', (_event, projectId: string) =>
     googleDrive.status(projectId)
   )
+  ipcMain.handle(
+    'google-drive:file-status',
+    (_event, projectId: string, relativePath: string) =>
+      googleDrive.fileStatus(projectId, relativePath)
+  )
   ipcMain.handle('google-drive:list-remotes', () => googleDrive.listRemotes())
   ipcMain.handle(
     'google-drive:connect',

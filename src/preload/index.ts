@@ -150,6 +150,8 @@ const api: ProjectConsoleApi = {
   googleDrive: {
     status: (projectId: string) =>
       ipcRenderer.invoke('google-drive:status', projectId),
+    fileStatus: (projectId: string, relativePath: string) =>
+      ipcRenderer.invoke('google-drive:file-status', projectId, relativePath),
     listRemotes: () => ipcRenderer.invoke('google-drive:list-remotes'),
     connect: (input: ConnectGoogleDriveInput) =>
       ipcRenderer.invoke('google-drive:connect', input),

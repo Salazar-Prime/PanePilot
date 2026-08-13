@@ -204,6 +204,10 @@ describe('project-scoped rclone persistence and uploads', () => {
         join(realpathSync(directory), 'drafts/paper.tex'),
         'personal-drive:PanePilot/Research/drafts/paper.tex'
       ])
+      expect(service.fileStatus(projectId, 'drafts/paper.tex')).toMatchObject({
+        uploaded: true,
+        publicLink: null
+      })
       expect(
         store
           .getProject(projectId)
@@ -227,6 +231,9 @@ describe('project-scoped rclone persistence and uploads', () => {
         'link',
         'personal-drive:PanePilot/Research/drafts/paper.tex'
       ])
+      expect(service.fileStatus(projectId, 'drafts/paper.tex').publicLink).toBe(
+        'https://drive.google.com/public-paper'
+      )
       expect(
         store
           .getProject(projectId)
@@ -241,6 +248,7 @@ describe('project-scoped rclone persistence and uploads', () => {
         '--unlink',
         'personal-drive:PanePilot/Research/drafts/paper.tex'
       ])
+      expect(service.fileStatus(projectId, 'drafts/paper.tex').publicLink).toBeNull()
       expect(
         store
           .getProject(projectId)

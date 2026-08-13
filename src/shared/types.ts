@@ -458,6 +458,14 @@ export interface GoogleDriveUploadResult {
   updated: boolean
 }
 
+export interface GoogleDriveFileStatus {
+  uploaded: boolean
+  fileId: string | null
+  webViewLink: string | null
+  publicLink: string | null
+  updatedAt: string | null
+}
+
 export interface GoogleDrivePublicLinkResult {
   url: string
   destination: string
@@ -540,6 +548,10 @@ export interface ProjectConsoleApi {
   }
   googleDrive: {
     status(projectId: string): Promise<GoogleDriveStatus>
+    fileStatus(
+      projectId: string,
+      relativePath: string
+    ): Promise<GoogleDriveFileStatus>
     listRemotes(): Promise<string[]>
     connect(input: ConnectGoogleDriveInput): Promise<GoogleDriveStatus>
     disconnect(projectId: string): Promise<void>
