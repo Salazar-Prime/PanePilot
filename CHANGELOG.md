@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.0 — 2026-08-14
+
+This release adds:
+
+- Sanitized GitHub-style Markdown previews with Preview/Source modes, rendered
+  unsaved drafts, project-bounded relative links and images, and syntax highlighting.
+- File and folder creation, rename, download, and copy-path actions for local and SSH
+  projects, with collision, traversal, overwrite, and symlink safeguards.
+- Project-scoped Quick Codex chats that use persistent tmux sessions while staying
+  separate from ordinary terminal tabs.
+- Same-connection terminal transfer between active projects, including live tmux
+  metadata retagging before durable project ownership changes.
+- Client-local whole-interface scaling at 90%, 100%, 110%, and 125%, with toolbar and
+  keyboard controls and a first-run 110% default.
+- Read-only Public, Private, Internal, or Unknown GitHub visibility in the Repository
+  action using the authenticated GitHub CLI with a public API fallback.
+- Continuous Git-pane scrolling with bounded automatic history pagination and a
+  manual fallback.
+
+The v0.6.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It remains
+unsigned and unnotarized. PanePilot Remote remains source-only in this release.
+
 ## 0.5.0 — 2026-08-11
 
 This release adds:
