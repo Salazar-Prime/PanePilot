@@ -7,8 +7,10 @@ import {
   GitService,
   gitRemoteCommand,
   parseGitGraph,
+  parseGitHubRepositoryReference,
   parseGitPorcelainV2
 } from '../src/main/git'
+import type { GitHubVisibilityResolver } from '../src/main/git'
 import { Store } from '../src/main/store'
 
 const temporaryDirectories: string[] = []
@@ -92,9 +94,101 @@ describe('Git porcelain parsing', () => {
       "'git' '--no-optional-locks' '-C' '/srv/worker'\\''s project' 'status' '--short'"
     )
   })
+
+  it('normalizes GitHub HTTPS and SSH repository references', () => {
+    expect(
+      parseGitHubRepositoryReference(
+        'https://github.com/Salazar-Prime/PanePilot.git'
+      )
+    ).toEqual({
+      nameWithOwner: 'Salazar-Prime/PanePilot',
+      url: 'https://github.com/Salazar-Prime/PanePilot'
+    })
+    expect(
+      parseGitHubRepositoryReference('git@github.com:owner/private-repo.git')
+    ).toEqual({
+      nameWithOwner: 'owner/private-repo',
+      url: 'https://github.com/owner/private-repo'
+    })
+    expect(
+      parseGitHubRepositoryReference('https://gitlab.com/owner/repo')
+    ).toBeNull()
+    expect(
+      parseGitHubRepositoryReference(
+        'https://github.com/owner/repo/issues/1'
+      )
+    ).toBeNull()
+  })
 })
 
 describe('project Git service', () => {
+  it('reports and caches authenticated GitHub repository visibility', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'panepilot-github-visibility-'))
+    temporaryDirectories.push(root)
+    const store = new Store(root)
+    store.syncConnections([])
+    const project = store.createProject({
+      type: 'terminal',
+      name: 'Private repository',
+      connectionId: 'local',
+      folder: root,
+      repositoryUrl: 'https://github.com/owner/private-repository'
+    })
+    let calls = 0
+    const resolver: GitHubVisibilityResolver = {
+      async resolve(reference) {
+        calls += 1
+        expect(reference.nameWithOwner).toBe('owner/private-repository')
+        return { visibility: 'private', source: 'gh' }
+      }
+    }
+
+    try {
+      const service = new GitService(store, resolver)
+      await expect(service.repositoryVisibility(project.id)).resolves.toMatchObject({
+        repository: 'owner/private-repository',
+        visibility: 'private',
+        source: 'gh',
+        message: null
+      })
+      await service.repositoryVisibility(project.id)
+      expect(calls).toBe(1)
+    } finally {
+      store.close()
+    }
+  })
+
+  it('does not guess when a GitHub repository is unavailable', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'panepilot-github-unknown-'))
+    temporaryDirectories.push(root)
+    const store = new Store(root)
+    store.syncConnections([])
+    const project = store.createProject({
+      type: 'terminal',
+      name: 'Unknown repository',
+      connectionId: 'local',
+      folder: root,
+      repositoryUrl: 'https://github.com/owner/unavailable'
+    })
+    const resolver: GitHubVisibilityResolver = {
+      async resolve() {
+        return null
+      }
+    }
+
+    try {
+      const service = new GitService(store, resolver)
+      await expect(service.repositoryVisibility(project.id)).resolves.toMatchObject({
+        repository: 'owner/unavailable',
+        visibility: null,
+        source: null,
+        message: expect.stringContaining('Sign in with GitHub CLI')
+      })
+    } finally {
+      store.close()
+    }
+  })
+
   it('reads current changes and paginates commits from a local project', async () => {
     const root = mkdtempSync(join(tmpdir(), 'panepilot-git-test-'))
     temporaryDirectories.push(root)

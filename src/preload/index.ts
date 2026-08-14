@@ -41,6 +41,8 @@ const api: ProjectConsoleApi = {
   },
   git: {
     status: (projectId: string) => ipcRenderer.invoke('git:status', projectId),
+    repositoryVisibility: (projectId: string) =>
+      ipcRenderer.invoke('git:repository-visibility', projectId),
     commits: (projectId: string, offset?: number, limit?: number) =>
       ipcRenderer.invoke('git:commits', projectId, offset, limit)
   },
@@ -166,8 +168,6 @@ const api: ProjectConsoleApi = {
   googleDrive: {
     status: (projectId: string) =>
       ipcRenderer.invoke('google-drive:status', projectId),
-    fileStatus: (projectId: string, relativePath: string) =>
-      ipcRenderer.invoke('google-drive:file-status', projectId, relativePath),
     listRemotes: () => ipcRenderer.invoke('google-drive:list-remotes'),
     connect: (input: ConnectGoogleDriveInput) =>
       ipcRenderer.invoke('google-drive:connect', input),

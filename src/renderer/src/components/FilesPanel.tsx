@@ -11,10 +11,8 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
-  Globe2,
   Image as ImageIcon,
   Link2Off,
-  LockKeyhole,
   Pencil,
   RefreshCw,
   Save,
@@ -25,7 +23,6 @@ import {
 import type {
   FileEntry,
   FilePreview,
-  GoogleDriveFileStatus,
   GoogleDriveUploadResult,
   Project
 } from '@shared/types'
@@ -123,8 +120,6 @@ function FilesPanelInstance({
   const [driveUpload, setDriveUpload] = useState<GoogleDriveUploadResult | null>(
     null
   )
-  const [driveFileStatus, setDriveFileStatus] =
-    useState<GoogleDriveFileStatus | null>(null)
   const [publicDriveLink, setPublicDriveLink] = useState<string | null>(null)
   const [markdownAnchor, setMarkdownAnchor] =
     useState<PendingMarkdownAnchor | null>(null)
@@ -158,33 +153,6 @@ function FilesPanelInstance({
     setDriveMessage('')
     setDriveUpload(null)
     setPublicDriveLink(null)
-    setDriveFileStatus(null)
-    if (!preview) return
-    let active = true
-    void window.projectConsole.googleDrive
-      .fileStatus(project.id, preview.path)
-      .then((status) => {
-        if (!active) return
-        setDriveFileStatus(status)
-        setPublicDriveLink(status.publicLink)
-        if (
-          status.uploaded &&
-          status.fileId &&
-          status.webViewLink
-        ) {
-          setDriveUpload({
-            fileId: status.fileId,
-            name: fileName(preview.path),
-            webViewLink: status.webViewLink,
-            destination: preview.path,
-            updated: true
-          })
-        }
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
   }, [preview?.path])
 
   function updateOpenFile(
@@ -632,13 +600,6 @@ function FilesPanelInstance({
         preview.path
       )
       setDriveUpload(result)
-      setDriveFileStatus({
-        uploaded: true,
-        fileId: result.fileId,
-        webViewLink: result.webViewLink,
-        publicLink: publicDriveLink,
-        updatedAt: new Date().toISOString()
-      })
       setDriveMessage(
         `${result.updated ? 'Updated' : 'Uploaded'} ${preview.path} → ${result.destination}`
       )
@@ -671,9 +632,6 @@ function FilesPanelInstance({
         preview.path
       )
       setPublicDriveLink(result.url)
-      setDriveFileStatus((current) =>
-        current ? { ...current, publicLink: result.url } : current
-      )
       await window.projectConsole.system.copyText(result.url)
       setDriveMessage(`Created and copied a public link for ${driveUpload.name}`)
       void onChanged?.().catch(() => undefined)
@@ -704,9 +662,6 @@ function FilesPanelInstance({
         preview.path
       )
       setPublicDriveLink(null)
-      setDriveFileStatus((current) =>
-        current ? { ...current, publicLink: null } : current
-      )
       setDriveMessage(`Stopped public sharing for ${driveUpload.name}`)
       void onChanged?.().catch(() => undefined)
     } catch (caught) {
@@ -928,25 +883,6 @@ function FilesPanelInstance({
               )}
               {driveMessage && (
                 <small className="drive-upload-result">{driveMessage}</small>
-              )}
-              {driveFileStatus?.uploaded && (
-                <span
-                  className={`drive-visibility-badge ${
-                    driveFileStatus.publicLink ? 'public' : 'private'
-                  }`}
-                  title={
-                    driveFileStatus.publicLink
-                      ? 'Anyone with the public link can open this uploaded Drive file'
-                      : 'This uploaded Drive file has no public link from PanePilot'
-                  }
-                >
-                  {driveFileStatus.publicLink ? (
-                    <Globe2 size={12} />
-                  ) : (
-                    <LockKeyhole size={12} />
-                  )}
-                  {driveFileStatus.publicLink ? 'Public' : 'Private'}
-                </span>
               )}
               {markdown && (
                 <div

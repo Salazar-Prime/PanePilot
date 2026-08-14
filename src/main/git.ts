@@ -5,6 +5,8 @@ import type {
   GitCommit,
   GitCommitPage,
   GitFileChange,
+  GitHubRepositoryVisibility,
+  GitHubRepositoryVisibilityStatus,
   GitRepositoryStatus,
   Project
 } from '../shared/types'
@@ -16,6 +18,124 @@ const DEFAULT_COMMIT_LIMIT = 80
 const MAX_COMMIT_LIMIT = 120
 const LOG_RECORD = '\x1e'
 const LOG_FIELD = '\x1f'
+const GITHUB_VISIBILITY_CACHE_MS = 5 * 60 * 1_000
+const GITHUB_API_TIMEOUT_MS = 8_000
+
+export interface GitHubRepositoryReference {
+  nameWithOwner: string
+  url: string
+}
+
+export interface GitHubVisibilityResolver {
+  resolve(reference: GitHubRepositoryReference): Promise<{
+    visibility: GitHubRepositoryVisibility
+    source: 'gh' | 'public-api'
+  } | null>
+}
+
+export function parseGitHubRepositoryReference(
+  rawUrl: string | null | undefined
+): GitHubRepositoryReference | null {
+  const value = rawUrl?.trim()
+  if (!value) return null
+  const scpMatch = value.match(/^git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/i)
+  const normalized = scpMatch
+    ? `https://github.com/${scpMatch[1]}/${scpMatch[2]}`
+    : value
+  try {
+    const url = new URL(normalized)
+    if (url.hostname.toLocaleLowerCase() !== 'github.com') return null
+    const parts = url.pathname
+      .replace(/^\/+|\/+$/g, '')
+      .split('/')
+      .filter(Boolean)
+    if (parts.length !== 2) return null
+    const owner = parts[0]
+    const name = parts[1].replace(/\.git$/i, '')
+    if (
+      !owner ||
+      !name ||
+      !/^[a-z0-9_.-]+$/i.test(owner) ||
+      !/^[a-z0-9_.-]+$/i.test(name)
+    ) {
+      return null
+    }
+    return {
+      nameWithOwner: `${owner}/${name}`,
+      url: `https://github.com/${owner}/${name}`
+    }
+  } catch {
+    return null
+  }
+}
+
+function normalizeGitHubVisibility(
+  value: unknown
+): GitHubRepositoryVisibility | null {
+  const normalized = String(value ?? '').trim().toLocaleLowerCase()
+  return normalized === 'public' ||
+    normalized === 'private' ||
+    normalized === 'internal'
+    ? normalized
+    : null
+}
+
+const defaultGitHubVisibilityResolver: GitHubVisibilityResolver = {
+  async resolve(reference) {
+    try {
+      const raw = await execute(
+        'gh',
+        [
+          'repo',
+          'view',
+          reference.nameWithOwner,
+          '--json',
+          'visibility',
+          '--jq',
+          '.visibility'
+        ],
+        GITHUB_API_TIMEOUT_MS
+      )
+      const visibility = normalizeGitHubVisibility(raw)
+      if (visibility) return { visibility, source: 'gh' }
+    } catch {
+      // The public REST endpoint below still works when gh is absent or signed out.
+    }
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), GITHUB_API_TIMEOUT_MS)
+    try {
+      const response = await fetch(
+        `https://api.github.com/repos/${reference.nameWithOwner}`,
+        {
+          headers: {
+            Accept: 'application/vnd.github+json',
+            'User-Agent': 'PanePilot',
+            'X-GitHub-Api-Version': '2022-11-28'
+          },
+          signal: controller.signal
+        }
+      )
+      if (!response.ok) return null
+      const body = (await response.json()) as {
+        visibility?: unknown
+        private?: unknown
+      }
+      const visibility =
+        normalizeGitHubVisibility(body.visibility) ??
+        (typeof body.private === 'boolean'
+          ? body.private
+            ? 'private'
+            : 'public'
+          : null)
+      return visibility ? { visibility, source: 'public-api' } : null
+    } catch {
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+}
 
 export function discoverRepository(folder: string): string | null {
   try {
@@ -303,7 +423,53 @@ function unavailableStatus(message: string): GitRepositoryStatus {
 }
 
 export class GitService {
-  constructor(private readonly store: Store) {}
+  private readonly visibilityCache = new Map<
+    string,
+    { expiresAt: number; status: GitHubRepositoryVisibilityStatus }
+  >()
+
+  constructor(
+    private readonly store: Store,
+    private readonly githubVisibility: GitHubVisibilityResolver =
+      defaultGitHubVisibilityResolver
+  ) {}
+
+  async repositoryVisibility(
+    projectId: string
+  ): Promise<GitHubRepositoryVisibilityStatus> {
+    const project = this.store.getProject(projectId)
+    if (!project || project.archived) throw new Error('Project not found.')
+    const reference = parseGitHubRepositoryReference(project.repositoryUrl)
+    const checkedAt = new Date().toISOString()
+    if (!reference) {
+      return {
+        repository: null,
+        visibility: null,
+        source: null,
+        message: project.repositoryUrl
+          ? 'The configured repository is not a GitHub repository.'
+          : 'No GitHub repository is configured for this project.',
+        checkedAt
+      }
+    }
+    const cached = this.visibilityCache.get(reference.nameWithOwner)
+    if (cached && cached.expiresAt > Date.now()) return cached.status
+    const resolved = await this.githubVisibility.resolve(reference)
+    const status: GitHubRepositoryVisibilityStatus = {
+      repository: reference.nameWithOwner,
+      visibility: resolved?.visibility ?? null,
+      source: resolved?.source ?? null,
+      message: resolved
+        ? null
+        : 'Visibility unavailable. Sign in with GitHub CLI to identify private repositories.',
+      checkedAt
+    }
+    this.visibilityCache.set(reference.nameWithOwner, {
+      expiresAt: Date.now() + GITHUB_VISIBILITY_CACHE_MS,
+      status
+    })
+    return status
+  }
 
   async status(projectId: string): Promise<GitRepositoryStatus> {
     const { runner } = this.projectRunner(projectId)

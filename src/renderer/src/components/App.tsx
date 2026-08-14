@@ -5,6 +5,7 @@ import {
   ArrowUpDown,
   Bot,
   Boxes,
+  Building2,
   ChevronDown,
   ChevronRight,
   Clipboard,
@@ -17,7 +18,9 @@ import {
   FolderOpen,
   GitBranch,
   Github,
+  Globe2,
   Laptop,
+  LockKeyhole,
   Menu,
   MessageSquarePlus,
   MessageSquareText,
@@ -43,6 +46,7 @@ import {
 import type {
   Connection,
   CreateProjectInput,
+  GitHubRepositoryVisibilityStatus,
   GitRepositoryStatus,
   Project,
   ProjectType,
@@ -140,6 +144,10 @@ export function App() {
   const [gitStatusLoading, setGitStatusLoading] = useState(false)
   const [gitStatusError, setGitStatusError] = useState('')
   const gitStatusRequest = useRef(0)
+  const [githubVisibility, setGithubVisibility] =
+    useState<GitHubRepositoryVisibilityStatus | null>(null)
+  const [githubVisibilityLoading, setGithubVisibilityLoading] = useState(false)
+  const githubVisibilityRequest = useRef(0)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [temporaryChatPanel, setTemporaryChatPanel] = useState<{
     projectId: string
@@ -406,6 +414,39 @@ export function App() {
       window.removeEventListener('focus', refreshOnFocus)
     }
   }, [project?.id, projectSupportsGit, refreshGitStatus, showArchivedProjects])
+
+  useEffect(() => {
+    const projectId = project?.id
+    const repositoryUrl = project?.repositoryUrl
+    githubVisibilityRequest.current += 1
+    setGithubVisibility(null)
+    setGithubVisibilityLoading(false)
+    if (!projectId || !repositoryUrl || showArchivedProjects) return
+    const request = githubVisibilityRequest.current
+    const refreshVisibility = () => {
+      setGithubVisibilityLoading(true)
+      void window.projectConsole.git
+        .repositoryVisibility(projectId)
+        .then((status) => {
+          if (request === githubVisibilityRequest.current) {
+            setGithubVisibility(status)
+          }
+        })
+        .catch(() => {
+          if (request === githubVisibilityRequest.current) {
+            setGithubVisibility(null)
+          }
+        })
+        .finally(() => {
+          if (request === githubVisibilityRequest.current) {
+            setGithubVisibilityLoading(false)
+          }
+        })
+    }
+    refreshVisibility()
+    window.addEventListener('focus', refreshVisibility)
+    return () => window.removeEventListener('focus', refreshVisibility)
+  }, [project?.id, project?.repositoryUrl, showArchivedProjects])
 
   useEffect(
     () => () => {
@@ -1453,14 +1494,36 @@ export function App() {
           )}
           {project?.repositoryUrl && (
             <button
-              className="secondary-button header-button"
+              className="secondary-button header-button repository-header-button"
               onClick={() =>
                 void window.projectConsole.projects.openRepository(
                   project.repositoryUrl!
                 )
               }
+              title={githubRepositoryVisibilityTitle(
+                githubVisibility,
+                githubVisibilityLoading
+              )}
             >
               <Github size={15} /> Repository
+              {githubVisibility?.repository && (
+                <span
+                  className={`repository-visibility-badge ${
+                    githubVisibility.visibility ?? 'unknown'
+                  }`}
+                >
+                  {githubVisibility.visibility === 'public' ? (
+                    <Globe2 size={10} />
+                  ) : githubVisibility.visibility === 'private' ? (
+                    <LockKeyhole size={10} />
+                  ) : githubVisibility.visibility === 'internal' ? (
+                    <Building2 size={10} />
+                  ) : null}
+                  {githubVisibility.visibility
+                    ? capitalize(githubVisibility.visibility)
+                    : 'Unknown'}
+                </span>
+              )}
             </button>
           )}
           {project && (
@@ -2204,6 +2267,24 @@ function gitToolbarTitle(
   if (status.ahead > 0) parts.push(`${status.ahead} ahead`)
   if (status.behind > 0) parts.push(`${status.behind} behind`)
   return `Git: ${parts.join(' · ')}`
+}
+
+function githubRepositoryVisibilityTitle(
+  status: GitHubRepositoryVisibilityStatus | null,
+  loading: boolean
+): string {
+  if (!status) {
+    return loading ? 'Checking GitHub repository visibility…' : 'Open repository'
+  }
+  if (!status.repository) return status.message ?? 'Open repository'
+  if (!status.visibility) {
+    return status.message ?? `Visibility unavailable for ${status.repository}`
+  }
+  return `${status.repository} · ${capitalize(status.visibility)} GitHub repository`
+}
+
+function capitalize(value: string): string {
+  return value ? `${value[0].toLocaleUpperCase()}${value.slice(1)}` : value
 }
 
 function projectGlyphTitle(name: string, left: boolean, right: boolean): string {

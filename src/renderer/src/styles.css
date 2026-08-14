@@ -2419,6 +2419,49 @@ select:focus-visible {
   padding: 0 10px;
 }
 
+.repository-header-button {
+  gap: 6px;
+}
+
+.repository-visibility-badge {
+  display: inline-flex;
+  height: 18px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  color: #aeb7c5;
+  border: 1px solid #394352;
+  border-radius: 999px;
+  background: #11151b;
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.035em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.repository-visibility-badge.public {
+  color: #87dfb2;
+  border-color: #2d6249;
+  background: #10251a;
+}
+
+.repository-visibility-badge.private {
+  color: #efc57d;
+  border-color: #69502c;
+  background: #281f10;
+}
+
+.repository-visibility-badge.internal {
+  color: #aebcff;
+  border-color: #47568e;
+  background: #181d34;
+}
+
+.repository-visibility-badge.unknown {
+  color: #818997;
+}
+
 .temporary-chat-toolbar-button {
   position: relative;
 }

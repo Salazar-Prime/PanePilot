@@ -86,6 +86,13 @@ older commits** retained as a fallback. Local and SSH-backed projects are suppor
 and these status/history reads run with Git optional locks disabled so PanePilot does
 not update the repository.
 
+For GitHub repository URLs, the top **Repository** action also labels the repository
+**Public**, **Private**, or **Internal**. PanePilot first uses the locally authenticated
+GitHub CLI (`gh`), which can identify private repositories available to that account,
+then falls back to GitHub's public repository API. If neither can see the repository,
+the label is **Unknown** instead of assuming that a missing repository is private.
+The check is read-only and cached briefly.
+
 ## Markdown preview
 
 Markdown files open in a rendered **Preview** in the Files workspace, with **Source**
@@ -128,9 +135,7 @@ Open/Copy actions for the private Drive link and records the same link in projec
 activity. Uploading alone does not call `rclone link` or change public access.
 After an upload, **Create public link** explicitly asks rclone to make an
 anyone-with-the-link URL and copies it to the clipboard. **Stop sharing** removes the
-public link. An uploaded file’s badge shows **Private** or **Public** and persists that
-last PanePilot-managed state across restarts. Uploading by itself never changes the
-file's public sharing state.
+public link. Uploading by itself never changes the file's public sharing state.
 
 Press **Command-K** (or **Control-K**) to open the command palette for projects,
 terminals, and common project actions.

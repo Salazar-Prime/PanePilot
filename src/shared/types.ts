@@ -124,6 +124,16 @@ export interface GitRepositoryStatus {
   refreshedAt: string
 }
 
+export type GitHubRepositoryVisibility = 'public' | 'private' | 'internal'
+
+export interface GitHubRepositoryVisibilityStatus {
+  repository: string | null
+  visibility: GitHubRepositoryVisibility | null
+  source: 'gh' | 'public-api' | null
+  message: string | null
+  checkedAt: string
+}
+
 export interface GitCommit {
   hash: string
   shortHash: string
@@ -459,14 +469,6 @@ export interface GoogleDriveUploadResult {
   updated: boolean
 }
 
-export interface GoogleDriveFileStatus {
-  uploaded: boolean
-  fileId: string | null
-  webViewLink: string | null
-  publicLink: string | null
-  updatedAt: string | null
-}
-
 export interface GoogleDrivePublicLinkResult {
   url: string
   destination: string
@@ -492,6 +494,7 @@ export interface ProjectConsoleApi {
   }
   git: {
     status(projectId: string): Promise<GitRepositoryStatus>
+    repositoryVisibility(projectId: string): Promise<GitHubRepositoryVisibilityStatus>
     commits(projectId: string, offset?: number, limit?: number): Promise<GitCommitPage>
   }
   terminals: {
@@ -562,10 +565,6 @@ export interface ProjectConsoleApi {
   }
   googleDrive: {
     status(projectId: string): Promise<GoogleDriveStatus>
-    fileStatus(
-      projectId: string,
-      relativePath: string
-    ): Promise<GoogleDriveFileStatus>
     listRemotes(): Promise<string[]>
     connect(input: ConnectGoogleDriveInput): Promise<GoogleDriveStatus>
     disconnect(projectId: string): Promise<void>

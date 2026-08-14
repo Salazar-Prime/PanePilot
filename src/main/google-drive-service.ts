@@ -6,7 +6,6 @@ import { execFile } from 'node:child_process'
 import { shell } from 'electron'
 import type {
   GoogleDrivePublicLinkResult,
-  GoogleDriveFileStatus,
   GoogleDriveStatus,
   GoogleDriveUploadResult
 } from '../shared/types'
@@ -129,26 +128,6 @@ export class GoogleDriveService {
       folderUrl: googleDriveFolderUrl(connection.folderId),
       connectedAt: connection.connectedAt
     }
-  }
-
-  fileStatus(projectId: string, relativePath: string): GoogleDriveFileStatus {
-    if (!this.store.getProject(projectId)) throw new Error('Project not found.')
-    const file = this.store.getGoogleDriveFile(projectId, relativePath)
-    return file
-      ? {
-          uploaded: true,
-          fileId: file.driveFileId,
-          webViewLink: file.webViewLink,
-          publicLink: file.publicLinkUrl,
-          updatedAt: file.updatedAt
-        }
-      : {
-          uploaded: false,
-          fileId: null,
-          webViewLink: null,
-          publicLink: null,
-          updatedAt: null
-        }
   }
 
   async listRemotes(): Promise<string[]> {

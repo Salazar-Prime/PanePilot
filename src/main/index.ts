@@ -179,6 +179,9 @@ function registerIpc(): void {
   ipcMain.handle('git:status', (_event, projectId: string) =>
     gitService.status(projectId)
   )
+  ipcMain.handle('git:repository-visibility', (_event, projectId: string) =>
+    gitService.repositoryVisibility(projectId)
+  )
   ipcMain.handle(
     'git:commits',
     (_event, projectId: string, offset?: number, limit?: number) =>
@@ -492,11 +495,6 @@ function registerIpc(): void {
 
   ipcMain.handle('google-drive:status', (_event, projectId: string) =>
     googleDrive.status(projectId)
-  )
-  ipcMain.handle(
-    'google-drive:file-status',
-    (_event, projectId: string, relativePath: string) =>
-      googleDrive.fileStatus(projectId, relativePath)
   )
   ipcMain.handle('google-drive:list-remotes', () => googleDrive.listRemotes())
   ipcMain.handle(
