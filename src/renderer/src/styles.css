@@ -2123,9 +2123,10 @@ select:focus-visible {
   background: #1b2342;
 }
 
-.chat-detail-heading > div:last-child {
+.chat-detail-summary {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: 3px;
 }
@@ -2146,6 +2147,18 @@ select:focus-visible {
   color: #59616f;
   font-family: "SFMono-Regular", "Cascadia Code", monospace;
   font-size: 8px;
+}
+
+.chat-detail-copy-button {
+  min-width: 112px;
+  min-height: 29px;
+  flex: 0 0 auto;
+  justify-content: center;
+  color: #8e98ab;
+}
+
+.chat-detail-copy-button:hover {
+  color: #d7dcea;
 }
 
 .chat-messages {

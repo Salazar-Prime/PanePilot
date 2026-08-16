@@ -1,10 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Bot, MessageSquareText, Search } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Bot, Check, Copy, MessageSquareText, Search } from 'lucide-react'
 import type {
   ConversationDetail,
   ConversationSummary,
   Project
 } from '@shared/types'
+import { copyConversationSessionId } from '../lib/conversationSessionId'
 
 export function ChatHistoryPanel({ project }: { project: Project }) {
   const [query, setQuery] = useState('')
@@ -13,12 +14,22 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
   const [detail, setDetail] = useState<ConversationDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null)
+  const copiedTimer = useRef<number | null>(null)
 
   useEffect(() => {
     setSelectedId(null)
     setDetail(null)
     setQuery('')
+    setCopiedSessionId(null)
   }, [project.id])
+
+  useEffect(
+    () => () => {
+      if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current)
+    },
+    []
+  )
 
   useEffect(() => {
     let active = true
@@ -53,6 +64,7 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
   useEffect(() => {
     let active = true
     if (!selectedId) return
+    setCopiedSessionId(null)
     void window.projectConsole.conversations
       .get(project.id, selectedId, query)
       .then((conversation) => {
@@ -65,6 +77,25 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
       active = false
     }
   }, [project.id, query, selectedId])
+
+  async function copySessionId(): Promise<void> {
+    const sessionId = detail?.providerSessionId
+    if (!sessionId) return
+    try {
+      await copyConversationSessionId(
+        sessionId,
+        window.projectConsole.system.copyText
+      )
+      setCopiedSessionId(sessionId)
+      if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current)
+      copiedTimer.current = window.setTimeout(() => {
+        setCopiedSessionId((current) => (current === sessionId ? null : current))
+        copiedTimer.current = null
+      }, 1_600)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    }
+  }
 
   return (
     <div className="chat-history-layout">
@@ -126,7 +157,7 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
               <div className="chat-detail-icon">
                 <Bot size={17} />
               </div>
-              <div>
+              <div className="chat-detail-summary">
                 <strong>{detail.title}</strong>
                 <span>
                   {detail.provider} · {detail.workingDirectory}
@@ -134,6 +165,23 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
                     ` · session ${detail.providerSessionId.slice(0, 8)}…`}
                 </span>
               </div>
+              {detail.providerSessionId && (
+                <button
+                  className="secondary-button chat-detail-copy-button"
+                  onClick={() => void copySessionId()}
+                  title={`Copy the exact ${detail.provider === 'claude' ? 'Claude session' : 'Codex thread'} ID`}
+                  aria-live="polite"
+                >
+                  {copiedSessionId === detail.providerSessionId ? (
+                    <Check size={12} />
+                  ) : (
+                    <Copy size={12} />
+                  )}
+                  {copiedSessionId === detail.providerSessionId
+                    ? 'Copied'
+                    : 'Copy session ID'}
+                </button>
+              )}
             </header>
             <div className="chat-messages">
               {detail.messages.map((message) => (
