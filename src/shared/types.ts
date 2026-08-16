@@ -111,6 +111,7 @@ export interface GitFileChange {
 export interface GitRepositoryStatus {
   isRepository: boolean
   root: string | null
+  originUrl: string | null
   branch: string | null
   detached: boolean
   head: string | null

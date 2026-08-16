@@ -86,7 +86,8 @@ older commits** retained as a fallback. Local and SSH-backed projects are suppor
 and these status/history reads run with Git optional locks disabled so PanePilot does
 not update the repository.
 
-For GitHub repository URLs, the top **Repository** action also labels the repository
+The top **Repository** action labels a Git repository with no `origin` remote as
+**Local** and opens its read-only Git pane. For GitHub origins, it instead shows
 **Public**, **Private**, or **Internal**. PanePilot first uses the locally authenticated
 GitHub CLI (`gh`), which can identify private repositories available to that account,
 then falls back to GitHub's public repository API. If neither can see the repository,

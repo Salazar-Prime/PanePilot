@@ -1,13 +1,32 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { shouldLoadOlderGitCommits } from '../src/renderer/src/lib/gitPane'
+import {
+  isOriginlessGitRepository,
+  shouldLoadOlderGitCommits
+} from '../src/renderer/src/lib/gitPane'
 
 function cssRule(css: string, selector: string): string {
   return css.match(new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? ''
 }
 
 describe('Git pane scrolling', () => {
+  it('identifies only repositories without an origin as local-only', () => {
+    expect(
+      isOriginlessGitRepository({ isRepository: true, originUrl: null })
+    ).toBe(true)
+    expect(
+      isOriginlessGitRepository({
+        isRepository: true,
+        originUrl: 'git@github.com:owner/repository.git'
+      })
+    ).toBe(false)
+    expect(
+      isOriginlessGitRepository({ isRepository: false, originUrl: null })
+    ).toBe(false)
+    expect(isOriginlessGitRepository(null)).toBe(false)
+  })
+
   it('uses one scroll owner rather than competing working-tree and history scrollers', () => {
     const css = readFileSync(
       join(process.cwd(), 'src/renderer/src/git-pane.css'),

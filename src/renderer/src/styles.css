@@ -2471,6 +2471,12 @@ select:focus-visible {
   background: #181d34;
 }
 
+.repository-visibility-badge.local {
+  color: #aab4c4;
+  border-color: #465163;
+  background: #171d27;
+}
+
 .repository-visibility-badge.unknown {
   color: #818997;
 }

@@ -408,6 +408,7 @@ function unavailableStatus(message: string): GitRepositoryStatus {
   return {
     isRepository: false,
     root: null,
+    originUrl: null,
     branch: null,
     detached: false,
     head: null,
@@ -474,7 +475,7 @@ export class GitService {
   async status(projectId: string): Promise<GitRepositoryStatus> {
     const { runner } = this.projectRunner(projectId)
     try {
-      const [root, raw] = await Promise.all([
+      const [root, raw, originUrl] = await Promise.all([
         runner.run(['rev-parse', '--show-toplevel']),
         runner.run([
           'status',
@@ -483,12 +484,17 @@ export class GitService {
           '--show-stash',
           '-z',
           '--untracked-files=all'
-        ])
+        ]),
+        runner
+          .run(['config', '--get', 'remote.origin.url'])
+          .then((value) => value.trim() || null)
+          .catch(() => null)
       ])
       const parsed = parseGitPorcelainV2(raw)
       return {
         isRepository: true,
         root: root.trim(),
+        originUrl,
         ...parsed,
         clean: parsed.changes.length === 0,
         message: null,

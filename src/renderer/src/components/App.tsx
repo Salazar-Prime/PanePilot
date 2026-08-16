@@ -60,6 +60,7 @@ import {
 } from '../lib/appearanceScale'
 import { useOpenSessions } from '../lib/openSessions'
 import { isPaneSwapShortcut } from '../lib/projectShortcuts'
+import { isOriginlessGitRepository } from '../lib/gitPane'
 import {
   projectSortFor,
   projectSortOptions,
@@ -1353,6 +1354,7 @@ export function App() {
     gitPaneOpen && project != null && projectSupportsGit && !showArchivedProjects
   const gitTone = gitToolbarTone(gitStatus, gitStatusError)
   const gitBadge = gitToolbarBadge(gitStatus)
+  const localRepository = isOriginlessGitRepository(gitStatus)
 
   return (
     <div
@@ -1492,21 +1494,34 @@ export function App() {
               <ExternalLink size={15} /> Overleaf
             </button>
           )}
-          {project?.repositoryUrl && (
+          {project && (project.repositoryUrl || localRepository) && (
             <button
               className="secondary-button header-button repository-header-button"
-              onClick={() =>
+              onClick={() => {
+                if (localRepository) {
+                  setGitPaneOpen((current) => !current)
+                  return
+                }
                 void window.projectConsole.projects.openRepository(
                   project.repositoryUrl!
                 )
+              }}
+              title={
+                localRepository
+                  ? `${gitPaneOpen ? 'Close' : 'Open'} Git pane · local repository with no origin remote`
+                  : githubRepositoryVisibilityTitle(
+                      githubVisibility,
+                      githubVisibilityLoading
+                    )
               }
-              title={githubRepositoryVisibilityTitle(
-                githubVisibility,
-                githubVisibilityLoading
-              )}
             >
-              <Github size={15} /> Repository
-              {githubVisibility?.repository && (
+              {localRepository ? <GitBranch size={15} /> : <Github size={15} />}{' '}
+              Repository
+              {localRepository ? (
+                <span className="repository-visibility-badge local">
+                  <Laptop size={10} /> Local
+                </span>
+              ) : githubVisibility?.repository ? (
                 <span
                   className={`repository-visibility-badge ${
                     githubVisibility.visibility ?? 'unknown'
@@ -1523,7 +1538,7 @@ export function App() {
                     ? capitalize(githubVisibility.visibility)
                     : 'Unknown'}
                 </span>
-              )}
+              ) : null}
             </button>
           )}
           {project && (

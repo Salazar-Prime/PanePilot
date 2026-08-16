@@ -223,6 +223,7 @@ describe('project Git service', () => {
       expect(status).toMatchObject({
         isRepository: true,
         root: realpathSync(projectFolder),
+        originUrl: null,
         branch: 'main',
         clean: false
       })
@@ -239,6 +240,43 @@ describe('project Git service', () => {
       expect(page.commits[0]).toMatchObject({
         subject: 'Initial commit',
         author: 'PanePilot Test'
+      })
+    } finally {
+      store.close()
+    }
+  })
+
+  it('reports the repository origin URL when one is configured', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'panepilot-git-origin-test-'))
+    temporaryDirectories.push(root)
+    const projectFolder = join(root, 'project')
+    const appData = join(root, 'app-data')
+    mkdirSync(projectFolder)
+    mkdirSync(appData)
+    git(projectFolder, 'init', '-b', 'main')
+    git(
+      projectFolder,
+      'remote',
+      'add',
+      'origin',
+      'git@github.com:owner/repository.git'
+    )
+
+    const store = new Store(appData)
+    store.syncConnections([])
+    const project = store.createProject({
+      type: 'terminal',
+      name: 'Git origin test',
+      connectionId: 'local',
+      folder: projectFolder,
+      repositoryUrl: null
+    })
+
+    try {
+      const service = new GitService(store)
+      await expect(service.status(project.id)).resolves.toMatchObject({
+        isRepository: true,
+        originUrl: 'git@github.com:owner/repository.git'
       })
     } finally {
       store.close()
@@ -266,6 +304,7 @@ describe('project Git service', () => {
       const service = new GitService(store)
       await expect(service.status(project.id)).resolves.toMatchObject({
         isRepository: false,
+        originUrl: null,
         message: 'This project folder is not a Git repository.'
       })
       await expect(service.commits(project.id)).resolves.toEqual({
