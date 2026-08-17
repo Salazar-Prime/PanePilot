@@ -17,17 +17,38 @@ import type {
 import { useModalEscape } from '../lib/modalEscape'
 import { Editor, monaco } from '../lib/monaco'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
+import {
+  noteProjectPath,
+  projectNotePathFromLink
+} from '../lib/noteMarkdown'
+import type { TerminalFileTarget } from '../lib/terminalFileLinks'
+import {
+  MarkdownPreview,
+  type MarkdownPreviewAnchor
+} from './MarkdownPreview'
 
 type NoteDialog =
   | { mode: 'create'; initialName: '' }
   | { mode: 'rename'; initialName: string }
 
-export function NotesPanel({ project }: { project: Project }) {
+type NoteViewMode = 'preview' | 'source'
+
+interface NotesPanelProps {
+  project: Project
+  onOpenFile?(target: TerminalFileTarget): void
+}
+
+export function NotesPanel({ project, onOpenFile }: NotesPanelProps) {
   const [notes, setNotes] = useState<ProjectNoteSummary[]>([])
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [note, setNote] = useState<ProjectNote | null>(null)
   const [saved, setSaved] = useState('')
   const [draft, setDraft] = useState('')
+  const [viewModes, setViewModes] = useState<
+    Record<string, NoteViewMode>
+  >({})
+  const [markdownAnchor, setMarkdownAnchor] =
+    useState<MarkdownPreviewAnchor | null>(null)
   const [dialog, setDialog] = useState<NoteDialog | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -35,7 +56,9 @@ export function NotesPanel({ project }: { project: Project }) {
   const saveRef = useRef<() => void>(() => undefined)
   const finderActionRef = useRef<{ dispose(): void } | null>(null)
   const activeFinderPathRef = useRef<string | null>(null)
+  const markdownLinkRequestRef = useRef(0)
   const dirty = note != null && draft !== saved
+  const viewMode = note ? viewModes[note.path] ?? 'preview' : 'preview'
   activeFinderPathRef.current = note
     ? `.panepilot/notes/${note.path}`
     : null
@@ -49,6 +72,7 @@ export function NotesPanel({ project }: { project: Project }) {
 
   async function loadNote(path: string) {
     const next = await window.projectConsole.notes.read(project.id, path)
+    setMarkdownAnchor(null)
     setSelectedPath(next.path)
     setNote(next)
     setSaved(next.content)
@@ -193,6 +217,8 @@ export function NotesPanel({ project }: { project: Project }) {
     setNote(null)
     setSaved('')
     setDraft('')
+    setViewModes({})
+    setMarkdownAnchor(null)
     setError('')
     void refresh(null, false)
   }, [project.id])
@@ -212,6 +238,52 @@ export function NotesPanel({ project }: { project: Project }) {
       await window.projectConsole.files.showInFolder(project.id, filePath)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
+    }
+  }
+
+  function setViewMode(mode: NoteViewMode): void {
+    if (!note) return
+    setViewModes((current) => ({ ...current, [note.path]: mode }))
+  }
+
+  async function openMarkdownProjectPath(
+    path: string,
+    fragment: string | null
+  ): Promise<void> {
+    const linkedNotePath = projectNotePathFromLink(
+      path,
+      notes.map((candidate) => candidate.path)
+    )
+    if (!linkedNotePath) {
+      if (onOpenFile) {
+        onOpenFile({ path, line: null, column: null })
+      } else {
+        setError('Open this project link from the Files workspace.')
+      }
+      return
+    }
+    if (linkedNotePath !== selectedPath && !canDiscard()) return
+
+    setLoading(true)
+    setError('')
+    try {
+      if (linkedNotePath !== selectedPath) await loadNote(linkedNotePath)
+      setViewModes((current) => ({
+        ...current,
+        [linkedNotePath]: 'preview'
+      }))
+      setMarkdownAnchor(
+        fragment
+          ? {
+              fragment,
+              requestId: ++markdownLinkRequestRef.current
+            }
+          : null
+      )
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -271,6 +343,26 @@ export function NotesPanel({ project }: { project: Project }) {
                 </span>
               </div>
               <div className="notes-actions">
+                <div
+                  className="preview-mode-switch"
+                  role="group"
+                  aria-label="Markdown note view"
+                >
+                  <button
+                    className={viewMode === 'preview' ? 'active' : ''}
+                    aria-pressed={viewMode === 'preview'}
+                    onClick={() => setViewMode('preview')}
+                  >
+                    Preview
+                  </button>
+                  <button
+                    className={viewMode === 'source' ? 'active' : ''}
+                    aria-pressed={viewMode === 'source'}
+                    onClick={() => setViewMode('source')}
+                  >
+                    Source
+                  </button>
+                </div>
                 <span className={dirty ? 'notes-dirty' : ''}>
                   {loading ? 'Loading…' : dirty ? 'Unsaved changes' : 'Saved'}
                 </span>
@@ -309,43 +401,62 @@ export function NotesPanel({ project }: { project: Project }) {
               </div>
             </header>
             {error && <div className="notes-error">{error}</div>}
-            <div className="notes-editor-shell">
-              <Editor
-                path={`panepilot-notes/${project.id}/${note.path}`}
-                language="markdown"
-                theme="vs-dark"
-                value={draft}
-                onChange={(value) => setDraft(value ?? '')}
-                onMount={(editor) => {
-                  editor.addCommand(
-                    monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
-                    () => saveRef.current()
-                  )
-                  finderActionRef.current?.dispose()
-                  if (project.connectionId === 'local') {
-                    finderActionRef.current = addShowInFinderAction(
-                      editor,
-                      showActiveNoteInFinder
-                    )
-                  }
-                  editor.focus()
-                }}
-                options={{
-                  automaticLayout: true,
-                  minimap: { enabled: false },
-                  fontFamily: '"SFMono-Regular", "Cascadia Code", monospace',
-                  fontSize: 13,
-                  lineHeight: 21,
-                  padding: { top: 18, bottom: 18 },
-                  scrollBeyondLastLine: false,
-                  smoothScrolling: true,
-                  wordWrap: 'on',
-                  wrappingIndent: 'same'
-                }}
+            {viewMode === 'preview' ? (
+              <MarkdownPreview
+                projectId={project.id}
+                path={noteProjectPath(note.path)}
+                content={draft}
+                anchor={markdownAnchor}
+                onOpenProjectPath={(path, fragment) =>
+                  void openMarkdownProjectPath(path, fragment)
+                }
+                onError={setError}
               />
-            </div>
+            ) : (
+              <div className="notes-editor-shell">
+                <Editor
+                  path={`panepilot-notes/${project.id}/${note.path}`}
+                  language="markdown"
+                  theme="vs-dark"
+                  value={draft}
+                  onChange={(value) => setDraft(value ?? '')}
+                  onMount={(editor) => {
+                    editor.addCommand(
+                      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+                      () => saveRef.current()
+                    )
+                    finderActionRef.current?.dispose()
+                    if (project.connectionId === 'local') {
+                      finderActionRef.current = addShowInFinderAction(
+                        editor,
+                        showActiveNoteInFinder
+                      )
+                    }
+                    editor.focus()
+                  }}
+                  options={{
+                    automaticLayout: true,
+                    minimap: { enabled: false },
+                    fontFamily: '"SFMono-Regular", "Cascadia Code", monospace',
+                    fontSize: 13,
+                    lineHeight: 21,
+                    padding: { top: 18, bottom: 18 },
+                    scrollBeyondLastLine: false,
+                    smoothScrolling: true,
+                    wordWrap: 'on',
+                    wrappingIndent: 'same'
+                  }}
+                />
+              </div>
+            )}
             <footer className="notes-footer">
-              <span>⌘S to save</span>
+              <span>
+                {viewMode === 'source'
+                  ? '⌘S to save'
+                  : dirty
+                    ? 'Previewing unsaved changes'
+                    : 'Rendered Markdown'}
+              </span>
               <span>
                 {new TextEncoder().encode(draft).length.toLocaleString()} bytes · 1 MB maximum
               </span>

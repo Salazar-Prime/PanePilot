@@ -96,14 +96,15 @@ The check is read-only and cached briefly.
 
 ## Markdown preview
 
-Markdown files open in a rendered **Preview** in the Files workspace, with **Source**
-available beside it for the Monaco view. Choosing **Edit** moves directly to Source;
-while editing, Preview renders the current unsaved draft so formatting can be checked
-before saving. The renderer follows GitHub Flavored Markdown for tables, task lists,
-strikethrough, autolinks, fenced code, heading links, and GitHub-style alerts. Relative
-links open the target inside the project, relative images are loaded through PanePilot's
-bounded local/SSH file preview, and web links open in the system browser. Raw HTML is
-sanitized before rendering.
+Markdown files open in a rendered **Preview** in both the Files workspace and project
+Notes, with **Source** available beside it for the Monaco view. Choosing **Edit** in
+Files moves directly to Source; while editing, Preview renders the current unsaved
+draft so formatting can be checked before saving. The renderer follows GitHub
+Flavored Markdown for tables, task lists, strikethrough, autolinks, fenced code,
+heading links, and GitHub-style alerts. Relative links open the target inside the
+project, relative images are loaded through PanePilot's bounded local/SSH file
+preview, and web links open in the system browser. Raw HTML is sanitized before
+rendering.
 
 The Files explorer toolbar can create an empty file or folder in the current
 directory. Right-click an explorer entry for copy-path, rename, download, or nested

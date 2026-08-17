@@ -419,7 +419,11 @@ export function LatexProjectWorkspace({
         className={`workspace-panel-cache ${tab === 'notes' ? 'active' : ''}`}
         aria-hidden={tab !== 'notes'}
       >
-        <NotesPanel key={project.id} project={project} />
+        <NotesPanel
+          key={project.id}
+          project={project}
+          onOpenFile={openFile}
+        />
       </div>
       <div
         className={`workspace-panel-cache ${tab === 'files' ? 'active' : ''}`}
