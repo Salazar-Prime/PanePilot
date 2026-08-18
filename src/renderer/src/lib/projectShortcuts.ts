@@ -30,6 +30,7 @@ export interface ShortcutOverlayGestureResult {
   state: ShortcutOverlayGestureState
   recognized: boolean
   triggered: boolean
+  shouldConsume: boolean
 }
 
 interface ProjectShortcutsOptions {
@@ -68,13 +69,15 @@ export function advanceShortcutOverlayGesture(
       return {
         state,
         recognized: false,
-        triggered: false
+        triggered: false,
+        shouldConsume: false
       }
     }
     return {
       state: { count: 0, lastTapAt: 0 },
       recognized: false,
-      triggered: false
+      triggered: false,
+      shouldConsume: false
     }
   }
 
@@ -87,7 +90,8 @@ export function advanceShortcutOverlayGesture(
   return {
     state: triggered ? { count: 0, lastTapAt: 0 } : { count, lastTapAt: now },
     recognized: true,
-    triggered
+    triggered,
+    shouldConsume: count > 1
   }
 }
 
@@ -214,8 +218,10 @@ export function useProjectShortcuts(
           overlayGestureRef.current = { count: 0, lastTapAt: 0 }
           return
         }
-        event.preventDefault()
-        event.stopPropagation()
+        if (overlayGesture.shouldConsume) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
         if (overlayGesture.triggered) {
           if (!open) announceShortcutOwner(rootRef.current)
           setOpen(!open)

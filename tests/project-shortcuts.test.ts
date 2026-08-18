@@ -57,12 +57,21 @@ describe('project keyboard shortcuts', () => {
     const second = advanceShortcutOverlayGesture(event, first.state, 500)
     const third = advanceShortcutOverlayGesture(event, second.state, 900)
 
-    expect(first).toMatchObject({ recognized: true, triggered: false })
-    expect(second).toMatchObject({ recognized: true, triggered: false })
+    expect(first).toMatchObject({
+      recognized: true,
+      triggered: false,
+      shouldConsume: false
+    })
+    expect(second).toMatchObject({
+      recognized: true,
+      triggered: false,
+      shouldConsume: true
+    })
     expect(third).toEqual({
       state: { count: 0, lastTapAt: 0 },
       recognized: true,
-      triggered: true
+      triggered: true,
+      shouldConsume: true
     })
   })
 
@@ -87,12 +96,14 @@ describe('project keyboard shortcuts', () => {
 
     expect(expired).toMatchObject({
       state: { count: 1, lastTapAt: 1_301 },
-      triggered: false
+      triggered: false,
+      shouldConsume: false
     })
     expect(interrupted).toEqual({
       state: { count: 0, lastTapAt: 0 },
       recognized: false,
-      triggered: false
+      triggered: false,
+      shouldConsume: false
     })
   })
 
@@ -116,9 +127,13 @@ describe('project keyboard shortcuts', () => {
     expect(shift).toMatchObject({
       state: first.state,
       recognized: false,
-      triggered: false
+      triggered: false,
+      shouldConsume: false
     })
-    expect(second.state.count).toBe(2)
+    expect(second).toMatchObject({
+      state: { count: 2 },
+      shouldConsume: true
+    })
   })
 
   it('uses the shifted split key to swap workspace panes', () => {

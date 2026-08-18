@@ -69,7 +69,8 @@ export function ProjectShortcutGuide({
       )}
       <footer>
         <span>
-          hold <kbd>Ctrl</kbd> · tap <kbd>?</kbd> three times to toggle
+          hold <kbd>Ctrl</kbd> · tap <kbd>?</kbd> three times to toggle · first
+          tap passes through
         </span>
         <span>
           <kbd>{primary}1–9</kbd> jump directly

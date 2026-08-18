@@ -162,9 +162,11 @@ Monaco text—between Compact (90%), Standard (100%), Comfortable (110%), and La
 (125%). The client-local choice survives restarts. Command/Control with plus or minus
 steps through those sizes; Command/Control-0 resets to Standard.
 
-Press **Command-/** (or **Control-/**) to reveal the focused project's keyboard
-KeyTips. While they are visible, use `T` for terminals, `A` for Actions, `Q` for
-project Q&A, `N` for Notes, `F` for Files, `C` for chat history, and `H` for Activity.
+Hold **Control** and tap **?** three times to reveal the focused project's keyboard
+KeyTips. The first tap passes through to the focused terminal or editor; the second
+and third are consumed, so completing the gesture sends only one Control-? input to
+the terminal. While KeyTips are visible, use `T` for terminals, `A` for Actions, `Q`
+for project Q&A, `N` for Notes, `F` for Files, `C` for chat history, and `H` for Activity.
 LaTeX projects also use `M` for Manuscript and `P` for PDF. Number keys select the
 shown terminal or chat tabs. Without opening KeyTips, **Command/Control-1–9** jumps
 directly to a tab and **Command/Control-Shift-[ / ]** cycles tabs. Only the focused
@@ -195,6 +197,6 @@ Click a project's sidebar glyph to replace its initial with one Unicode symbol
 or emoji. In split view, violet on the glyph's left half marks the left pane and
 teal on its right half marks the right pane. The larger project name in the top
 bar is followed by a dotted-underlined path; click that path to copy it. The
-keyboard shortcut overlay remains available with **Command/Control-/** even
-though the visible Shortcuts and Command Palette buttons are intentionally
-omitted. Press **Escape** to dismiss the topmost open modal.
+keyboard shortcut overlay remains available by holding **Control** and tapping
+**?** three times even though the visible Shortcuts and Command Palette buttons
+are intentionally omitted. Press **Escape** to dismiss the topmost open modal.
