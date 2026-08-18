@@ -157,8 +157,11 @@ export interface CreateProjectBaseInput {
   name: string
   connectionId: string
   folder: string
+  newFolderName?: string
   repositoryUrl?: string
 }
+
+export type ProjectFolderSelectionPurpose = 'project' | 'parent'
 
 export type CreateProjectInput =
   | (CreateProjectBaseInput & {
@@ -490,7 +493,7 @@ export interface ProjectConsoleApi {
     restore(projectId: string): Promise<void>
     delete(projectId: string): Promise<void>
     updateRepository(projectId: string, url: string | null): Promise<void>
-    chooseFolder(): Promise<string | null>
+    chooseFolder(purpose?: ProjectFolderSelectionPurpose): Promise<string | null>
     openRepository(url: string): Promise<void>
   }
   git: {

@@ -1,4 +1,5 @@
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, realpathSync, statSync } from 'node:fs'
+import { posix, resolve } from 'node:path'
 import type {
   Connection,
   CreateProjectInput,
@@ -6,64 +7,166 @@ import type {
   ProjectType
 } from '../shared/types'
 import { discoverRepository } from './git'
-import { previewLocalFile } from './file-service'
+import {
+  createLocalDirectory,
+  createLocalFile,
+  previewLocalFile,
+  writeLocalFile
+} from './file-service'
 import {
   normalizeOptionalWebUrl,
   normalizeProjectRelativePath
 } from './latex-paths'
-import { listRemoteFolders, previewRemoteFile } from './remote-file-service'
+import {
+  createRemoteDirectory,
+  createRemoteFile,
+  listRemoteFolders,
+  previewRemoteFile,
+  writeRemoteFileAsync
+} from './remote-file-service'
 import type { Store } from './store'
 
 export interface ProjectTypeService {
   type: ProjectType
-  create(store: Store, input: CreateProjectInput, connection: Connection): Project
+  create(
+    store: Store,
+    input: CreateProjectInput,
+    connection: Connection
+  ): Promise<Project>
 }
 
-function validateBase(input: CreateProjectInput, connection: Connection): string {
+interface ResolvedProjectFolder {
+  folder: string
+  created: boolean
+}
+
+const STARTER_LATEX_DOCUMENT = String.raw`\documentclass{article}
+
+\begin{document}
+
+\end{document}
+`
+
+function validateBaseInput(input: CreateProjectInput): void {
   if (!input.name.trim()) throw new Error('Project name is required.')
   if (!input.folder.trim()) throw new Error('Project folder is required.')
+  if (input.newFolderName != null && !input.newFolderName.trim()) {
+    throw new Error('New folder name is required.')
+  }
+}
+
+async function resolveProjectFolder(
+  input: CreateProjectInput,
+  connection: Connection
+): Promise<ResolvedProjectFolder> {
   const folder = input.folder.trim()
+  const newFolderName = input.newFolderName?.trim()
   if (connection.kind === 'local') {
     if (!existsSync(folder) || !statSync(folder).isDirectory()) {
-      throw new Error('Choose an existing local folder.')
+      throw new Error(
+        newFolderName
+          ? 'Choose an existing local parent folder.'
+          : 'Choose an existing local folder.'
+      )
     }
-    return folder
+    if (!newFolderName) return { folder, created: false }
+    const createdPath = createLocalDirectory(folder, '.', newFolderName)
+    return {
+      folder: realpathSync(resolve(folder, createdPath)),
+      created: true
+    }
   }
   if (!connection.sshAlias) throw new Error('The SSH connection has no alias.')
-  return listRemoteFolders(connection.sshAlias, folder).currentPath
+  const parent = listRemoteFolders(connection.sshAlias, folder).currentPath
+  if (!newFolderName) return { folder: parent, created: false }
+  const createdPath = await createRemoteDirectory(
+    connection.sshAlias,
+    parent,
+    '.',
+    newFolderName
+  )
+  return {
+    folder: listRemoteFolders(
+      connection.sshAlias,
+      posix.join(parent, createdPath)
+    ).currentPath,
+    created: true
+  }
 }
 
 function repositoryFor(
-  input: CreateProjectInput,
+  explicitRepository: string | null,
   connection: Connection,
   folder: string
 ): string | null {
   return (
-    normalizeOptionalWebUrl(input.repositoryUrl, 'Repository URL') ??
+    explicitRepository ??
     (connection.kind === 'local' ? discoverRepository(folder) : null)
+  )
+}
+
+async function createStarterLatexFile(
+  connection: Connection,
+  folder: string,
+  mainFile: string
+): Promise<void> {
+  const parts = mainFile.split('/')
+  const fileName = parts.pop()!
+  let parentPath = '.'
+  for (const part of parts) {
+    if (connection.kind === 'local') {
+      parentPath = createLocalDirectory(folder, parentPath, part)
+    } else {
+      if (!connection.sshAlias) throw new Error('The SSH connection has no alias.')
+      parentPath = await createRemoteDirectory(
+        connection.sshAlias,
+        folder,
+        parentPath,
+        part
+      )
+    }
+  }
+
+  if (connection.kind === 'local') {
+    createLocalFile(folder, parentPath, fileName)
+    writeLocalFile(folder, mainFile, STARTER_LATEX_DOCUMENT)
+    return
+  }
+  if (!connection.sshAlias) throw new Error('The SSH connection has no alias.')
+  await createRemoteFile(connection.sshAlias, folder, parentPath, fileName)
+  await writeRemoteFileAsync(
+    connection.sshAlias,
+    folder,
+    mainFile,
+    STARTER_LATEX_DOCUMENT
   )
 }
 
 const terminalProjectService: ProjectTypeService = {
   type: 'terminal',
-  create(store, input, connection) {
+  async create(store, input, connection) {
     if (input.type !== 'terminal') throw new Error('Invalid terminal project settings.')
-    const folder = validateBase(input, connection)
+    validateBaseInput(input)
+    const explicitRepository = normalizeOptionalWebUrl(
+      input.repositoryUrl,
+      'Repository URL'
+    )
+    const { folder } = await resolveProjectFolder(input, connection)
     return store.createProject({
       type: 'terminal',
       name: input.name.trim(),
       connectionId: input.connectionId,
       folder,
-      repositoryUrl: repositoryFor(input, connection, folder)
+      repositoryUrl: repositoryFor(explicitRepository, connection, folder)
     })
   }
 }
 
 const latexProjectService: ProjectTypeService = {
   type: 'latex',
-  create(store, input, connection) {
+  async create(store, input, connection) {
     if (input.type !== 'latex') throw new Error('Invalid LaTeX project settings.')
-    const folder = validateBase(input, connection)
+    validateBaseInput(input)
     const mainFile = normalizeProjectRelativePath(
       input.latex.mainFile || 'main.tex',
       'Main LaTeX file',
@@ -74,6 +177,12 @@ const latexProjectService: ProjectTypeService = {
       'Context folder'
     )
     const overleafUrl = normalizeOptionalWebUrl(input.latex.overleafUrl, 'Overleaf URL')
+    const explicitRepository = normalizeOptionalWebUrl(
+      input.repositoryUrl,
+      'Repository URL'
+    )
+    const { folder, created } = await resolveProjectFolder(input, connection)
+    if (created) await createStarterLatexFile(connection, folder, mainFile)
     let preview
     try {
       preview =
@@ -95,7 +204,7 @@ const latexProjectService: ProjectTypeService = {
       name: input.name.trim(),
       connectionId: input.connectionId,
       folder,
-      repositoryUrl: repositoryFor(input, connection, folder),
+      repositoryUrl: repositoryFor(explicitRepository, connection, folder),
       latex: { mainFile, overleafUrl, contextFolder }
     })
   }

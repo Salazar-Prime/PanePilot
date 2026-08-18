@@ -14,6 +14,7 @@ import type {
   CreateProjectInput,
   CreateProjectActionInput,
   LatexChatMode,
+  ProjectFolderSelectionPurpose,
   SynthesizeSpeechInput,
   StartLatexChatInput,
   StartTerminalInput,
@@ -131,14 +132,20 @@ function registerIpc(): void {
     return testSshConnection(connection.sshAlias)
   })
   ipcMain.handle('projects:list', () => store.listProjects())
-  ipcMain.handle('projects:choose-folder', async () => {
+  ipcMain.handle('projects:choose-folder', async (_event, rawPurpose?: unknown) => {
+    const purpose: ProjectFolderSelectionPurpose =
+      rawPurpose === 'parent' ? 'parent' : 'project'
     const result = await dialog.showOpenDialog(mainWindow!, {
-      title: 'Choose a project folder',
+      title:
+        purpose === 'parent'
+          ? 'Choose where to create the new project folder'
+          : 'Choose a project folder',
+      buttonLabel: purpose === 'parent' ? 'Choose Location' : 'Choose Project',
       properties: ['openDirectory', 'createDirectory']
     })
     return result.canceled ? null : result.filePaths[0]
   })
-  ipcMain.handle('projects:create', (_event, input: CreateProjectInput) => {
+  ipcMain.handle('projects:create', async (_event, input: CreateProjectInput) => {
     const connection = store.getConnection(input.connectionId)
     if (!connection) throw new Error('Choose a valid connection.')
     const service = projectTypeServices.get(input.type)

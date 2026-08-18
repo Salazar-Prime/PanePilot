@@ -2953,6 +2953,89 @@ select:focus-visible {
   font-size: 9px;
 }
 
+.project-folder-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin: 14px 0 2px;
+}
+
+.project-folder-mode button {
+  display: flex;
+  min-width: 0;
+  min-height: 55px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  color: #78818f;
+  border: 1px solid #29303b;
+  border-radius: 8px;
+  background: #0d1016;
+  text-align: left;
+}
+
+.project-folder-mode button:hover {
+  color: #cbd0da;
+  border-color: #3a4350;
+}
+
+.project-folder-mode button.selected {
+  color: #cbd3ff;
+  border-color: #5566ad;
+  background: #181d31;
+  box-shadow: inset 0 0 0 1px #5869b333;
+}
+
+.project-folder-mode button > svg {
+  flex: 0 0 auto;
+}
+
+.project-folder-mode button > span,
+.new-project-folder-preview > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.project-folder-mode strong {
+  color: inherit;
+  font-size: 9px;
+}
+
+.project-folder-mode small {
+  color: #5f6876;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.new-project-folder-preview {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  margin: -4px 0 3px;
+  padding: 9px 10px;
+  color: #8fa0f1;
+  border-left: 2px solid #6f82e5;
+  border-radius: 2px 7px 7px 2px;
+  background: linear-gradient(90deg, #171d31 0%, #10141e 72%);
+}
+
+.new-project-folder-preview small {
+  color: #6d7685;
+  font-size: 8px;
+}
+
+.new-project-folder-preview code {
+  overflow: hidden;
+  color: #b8c0d1;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .remote-folder-browser {
   margin: -3px 0 14px;
   overflow: hidden;

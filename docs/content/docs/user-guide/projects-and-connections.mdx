@@ -36,9 +36,16 @@ its location.
 
 ## Local and remote creation
 
-Local creation uses the operating system's directory chooser and rejects paths that are
-not existing directories. Remote creation starts in the SSH user's home directory,
-shows subdirectories, follows canonical paths, and stores the selected remote path.
+Local and remote creation can attach an existing folder or create one new folder under
+an existing parent. Local parent selection uses the operating system's directory
+chooser. Remote selection starts in the SSH user's home directory and shows
+subdirectories. In both cases, the new folder accepts one validated name, refuses an
+existing destination, and supplies the default editable project name. PanePilot shows
+the final destination before creating it. New LaTeX folders also receive the configured
+main `.tex` file with a minimal document.
+
+Remote paths are canonicalized before they are stored. Creating a folder on an SSH
+connection uses the same bounded remote file operation as the Files workspace.
 
 The remote browser requires `python3` on the host. PanePilot sends a small base64-wrapped
 Python script over SSH and exchanges JSON over standard input and output.

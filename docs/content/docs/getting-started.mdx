@@ -40,9 +40,15 @@ node scripts/prepare-node-pty.mjs
 
 1. Choose **New project**.
 2. Keep **This Mac** selected.
-3. Choose an existing folder.
-4. Accept the folder-derived project name or enter a different display name.
+3. Choose **Use existing folder** and select a project folder, or choose **Create new
+   folder**, select its parent location, and enter one folder name.
+4. Accept the folder-derived project name or enter a different display name. For a new
+   folder, its name becomes the default project name.
 5. Create the project.
+
+PanePilot previews a new folder's final path and refuses existing destinations. Folder
+names are single names, not paths, so separators and traversal are rejected. A new
+LaTeX project also receives its configured main `.tex` file with a minimal document.
 
 The project receives a stable UUID independent of its name. Renaming the project later
 does not change its folder, connection, terminal identities, or history.
@@ -85,7 +91,8 @@ Restart PanePilot after changing SSH config, then:
 
 1. Choose **New project**.
 2. Select `buildbox`.
-3. Browse from the remote home directory to the project folder.
+3. Browse from the remote home directory to an existing project folder, or select the
+   parent directory where PanePilot should create a new folder.
 4. Create the project.
 
 Remote browsing is intentionally performed on the SSH host; it does not open the local

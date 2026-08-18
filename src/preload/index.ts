@@ -6,6 +6,7 @@ import type {
   CreateProjectActionInput,
   LatexChatMode,
   ProjectConsoleApi,
+  ProjectFolderSelectionPurpose,
   SynthesizeSpeechInput,
   StartLatexChatInput,
   StartTerminalInput,
@@ -36,7 +37,8 @@ const api: ProjectConsoleApi = {
     delete: (projectId: string) => ipcRenderer.invoke('projects:delete', projectId),
     updateRepository: (projectId: string, url: string | null) =>
       ipcRenderer.invoke('projects:update-repository', projectId, url),
-    chooseFolder: () => ipcRenderer.invoke('projects:choose-folder'),
+    chooseFolder: (purpose?: ProjectFolderSelectionPurpose) =>
+      ipcRenderer.invoke('projects:choose-folder', purpose),
     openRepository: (url: string) => ipcRenderer.invoke('projects:open-repository', url)
   },
   git: {

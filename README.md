@@ -63,6 +63,15 @@ npm run typecheck
 npm run build
 ```
 
+## Create a project
+
+The New Project dialog can attach an existing folder or create a new one on the
+selected local or SSH connection. For a new folder, choose its parent location and
+enter one folder name. PanePilot previews the final path and uses that folder name as
+the default project name; the project name remains editable. Creation refuses path
+separators and existing destinations rather than overwriting them. A new LaTeX
+project also receives a minimal configured main `.tex` file.
+
 ## Current agent status tracking
 
 Codex terminals expose `run-state` and `task-progress` through the tmux pane title so

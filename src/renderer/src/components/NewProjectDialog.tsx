@@ -4,6 +4,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  FolderPlus,
   Github,
   Laptop,
   Link2,
@@ -20,6 +21,11 @@ import type {
 } from '@shared/types'
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { useModalEscape } from '../lib/modalEscape'
+import {
+  newProjectFolderDestination,
+  type ProjectFolderMode,
+  suggestedProjectName
+} from '../lib/projectCreation'
 
 interface Props {
   connections: Connection[]
@@ -42,7 +48,10 @@ export function NewProjectDialog({
   const [connectionId, setConnectionId] = useState(
     initialConnectionId ?? connections[0]?.id ?? 'local'
   )
+  const [folderMode, setFolderMode] =
+    useState<ProjectFolderMode>('existing')
   const [folder, setFolder] = useState('')
+  const [newFolderName, setNewFolderName] = useState('')
   const [repositoryUrl, setRepositoryUrl] = useState('')
   const [mainFile, setMainFile] = useState('main.tex')
   const [contextFolder, setContextFolder] = useState('context')
@@ -53,14 +62,14 @@ export function NewProjectDialog({
   const [remoteLoading, setRemoteLoading] = useState(false)
   const connection = connections.find((item) => item.id === connectionId)
   const definition = projectTypeRegistry[type]
+  const folderDestination = newProjectFolderDestination(folder, newFolderName)
   useModalEscape(onClose, true, submitting)
 
   useEffect(() => {
-    if (!nameEdited && folder) {
-      const parts = folder.replace(/\/+$/, '').split('/')
-      setName(parts.at(-1) ?? '')
+    if (!nameEdited) {
+      setName(suggestedProjectName(folderMode, folder, newFolderName))
     }
-  }, [folder, nameEdited])
+  }, [folder, folderMode, nameEdited, newFolderName])
 
   useEffect(() => {
     if (connection?.kind !== 'ssh') {
@@ -71,7 +80,9 @@ export function NewProjectDialog({
   }, [connectionId])
 
   async function chooseFolder() {
-    const selected = await window.projectConsole.projects.chooseFolder()
+    const selected = await window.projectConsole.projects.chooseFolder(
+      folderMode === 'new' ? 'parent' : 'project'
+    )
     if (selected) setFolder(selected)
   }
 
@@ -95,9 +106,11 @@ export function NewProjectDialog({
     setError('')
     try {
       const base = {
-        name,
+        name: name.trim(),
         connectionId,
-        folder,
+        folder: folder.trim(),
+        newFolderName:
+          folderMode === 'new' ? newFolderName.trim() : undefined,
         repositoryUrl: repositoryUrl.trim() || undefined
       }
       const input: CreateProjectInput =
@@ -167,6 +180,7 @@ export function NewProjectDialog({
               onChange={(event) => {
                 setConnectionId(event.target.value)
                 setFolder('')
+                setNewFolderName('')
                 setName('')
                 setNameEdited(false)
                 setRemoteListing(null)
@@ -193,13 +207,58 @@ export function NewProjectDialog({
             </div>
           </div>
 
+          <div
+            className="project-folder-mode"
+            role="group"
+            aria-label="Project folder setup"
+          >
+            <button
+              type="button"
+              className={folderMode === 'existing' ? 'selected' : ''}
+              aria-pressed={folderMode === 'existing'}
+              onClick={() => {
+                setFolderMode('existing')
+                setError('')
+              }}
+            >
+              <FolderOpen size={17} />
+              <span>
+                <strong>Use existing folder</strong>
+                <small>Attach a folder that already exists</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={folderMode === 'new' ? 'selected' : ''}
+              aria-pressed={folderMode === 'new'}
+              onClick={() => {
+                setFolderMode('new')
+                setError('')
+              }}
+            >
+              <FolderPlus size={17} />
+              <span>
+                <strong>Create new folder</strong>
+                <small>Choose a location, then name the folder</small>
+              </span>
+            </button>
+          </div>
+
           <label className="field">
-            <span>Project folder</span>
+            <span>{folderMode === 'new' ? 'Create inside' : 'Project folder'}</span>
             <div className="field-row">
               <input
                 value={folder}
                 onChange={(event) => setFolder(event.target.value)}
-                placeholder={connection?.kind === 'ssh' ? '/home/you/project' : 'Choose a folder'}
+                placeholder={
+                  connection?.kind === 'ssh'
+                    ? folderMode === 'new'
+                      ? '/home/you/projects'
+                      : '/home/you/project'
+                    : folderMode === 'new'
+                      ? 'Choose a parent folder'
+                      : 'Choose a folder'
+                }
                 autoFocus
               />
               <button
@@ -213,8 +272,10 @@ export function NewProjectDialog({
                 disabled={connection?.kind === 'ssh' && remoteLoading}
                 title={
                   connection?.kind === 'ssh'
-                    ? 'Browse the entered remote path'
-                    : 'Choose a local folder'
+                    ? `Browse the entered remote ${folderMode === 'new' ? 'parent ' : ''}path`
+                    : folderMode === 'new'
+                      ? 'Choose where to create the folder'
+                      : 'Choose a local folder'
                 }
               >
                 <FolderOpen size={17} />
@@ -254,9 +315,32 @@ export function NewProjectDialog({
               </div>
               <small>
                 Browse folders or type an absolute path above. The entered path
-                will be used when the project is created.
+                {folderMode === 'new'
+                  ? ' will contain the new project folder.'
+                  : ' will be used when the project is created.'}
               </small>
             </div>
+          )}
+
+          {folderMode === 'new' && (
+            <>
+              <label className="field">
+                <span>New folder name</span>
+                <input
+                  value={newFolderName}
+                  onChange={(event) => setNewFolderName(event.target.value)}
+                  placeholder="my-project"
+                  maxLength={255}
+                />
+              </label>
+              <div className="new-project-folder-preview">
+                <FolderPlus size={16} />
+                <span>
+                  <small>New project location</small>
+                  <code>{folderDestination || 'Choose a location and folder name'}</code>
+                </span>
+              </div>
+            </>
           )}
 
           <label className="field">
@@ -292,8 +376,11 @@ export function NewProjectDialog({
                 </label>
               </div>
               <p className="form-help">
-                Paths are relative to the project folder. The context folder is optional and may
-                contain notes, sources, and reference material for attached agents.
+                Paths are relative to the project folder. The context folder is
+                optional and may contain notes, sources, and reference material
+                for attached agents.
+                {folderMode === 'new' &&
+                  ' PanePilot creates the configured main file with a minimal LaTeX document.'}
               </p>
               <label className="field">
                 <span>
@@ -326,7 +413,13 @@ export function NewProjectDialog({
             </button>
             <button
               className="primary-button"
-              disabled={submitting || !name || !folder || (type === 'latex' && !mainFile)}
+              disabled={
+                submitting ||
+                !name.trim() ||
+                !folder.trim() ||
+                (folderMode === 'new' && !newFolderName.trim()) ||
+                (type === 'latex' && !mainFile.trim())
+              }
             >
               {submitting ? 'Creating…' : `Create ${definition.label} project`}
             </button>
