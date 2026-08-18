@@ -405,7 +405,11 @@ export function ManagedTerminal({
     )
 
   return (
-    <div className="managed-terminal" data-speech-terminal-id={session.id}>
+    <div
+      className="managed-terminal"
+      data-speech-terminal-id={session.id}
+      data-terminal-session-id={session.id}
+    >
       <div
         className="terminal-host"
         ref={hostRef}

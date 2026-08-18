@@ -6,7 +6,8 @@ import {
   isShortcutOverlayTap,
   keyTipActionKey,
   keyTipSessionIndex,
-  sessionCycleDirection
+  sessionCycleDirection,
+  terminalInputForShortcutOverlayTap
 } from '../src/renderer/src/lib/projectShortcuts'
 
 function keyEvent(overrides: Partial<{
@@ -44,6 +45,24 @@ describe('project keyboard shortcuts', () => {
       isShortcutOverlayTap(keyEvent({ key: '/', code: 'Slash', ctrlKey: true }))
     ).toBe(true)
     expect(isShortcutOverlayTap(keyEvent({ key: '?', code: 'Slash' }))).toBe(false)
+  })
+
+  it('maps the first terminal tap to the standard control byte', () => {
+    expect(
+      terminalInputForShortcutOverlayTap(
+        keyEvent({ key: '?', code: 'Slash', ctrlKey: true, shiftKey: true })
+      )
+    ).toBe('\x7f')
+    expect(
+      terminalInputForShortcutOverlayTap(
+        keyEvent({ key: '/', code: 'Slash', ctrlKey: true })
+      )
+    ).toBe('\x1f')
+    expect(
+      terminalInputForShortcutOverlayTap(
+        keyEvent({ key: '?', code: 'Slash', shiftKey: true })
+      )
+    ).toBeNull()
   })
 
   it('opens help after three timely question-mark taps and then resets', () => {

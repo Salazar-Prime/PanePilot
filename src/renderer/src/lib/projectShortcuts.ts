@@ -59,6 +59,13 @@ export function isShortcutOverlayTap(event: ShortcutEvent): boolean {
   )
 }
 
+export function terminalInputForShortcutOverlayTap(
+  event: ShortcutEvent
+): string | null {
+  if (!isShortcutOverlayTap(event)) return null
+  return event.shiftKey || event.key === '?' ? '\x7f' : '\x1f'
+}
+
 export function advanceShortcutOverlayGesture(
   event: ShortcutEvent,
   state: ShortcutOverlayGestureState,
@@ -218,7 +225,16 @@ export function useProjectShortcuts(
           overlayGestureRef.current = { count: 0, lastTapAt: 0 }
           return
         }
-        if (overlayGesture.shouldConsume) {
+        const terminalSessionId = overlayGesture.shouldConsume
+          ? null
+          : terminalSessionIdForTarget(event.target, rootRef.current)
+        const terminalInput = terminalInputForShortcutOverlayTap(event)
+        if (terminalSessionId && terminalInput) {
+          void window.projectConsole.terminals
+            .write(terminalSessionId, terminalInput)
+            .catch(() => undefined)
+        }
+        if (overlayGesture.shouldConsume || terminalSessionId) {
           event.preventDefault()
           event.stopPropagation()
         }
@@ -323,4 +339,14 @@ function isActiveProjectWorkspace(root: HTMLDivElement | null): boolean {
     '.workspace-pane.focused .project-workspace'
   )
   return focused ? focused === root : workspaces[0] === root
+}
+
+function terminalSessionIdForTarget(
+  target: EventTarget | null,
+  root: HTMLDivElement | null
+): string | null {
+  if (!(target instanceof Element) || !root) return null
+  const terminal = target.closest<HTMLElement>('[data-terminal-session-id]')
+  if (!terminal || !root.contains(terminal)) return null
+  return terminal.dataset.terminalSessionId || null
 }
