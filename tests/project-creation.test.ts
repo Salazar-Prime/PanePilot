@@ -1,10 +1,12 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
-  rmSync
+  rmSync,
+  writeFileSync
 } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -85,6 +87,50 @@ describe('new project folder creation', () => {
       expect(project.folder).toBe(realpathSync(join(parent, 'fresh-project')))
       expect(existsSync(project.folder)).toBe(true)
     } finally {
+      store.close()
+    }
+  })
+
+  it('creates a new folder through the selected SSH connection', async () => {
+    const { root, store } = createStore()
+    const parent = join(root, 'remote-projects')
+    const bin = join(root, 'bin')
+    const ssh = join(bin, 'ssh')
+    const originalPath = process.env.PATH
+    mkdirSync(parent)
+    mkdirSync(bin)
+    writeFileSync(
+      ssh,
+      `#!/bin/sh
+for panepilot_argument in "$@"; do
+  panepilot_command="$panepilot_argument"
+done
+exec /bin/sh -c "$panepilot_command"
+`
+    )
+    chmodSync(ssh, 0o755)
+    process.env.PATH = `${bin}:${originalPath ?? ''}`
+    store.syncConnections(['test-remote'])
+    const connection = store.getConnection('ssh:test-remote')!
+
+    try {
+      const project = await projectTypeServices.get('terminal')!.create(
+        store,
+        {
+          type: 'terminal',
+          name: 'Remote project',
+          connectionId: connection.id,
+          folder: parent,
+          newFolderName: 'remote-project'
+        },
+        connection
+      )
+
+      expect(project.folder).toBe(realpathSync(join(parent, 'remote-project')))
+      expect(existsSync(project.folder)).toBe(true)
+    } finally {
+      if (originalPath == null) delete process.env.PATH
+      else process.env.PATH = originalPath
       store.close()
     }
   })

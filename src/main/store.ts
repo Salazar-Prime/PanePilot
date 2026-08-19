@@ -632,6 +632,7 @@ export class Store {
     this.ensureColumn('terminal_sessions', 'flagged', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('activities', 'session_id', 'TEXT')
     this.ensureColumn('activities', 'message', `TEXT NOT NULL DEFAULT ''`)
+    this.ensureActivityDeleteCascades()
 
     const connectionColumns = this.tableColumns('connections')
     const sessionColumns = this.tableColumns('terminal_sessions')
@@ -758,6 +759,57 @@ export class Store {
         FROM agent_events;
         DROP TABLE agent_events;
         ALTER TABLE agent_events_with_delete_cascade RENAME TO agent_events;
+      `)
+    })
+  }
+
+  private ensureActivityDeleteCascades(): void {
+    const foreignKeys = this.db
+      .prepare('PRAGMA foreign_key_list(activities)')
+      .all() as Array<{
+      table: string
+      from: string
+      on_delete: string
+    }>
+    const cascadesWithProject = foreignKeys.some(
+      (foreignKey) =>
+        foreignKey.table === 'projects' &&
+        foreignKey.from === 'project_id' &&
+        foreignKey.on_delete.toUpperCase() === 'CASCADE'
+    )
+    const cascadesWithSession = foreignKeys.some(
+      (foreignKey) =>
+        foreignKey.table === 'terminal_sessions' &&
+        foreignKey.from === 'session_id' &&
+        foreignKey.on_delete.toUpperCase() === 'CASCADE'
+    )
+    if (cascadesWithProject && cascadesWithSession) return
+
+    this.inTransaction(() => {
+      this.db.exec(`
+        CREATE TABLE activities_with_delete_cascades (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          session_id TEXT REFERENCES terminal_sessions(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL,
+          message TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO activities_with_delete_cascades
+          (id, project_id, session_id, kind, message, created_at)
+        SELECT activity.id, activity.project_id,
+               CASE
+                 WHEN activity.session_id IS NULL THEN NULL
+                 WHEN EXISTS (
+                   SELECT 1 FROM terminal_sessions session
+                   WHERE session.id = activity.session_id
+                 ) THEN activity.session_id
+                 ELSE NULL
+               END,
+               activity.kind, activity.message, activity.created_at
+        FROM activities activity;
+        DROP TABLE activities;
+        ALTER TABLE activities_with_delete_cascades RENAME TO activities;
       `)
     })
   }

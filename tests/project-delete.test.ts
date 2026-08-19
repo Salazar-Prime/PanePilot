@@ -48,6 +48,21 @@ describe('archived project deletion', () => {
     const databasePath = join(appDataPath, 'project-console.sqlite')
     const legacyDatabase = new DatabaseSync(databasePath)
     legacyDatabase.exec(`
+      ALTER TABLE activities RENAME TO activities_with_cascade;
+      CREATE TABLE activities (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        session_id TEXT,
+        kind TEXT NOT NULL,
+        message TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO activities
+        (id, project_id, session_id, kind, message, created_at)
+      SELECT id, project_id, session_id, kind, message, created_at
+      FROM activities_with_cascade;
+      DROP TABLE activities_with_cascade;
+
       DROP TABLE agent_events;
       CREATE TABLE agent_events (
         id TEXT PRIMARY KEY,
