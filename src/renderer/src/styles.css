@@ -3037,48 +3037,134 @@ select:focus-visible {
 }
 
 .remote-folder-browser {
-  margin: -3px 0 14px;
   overflow: hidden;
-  border: 1px solid #2a303b;
-  border-radius: 8px;
-  background: #0b0d12;
+  border: 1px solid #303746;
+  border-radius: 9px;
+  background: #090c11;
+  box-shadow: inset 3px 0 0 #7183e6;
 }
 
-.remote-folder-heading {
-  display: flex;
-  height: 34px;
+.remote-project-folder-field {
+  margin-top: 16px;
+}
+
+.remote-folder-pathbar {
+  display: grid;
+  min-height: 42px;
   align-items: center;
-  gap: 7px;
-  padding: 0 10px;
-  color: #7788e4;
-  border-bottom: 1px solid #242a33;
-  background: #11141b;
+  padding: 0 7px 0 12px;
+  color: #7f91ed;
+  border-bottom: 1px solid #252c37;
+  background: #10141b;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
 }
 
-.remote-folder-heading span {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: #9aa1ad;
+.remote-folder-pathbar input {
+  width: 100%;
+  height: 30px;
+  padding: 0 4px;
+  color: #d6dbea;
+  border: 0;
+  border-radius: 4px;
+  outline: none;
+  background: transparent;
   font-family: "SFMono-Regular", "Cascadia Code", monospace;
-  font-size: 9px;
+  font-size: 10px;
+}
+
+.remote-folder-pathbar input:focus {
+  background: #090c11;
+  box-shadow: inset 0 0 0 1px #5366b8;
+}
+
+.remote-folder-pathbar button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  color: #8994a8;
+  border: 1px solid #313948;
+  border-radius: 6px;
+  background: #151a22;
+}
+
+.remote-folder-pathbar button:hover,
+.remote-folder-pathbar button.selected,
+.remote-folder-pathbar button:focus-visible {
+  color: #dce2ff;
+  border-color: #6274cc;
+  background: #222a48;
+  outline: none;
+}
+
+.remote-new-folder-row {
+  display: grid;
+  min-height: 54px;
+  align-items: center;
+  padding: 7px 10px 7px 13px;
+  color: #91a2f5;
+  border-bottom: 1px solid #262d3a;
+  background: #121729;
+  grid-template-columns: auto minmax(120px, 0.45fr) minmax(0, 1fr);
+  gap: 9px;
+}
+
+.remote-new-folder-row label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.remote-new-folder-row label span {
+  color: #7e8ac5;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.remote-new-folder-row input {
+  width: 100%;
+  height: 25px;
+  padding: 0 7px;
+  color: #e1e5ef;
+  border: 1px solid #3b4668;
+  border-radius: 5px;
+  outline: none;
+  background: #0b0e17;
+  font-size: 10px;
+}
+
+.remote-new-folder-row input:focus {
+  border-color: #7587e8;
+}
+
+.remote-new-folder-row code {
+  overflow: hidden;
+  color: #7f8899;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 8px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .remote-folder-list {
-  max-height: 155px;
+  min-height: 126px;
+  max-height: 230px;
   overflow-y: auto;
-  padding: 5px;
+  padding: 6px 7px;
 }
 
-.remote-folder-list button {
+.remote-folder-entry {
   display: flex;
   width: 100%;
-  height: 28px;
+  height: 31px;
   align-items: center;
   gap: 8px;
-  padding: 0 7px;
+  padding: 0 8px;
   color: #8d95a2;
   border: 0;
   border-radius: 5px;
@@ -3087,20 +3173,41 @@ select:focus-visible {
   text-align: left;
 }
 
-.remote-folder-list button:hover {
+.remote-folder-list button.remote-folder-entry:hover {
   color: #d6dae3;
-  background: #191d25;
+  background: #171d28;
 }
 
-.remote-folder-list button svg {
+.remote-folder-entry svg {
   flex: 0 0 auto;
   color: #7280bd;
 }
 
-.remote-folder-list button span {
+.remote-folder-entry span {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.remote-folder-entry small {
+  color: #4f5867;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.remote-folder-parent small {
+  text-transform: none;
+}
+
+.remote-file-entry {
+  cursor: default;
+  color: #6f7783;
+}
+
+.remote-file-entry svg {
+  color: #535e74;
 }
 
 .remote-folder-list p {
@@ -3110,12 +3217,39 @@ select:focus-visible {
   text-align: center;
 }
 
-.remote-folder-browser > small {
-  display: block;
-  padding: 7px 10px 8px;
-  color: #59616e;
+.remote-folder-status {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 13px;
   border-top: 1px solid #20252e;
+  background: #0d1016;
+}
+
+.remote-folder-status span,
+.remote-folder-status small {
+  color: #59616e;
   font-size: 8px;
+}
+
+.remote-folder-status span {
+  color: #7684c4;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+}
+
+@media (max-width: 560px) {
+  .remote-new-folder-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .remote-new-folder-row code {
+    grid-column: 2;
+  }
+
+  .remote-folder-status small {
+    display: none;
+  }
 }
 
 .project-location-summary {

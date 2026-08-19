@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 import { projectTypeServices } from '../src/main/project-type-services'
+import { listRemoteFolders } from '../src/main/remote-file-service'
 import { Store } from '../src/main/store'
 import {
   fuzzyFilterFolderEntries,
@@ -55,11 +56,21 @@ describe('new project folder creation', () => {
 
   it('fuzzy-filters folders typed after the current remote path', () => {
     const entries = [
-      { name: 'archive', path: '/home/me/archive' },
-      { name: 'deepstream-tools', path: '/home/me/deepstream-tools' },
+      { name: 'archive', path: '/home/me/archive', kind: 'directory' },
+      {
+        name: 'deepstream-tools',
+        path: '/home/me/deepstream-tools',
+        kind: 'directory'
+      },
       {
         name: 'detectionThruDeepstream',
-        path: '/home/me/detectionThruDeepstream'
+        path: '/home/me/detectionThruDeepstream',
+        kind: 'directory'
+      },
+      {
+        name: 'deepstream-notes.md',
+        path: '/home/me/deepstream-notes.md',
+        kind: 'file'
       }
     ]
 
@@ -72,7 +83,11 @@ describe('new project folder creation', () => {
     ).toEqual(['detectionThruDeepstream'])
     expect(
       fuzzyFilterFolderEntries(entries, 'deep').map((entry) => entry.name)
-    ).toEqual(['deepstream-tools', 'detectionThruDeepstream'])
+    ).toEqual([
+      'deepstream-tools',
+      'deepstream-notes.md',
+      'detectionThruDeepstream'
+    ])
   })
 
   it('exposes existing and new folder choices in the New Project dialog', () => {
@@ -88,6 +103,9 @@ describe('new project folder creation', () => {
     expect(component).toContain('Create new folder')
     expect(component).toContain("folderMode === 'new' ? 'parent' : 'project'")
     expect(component).toContain('newFolderName.trim()')
+    expect(component).toContain('remote-folder-pathbar')
+    expect(component).toContain('remote-new-folder-row')
+    expect(component).toContain('Type to filter · Enter to open')
   })
 
   it('creates a collision-safe local folder before adding the project', async () => {
@@ -124,6 +142,7 @@ describe('new project folder creation', () => {
     const originalPath = process.env.PATH
     mkdirSync(parent)
     mkdirSync(bin)
+    writeFileSync(join(parent, 'README.md'), '# Remote project root\n')
     writeFileSync(
       ssh,
       `#!/bin/sh
@@ -153,6 +172,15 @@ exec /bin/sh -c "$panepilot_command"
 
       expect(project.folder).toBe(realpathSync(join(parent, 'remote-project')))
       expect(existsSync(project.folder)).toBe(true)
+      expect(
+        listRemoteFolders('test-remote', parent).entries.map((entry) => ({
+          name: entry.name,
+          kind: entry.kind
+        }))
+      ).toEqual([
+        { name: 'remote-project', kind: 'directory' },
+        { name: 'README.md', kind: 'file' }
+      ])
     } finally {
       if (originalPath == null) delete process.env.PATH
       else process.env.PATH = originalPath

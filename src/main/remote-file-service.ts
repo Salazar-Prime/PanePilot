@@ -30,11 +30,17 @@ if not os.path.isdir(current):
 entries = []
 for item in os.scandir(current):
     try:
-        if item.is_dir(follow_symlinks=True):
-            entries.append({"name": item.name, "path": os.path.realpath(item.path), "kind": "directory", "size": None})
+        stat = item.stat(follow_symlinks=True)
+        is_dir = item.is_dir(follow_symlinks=True)
+        entries.append({
+            "name": item.name,
+            "path": os.path.realpath(item.path),
+            "kind": "directory" if is_dir else "file",
+            "size": None if is_dir else stat.st_size,
+        })
     except OSError:
         pass
-entries.sort(key=lambda item: item["name"].lower())
+entries.sort(key=lambda item: (item["kind"] != "directory", item["name"].lower()))
 parent = os.path.dirname(current)
 print(json.dumps({"currentPath": current, "parentPath": None if parent == current else parent, "entries": entries}))
 `

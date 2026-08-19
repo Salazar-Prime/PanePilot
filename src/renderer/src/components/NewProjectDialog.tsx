@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ChevronUp,
+  File,
   FileText,
   Folder,
   FolderOpen,
@@ -193,6 +194,7 @@ export function NewProjectDialog({
               value={connectionId}
               onChange={(event) => {
                 setConnectionId(event.target.value)
+                setFolderMode('existing')
                 setFolder('')
                 setNewFolderName('')
                 setName('')
@@ -221,157 +223,240 @@ export function NewProjectDialog({
             </div>
           </div>
 
-          <div
-            className="project-folder-mode"
-            role="group"
-            aria-label="Project folder setup"
-          >
-            <button
-              type="button"
-              className={folderMode === 'existing' ? 'selected' : ''}
-              aria-pressed={folderMode === 'existing'}
-              onClick={() => {
-                setFolderMode('existing')
-                setError('')
-              }}
-            >
-              <FolderOpen size={17} />
-              <span>
-                <strong>Use existing folder</strong>
-                <small>Attach a folder that already exists</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={folderMode === 'new' ? 'selected' : ''}
-              aria-pressed={folderMode === 'new'}
-              onClick={() => {
-                setFolderMode('new')
-                setError('')
-              }}
-            >
-              <FolderPlus size={17} />
-              <span>
-                <strong>Create new folder</strong>
-                <small>Choose a location, then name the folder</small>
-              </span>
-            </button>
-          </div>
-
-          <label className="field">
-            <span>{folderMode === 'new' ? 'Create inside' : 'Project folder'}</span>
-            <div className="field-row">
-              <input
-                value={folder}
-                onChange={(event) =>
-                  setFolder(
-                    remoteListing
-                      ? remoteFolderInputValue(
-                          remoteListing.currentPath,
-                          folder,
-                          event.target.value
-                        )
-                      : event.target.value
-                  )
-                }
-                placeholder={
-                  connection?.kind === 'ssh'
-                    ? folderMode === 'new'
-                      ? '/home/you/projects'
-                      : '/home/you/project'
-                    : folderMode === 'new'
-                      ? 'Choose a parent folder'
-                      : 'Choose a folder'
-                }
-                autoFocus
-              />
-              <button
-                type="button"
-                className="secondary-button square"
-                onClick={() =>
-                  connection?.kind === 'ssh'
-                    ? void browseRemote(folder.trim() || undefined)
-                    : void chooseFolder()
-                }
-                disabled={connection?.kind === 'ssh' && remoteLoading}
-                title={
-                  connection?.kind === 'ssh'
-                    ? `Browse the entered remote ${folderMode === 'new' ? 'parent ' : ''}path`
-                    : folderMode === 'new'
-                      ? 'Choose where to create the folder'
-                      : 'Choose a local folder'
-                }
-              >
-                <FolderOpen size={17} />
-              </button>
-            </div>
-          </label>
-          {connection?.kind === 'ssh' && (
-            <div className="remote-folder-browser">
-              <div className="remote-folder-heading">
-                <Server size={13} />
-                <span>{remoteListing?.currentPath || 'Connecting…'}</span>
-                {remoteLoading && <LoaderCircle className="spin" size={14} />}
-              </div>
-              <div className="remote-folder-list">
-                {remoteListing?.parentPath && (
-                  <button
-                    type="button"
-                    onClick={() => void browseRemote(remoteListing.parentPath!)}
-                  >
-                    <ChevronUp size={15} />
-                    <span>..</span>
-                  </button>
-                )}
-                {remoteEntries.map((entry) => (
-                  <button
-                    type="button"
-                    key={entry.path}
-                    onClick={() => void browseRemote(entry.path)}
-                  >
-                    <Folder size={15} />
-                    <span>{entry.name}</span>
-                  </button>
-                ))}
-                {!remoteLoading && remoteListing?.entries.length === 0 && (
-                  <p>This folder has no subfolders.</p>
-                )}
-                {!remoteLoading &&
-                  remoteFilterQuery &&
-                  remoteListing &&
-                  remoteListing.entries.length > 0 &&
-                  remoteEntries.length === 0 && (
-                    <p>No folders match “{remoteFilterQuery}”.</p>
+          {connection?.kind === 'ssh' ? (
+            <div className="field remote-project-folder-field">
+              <span>{folderMode === 'new' ? 'Create inside' : 'Project folder'}</span>
+              <div className="remote-folder-browser">
+                <div className="remote-folder-pathbar">
+                  <Server size={14} />
+                  <input
+                    value={folder}
+                    onChange={(event) =>
+                      setFolder(
+                        remoteListing
+                          ? remoteFolderInputValue(
+                              remoteListing.currentPath,
+                              folder,
+                              event.target.value
+                            )
+                          : event.target.value
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter') return
+                      event.preventDefault()
+                      const firstFolder = remoteEntries.find(
+                        (entry) => entry.kind === 'directory'
+                      )
+                      void browseRemote(
+                        remoteFilterQuery && firstFolder
+                          ? firstFolder.path
+                          : folder.trim() || undefined
+                      )
+                    }}
+                    placeholder="Remote path"
+                    aria-label="Remote project path"
+                    spellCheck={false}
+                    autoFocus
+                  />
+                  {remoteLoading ? (
+                    <LoaderCircle className="spin" size={15} />
+                  ) : (
+                    <button
+                      type="button"
+                      className={folderMode === 'new' ? 'selected' : ''}
+                      aria-label={
+                        folderMode === 'new'
+                          ? 'Cancel new folder'
+                          : 'Create a new project folder here'
+                      }
+                      aria-pressed={folderMode === 'new'}
+                      title={
+                        folderMode === 'new'
+                          ? 'Use this folder'
+                          : 'Create a new folder here'
+                      }
+                      onClick={() => {
+                        const creating = folderMode !== 'new'
+                        setFolderMode(creating ? 'new' : 'existing')
+                        if (creating && remoteListing) {
+                          setFolder(remoteListing.currentPath)
+                        }
+                        setNewFolderName('')
+                        setError('')
+                      }}
+                    >
+                      {folderMode === 'new' ? <X size={15} /> : <FolderPlus size={15} />}
+                    </button>
                   )}
+                </div>
+                {folderMode === 'new' && (
+                  <div className="remote-new-folder-row">
+                    <FolderPlus size={15} />
+                    <label>
+                      <span>New folder</span>
+                      <input
+                        value={newFolderName}
+                        onChange={(event) => setNewFolderName(event.target.value)}
+                        placeholder="Folder name"
+                        maxLength={255}
+                        aria-label="New remote folder name"
+                        autoFocus
+                      />
+                    </label>
+                    <code>
+                      {folderDestination || 'Enter a folder name'}
+                    </code>
+                  </div>
+                )}
+                <div className="remote-folder-list">
+                  {remoteListing?.parentPath && (
+                    <button
+                      type="button"
+                      className="remote-folder-entry remote-folder-parent"
+                      onClick={() => void browseRemote(remoteListing.parentPath!)}
+                    >
+                      <ChevronUp size={15} />
+                      <span>..</span>
+                      <small>Parent folder</small>
+                    </button>
+                  )}
+                  {remoteEntries.map((entry) =>
+                    entry.kind === 'directory' ? (
+                      <button
+                        type="button"
+                        className="remote-folder-entry"
+                        key={entry.path}
+                        onClick={() => void browseRemote(entry.path)}
+                      >
+                        <Folder size={15} />
+                        <span>{entry.name}</span>
+                        <small>Folder</small>
+                      </button>
+                    ) : (
+                      <div
+                        className="remote-folder-entry remote-file-entry"
+                        key={entry.path}
+                        title="Choose a folder to create or attach a project"
+                      >
+                        <File size={15} />
+                        <span>{entry.name}</span>
+                        <small>File</small>
+                      </div>
+                    )
+                  )}
+                  {!remoteLoading && remoteListing?.entries.length === 0 && (
+                    <p>This folder is empty.</p>
+                  )}
+                  {!remoteLoading &&
+                    remoteFilterQuery &&
+                    remoteListing &&
+                    remoteListing.entries.length > 0 &&
+                    remoteEntries.length === 0 && (
+                      <p>No files or folders match “{remoteFilterQuery}”.</p>
+                    )}
+                </div>
+                <div className="remote-folder-status">
+                  <span>
+                    {remoteFilterQuery
+                      ? `${remoteEntries.length} match${remoteEntries.length === 1 ? '' : 'es'}`
+                      : `${remoteListing?.entries.filter((entry) => entry.kind === 'directory').length ?? 0} folders · ${
+                          remoteListing?.entries.filter(
+                            (entry) => entry.kind === 'file'
+                          ).length ?? 0
+                        } files`}
+                  </span>
+                  <small>Type to filter · Enter to open</small>
+                </div>
               </div>
-              <small>
-                Type after the current path to fuzzy-filter these folders, or
-                enter an absolute path and use Browse. The entered path
-                {folderMode === 'new'
-                  ? ' will contain the new project folder.'
-                  : ' will be used when the project is created.'}
-              </small>
             </div>
-          )}
-
-          {folderMode === 'new' && (
+          ) : (
             <>
-              <label className="field">
-                <span>New folder name</span>
-                <input
-                  value={newFolderName}
-                  onChange={(event) => setNewFolderName(event.target.value)}
-                  placeholder="my-project"
-                  maxLength={255}
-                />
-              </label>
-              <div className="new-project-folder-preview">
-                <FolderPlus size={16} />
-                <span>
-                  <small>New project location</small>
-                  <code>{folderDestination || 'Choose a location and folder name'}</code>
-                </span>
+              <div
+                className="project-folder-mode"
+                role="group"
+                aria-label="Project folder setup"
+              >
+                <button
+                  type="button"
+                  className={folderMode === 'existing' ? 'selected' : ''}
+                  aria-pressed={folderMode === 'existing'}
+                  onClick={() => {
+                    setFolderMode('existing')
+                    setError('')
+                  }}
+                >
+                  <FolderOpen size={17} />
+                  <span>
+                    <strong>Use existing folder</strong>
+                    <small>Attach a folder that already exists</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={folderMode === 'new' ? 'selected' : ''}
+                  aria-pressed={folderMode === 'new'}
+                  onClick={() => {
+                    setFolderMode('new')
+                    setError('')
+                  }}
+                >
+                  <FolderPlus size={17} />
+                  <span>
+                    <strong>Create new folder</strong>
+                    <small>Choose a location, then name the folder</small>
+                  </span>
+                </button>
               </div>
+              <label className="field">
+                <span>{folderMode === 'new' ? 'Create inside' : 'Project folder'}</span>
+                <div className="field-row">
+                  <input
+                    value={folder}
+                    onChange={(event) => setFolder(event.target.value)}
+                    placeholder={
+                      folderMode === 'new'
+                        ? 'Choose a parent folder'
+                        : 'Choose a folder'
+                    }
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="secondary-button square"
+                    onClick={() => void chooseFolder()}
+                    title={
+                      folderMode === 'new'
+                        ? 'Choose where to create the folder'
+                        : 'Choose a local folder'
+                    }
+                  >
+                    <FolderOpen size={17} />
+                  </button>
+                </div>
+              </label>
+              {folderMode === 'new' && (
+                <>
+                  <label className="field">
+                    <span>New folder name</span>
+                    <input
+                      value={newFolderName}
+                      onChange={(event) => setNewFolderName(event.target.value)}
+                      placeholder="my-project"
+                      maxLength={255}
+                    />
+                  </label>
+                  <div className="new-project-folder-preview">
+                    <FolderPlus size={16} />
+                    <span>
+                      <small>New project location</small>
+                      <code>
+                        {folderDestination || 'Choose a location and folder name'}
+                      </code>
+                    </span>
+                  </div>
+                </>
+              )}
             </>
           )}
 
