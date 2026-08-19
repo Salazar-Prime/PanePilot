@@ -25,3 +25,87 @@ export function newProjectFolderDestination(
   const separator = parent.includes('\\') && !parent.includes('/') ? '\\' : '/'
   return `${parent}${separator}${name}`
 }
+
+function normalizedRemotePath(path: string): string {
+  const trimmed = path.trim()
+  return trimmed === '/' ? '/' : trimmed.replace(/\/+$/u, '')
+}
+
+export function remoteFolderInputValue(
+  currentPath: string,
+  previousValue: string,
+  nextValue: string
+): string {
+  const current = normalizedRemotePath(currentPath)
+  if (
+    current !== '/' &&
+    previousValue === current &&
+    nextValue.startsWith(current) &&
+    nextValue.length > current.length &&
+    nextValue[current.length] !== '/'
+  ) {
+    return `${current}/${nextValue.slice(current.length)}`
+  }
+  return nextValue
+}
+
+export function remoteFolderFilterQuery(
+  currentPath: string,
+  typedPath: string
+): string {
+  const current = normalizedRemotePath(currentPath)
+  const typed = typedPath.trim()
+  if (!typed || typed === current) return ''
+
+  let remainder = ''
+  if (current === '/' && typed.startsWith('/')) {
+    remainder = typed.slice(1)
+  } else if (typed.startsWith(`${current}/`)) {
+    remainder = typed.slice(current.length + 1)
+  } else if (typed.startsWith(current)) {
+    remainder = typed.slice(current.length)
+  } else {
+    remainder = typed.split('/').at(-1) ?? ''
+  }
+  return remainder.split('/')[0]?.trim() ?? ''
+}
+
+function fuzzyNameScore(name: string, rawQuery: string): number | null {
+  const candidate = name.toLocaleLowerCase()
+  const query = rawQuery.trim().toLocaleLowerCase()
+  if (!query) return 0
+  if (candidate === query) return 10_000
+  if (candidate.startsWith(query)) return 7_500 - candidate.length
+  const containedAt = candidate.indexOf(query)
+  if (containedAt >= 0) return 5_000 - containedAt * 10 - candidate.length
+
+  let queryIndex = 0
+  let previousMatch = -2
+  let score = 1_000
+  for (let index = 0; index < candidate.length && queryIndex < query.length; index += 1) {
+    if (candidate[index] !== query[queryIndex]) continue
+    const adjacent = index === previousMatch + 1
+    const boundary = index === 0 || /[\s._-]/u.test(candidate[index - 1])
+    score += adjacent ? 30 : 8
+    if (boundary) score += 20
+    score -= index
+    previousMatch = index
+    queryIndex += 1
+  }
+  if (queryIndex !== query.length) return null
+  return score - (candidate.length - query.length)
+}
+
+export function fuzzyFilterFolderEntries<T extends { name: string }>(
+  entries: T[],
+  query: string
+): T[] {
+  if (!query.trim()) return entries
+  return entries
+    .flatMap((entry, index) => {
+      const score = fuzzyNameScore(entry.name, query)
+      return score == null ? [] : [{ entry, index, score }]
+    })
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map(({ entry }) => entry)
+}

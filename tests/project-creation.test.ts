@@ -14,7 +14,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { projectTypeServices } from '../src/main/project-type-services'
 import { Store } from '../src/main/store'
 import {
+  fuzzyFilterFolderEntries,
   newProjectFolderDestination,
+  remoteFolderFilterQuery,
+  remoteFolderInputValue,
   suggestedProjectName
 } from '../src/renderer/src/lib/projectCreation'
 
@@ -48,6 +51,28 @@ describe('new project folder creation', () => {
       '/Users/me/Work/sal3000'
     )
     expect(newProjectFolderDestination('/', 'sal3000')).toBe('/sal3000')
+  })
+
+  it('fuzzy-filters folders typed after the current remote path', () => {
+    const entries = [
+      { name: 'archive', path: '/home/me/archive' },
+      { name: 'deepstream-tools', path: '/home/me/deepstream-tools' },
+      {
+        name: 'detectionThruDeepstream',
+        path: '/home/me/detectionThruDeepstream'
+      }
+    ]
+
+    expect(
+      remoteFolderInputValue('/home/me', '/home/me', '/home/medtds')
+    ).toBe('/home/me/dtds')
+    expect(remoteFolderFilterQuery('/home/me', '/home/me/dtds')).toBe('dtds')
+    expect(
+      fuzzyFilterFolderEntries(entries, 'dtds').map((entry) => entry.name)
+    ).toEqual(['detectionThruDeepstream'])
+    expect(
+      fuzzyFilterFolderEntries(entries, 'deep').map((entry) => entry.name)
+    ).toEqual(['deepstream-tools', 'detectionThruDeepstream'])
   })
 
   it('exposes existing and new folder choices in the New Project dialog', () => {

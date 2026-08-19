@@ -46,6 +46,9 @@ main `.tex` file with a minimal document.
 
 Remote paths are canonicalized before they are stored. Creating a folder on an SSH
 connection uses the same bounded remote file operation as the Files workspace.
+Typing after the current remote path fuzzy-filters and ranks the child folders already
+shown below it. Selecting a match navigates into that folder; entering an unrelated
+absolute path still requires the **Browse** button.
 
 The remote browser requires `python3` on the host. PanePilot sends a small base64-wrapped
 Python script over SSH and exchanges JSON over standard input and output.

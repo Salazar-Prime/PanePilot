@@ -70,7 +70,8 @@ selected local or SSH connection. For a new folder, choose its parent location a
 enter one folder name. PanePilot previews the final path and uses that folder name as
 the default project name; the project name remains editable. Creation refuses path
 separators and existing destinations rather than overwriting them. A new LaTeX
-project also receives a minimal configured main `.tex` file.
+project also receives a minimal configured main `.tex` file. In the SSH browser,
+typing after the current path fuzzy-filters its child folders.
 
 ## Current agent status tracking
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ChevronUp,
   FileText,
@@ -22,8 +22,11 @@ import type {
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { useModalEscape } from '../lib/modalEscape'
 import {
+  fuzzyFilterFolderEntries,
   newProjectFolderDestination,
   type ProjectFolderMode,
+  remoteFolderFilterQuery,
+  remoteFolderInputValue,
   suggestedProjectName
 } from '../lib/projectCreation'
 
@@ -63,6 +66,17 @@ export function NewProjectDialog({
   const connection = connections.find((item) => item.id === connectionId)
   const definition = projectTypeRegistry[type]
   const folderDestination = newProjectFolderDestination(folder, newFolderName)
+  const remoteFilterQuery = remoteListing
+    ? remoteFolderFilterQuery(remoteListing.currentPath, folder)
+    : ''
+  const remoteEntries = useMemo(
+    () =>
+      fuzzyFilterFolderEntries(
+        remoteListing?.entries ?? [],
+        remoteFilterQuery
+      ),
+    [remoteFilterQuery, remoteListing?.entries]
+  )
   useModalEscape(onClose, true, submitting)
 
   useEffect(() => {
@@ -249,7 +263,17 @@ export function NewProjectDialog({
             <div className="field-row">
               <input
                 value={folder}
-                onChange={(event) => setFolder(event.target.value)}
+                onChange={(event) =>
+                  setFolder(
+                    remoteListing
+                      ? remoteFolderInputValue(
+                          remoteListing.currentPath,
+                          folder,
+                          event.target.value
+                        )
+                      : event.target.value
+                  )
+                }
                 placeholder={
                   connection?.kind === 'ssh'
                     ? folderMode === 'new'
@@ -299,7 +323,7 @@ export function NewProjectDialog({
                     <span>..</span>
                   </button>
                 )}
-                {remoteListing?.entries.map((entry) => (
+                {remoteEntries.map((entry) => (
                   <button
                     type="button"
                     key={entry.path}
@@ -312,9 +336,17 @@ export function NewProjectDialog({
                 {!remoteLoading && remoteListing?.entries.length === 0 && (
                   <p>This folder has no subfolders.</p>
                 )}
+                {!remoteLoading &&
+                  remoteFilterQuery &&
+                  remoteListing &&
+                  remoteListing.entries.length > 0 &&
+                  remoteEntries.length === 0 && (
+                    <p>No folders match “{remoteFilterQuery}”.</p>
+                  )}
               </div>
               <small>
-                Browse folders or type an absolute path above. The entered path
+                Type after the current path to fuzzy-filter these folders, or
+                enter an absolute path and use Browse. The entered path
                 {folderMode === 'new'
                   ? ' will contain the new project folder.'
                   : ' will be used when the project is created.'}
