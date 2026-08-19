@@ -49,7 +49,10 @@ connection uses the same bounded remote file operation as the Files workspace.
 The SSH picker keeps the editable path, new-folder control, and folder/file listing in
 one browser. Typing after the current path fuzzy-filters and ranks the entries already
 shown below it. Selecting a folder navigates into it; files remain visible for context.
-Pressing Enter opens the first matching folder or an unrelated absolute path.
+The best folder match is selected first. Use the arrow keys to change the selection,
+Tab to complete it in the path, or slash/Enter to open it. A slash after each fuzzy
+path segment therefore navigates through the remote tree one verified folder at a
+time.
 
 The remote browser requires `python3` on the host. PanePilot sends a small base64-wrapped
 Python script over SSH and exchanges JSON over standard input and output.

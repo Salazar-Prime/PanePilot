@@ -72,7 +72,8 @@ the default project name; the project name remains editable. Creation refuses pa
 separators and existing destinations rather than overwriting them. A new LaTeX
 project also receives a minimal configured main `.tex` file. The SSH picker combines
 its editable path, new-folder control, and folder/file listing in one browser; typing
-after the current path fuzzy-filters those entries.
+after the current path fuzzy-filters those entries. The best folder match starts
+selected: Tab completes it, while slash or Enter opens it and continues navigation.
 
 ## Current agent status tracking
 

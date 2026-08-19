@@ -17,8 +17,10 @@ import { Store } from '../src/main/store'
 import {
   fuzzyFilterFolderEntries,
   newProjectFolderDestination,
+  rankedRemoteBrowserEntries,
   remoteFolderFilterQuery,
   remoteFolderInputValue,
+  remoteFolderSlashTarget,
   suggestedProjectName
 } from '../src/renderer/src/lib/projectCreation'
 
@@ -55,7 +57,11 @@ describe('new project folder creation', () => {
   })
 
   it('fuzzy-filters folders typed after the current remote path', () => {
-    const entries = [
+    const entries: Array<{
+      name: string
+      path: string
+      kind: 'directory' | 'file'
+    }> = [
       { name: 'archive', path: '/home/me/archive', kind: 'directory' },
       {
         name: 'deepstream-tools',
@@ -88,6 +94,18 @@ describe('new project folder creation', () => {
       'deepstream-notes.md',
       'detectionThruDeepstream'
     ])
+    expect(
+      rankedRemoteBrowserEntries(entries, 'deep').map((entry) => entry.name)
+    ).toEqual([
+      'deepstream-tools',
+      'detectionThruDeepstream',
+      'deepstream-notes.md'
+    ])
+    expect(remoteFolderSlashTarget('/home/me', '/home/me/dtds/', entries)).toBe(
+      '/home/me/detectionThruDeepstream'
+    )
+    expect(remoteFolderSlashTarget('/home/me', '/etc/', entries)).toBe('/etc')
+    expect(remoteFolderSlashTarget('/home/me', '/home/me', entries)).toBeNull()
   })
 
   it('exposes existing and new folder choices in the New Project dialog', () => {
@@ -105,7 +123,10 @@ describe('new project folder creation', () => {
     expect(component).toContain('newFolderName.trim()')
     expect(component).toContain('remote-folder-pathbar')
     expect(component).toContain('remote-new-folder-row')
-    expect(component).toContain('Type to filter · Enter to open')
+    expect(component).toContain('Tab complete · / or Enter open')
+    expect(component).toContain("event.key === 'Tab'")
+    expect(component).toContain("event.key === '/'")
+    expect(component).toContain('setRemoteSelectionIndex(0)')
   })
 
   it('creates a collision-safe local folder before adding the project', async () => {

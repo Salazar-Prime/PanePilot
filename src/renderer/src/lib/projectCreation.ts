@@ -109,3 +109,34 @@ export function fuzzyFilterFolderEntries<T extends { name: string }>(
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .map(({ entry }) => entry)
 }
+
+export function rankedRemoteBrowserEntries<
+  T extends { name: string; kind: 'directory' | 'file' }
+>(entries: T[], query: string): T[] {
+  const matches = fuzzyFilterFolderEntries(entries, query)
+  return [
+    ...matches.filter((entry) => entry.kind === 'directory'),
+    ...matches.filter((entry) => entry.kind === 'file')
+  ]
+}
+
+export function remoteFolderSlashTarget<
+  T extends { name: string; path: string; kind: 'directory' | 'file' }
+>(currentPath: string, typedPath: string, entries: T[]): string | null {
+  const typed = typedPath.trim()
+  if (!typed.endsWith('/')) return null
+
+  const current = normalizedRemotePath(currentPath)
+  const typedTarget = typed.replace(/\/+$/u, '') || '/'
+  if (typedTarget === current) return null
+
+  const query = remoteFolderFilterQuery(current, typedTarget)
+  const insideCurrent =
+    current === '/' || typedTarget.startsWith(`${current}/`)
+  const matchingFolder = rankedRemoteBrowserEntries(entries, query).find(
+    (entry) => entry.kind === 'directory'
+  )
+  return insideCurrent && query && matchingFolder
+    ? matchingFolder.path
+    : typedTarget
+}

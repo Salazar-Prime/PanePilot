@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronUp,
   File,
@@ -23,11 +23,12 @@ import type {
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { useModalEscape } from '../lib/modalEscape'
 import {
-  fuzzyFilterFolderEntries,
   newProjectFolderDestination,
   type ProjectFolderMode,
+  rankedRemoteBrowserEntries,
   remoteFolderFilterQuery,
   remoteFolderInputValue,
+  remoteFolderSlashTarget,
   suggestedProjectName
 } from '../lib/projectCreation'
 
@@ -64,6 +65,8 @@ export function NewProjectDialog({
   const [error, setError] = useState('')
   const [remoteListing, setRemoteListing] = useState<RemoteFolderListing | null>(null)
   const [remoteLoading, setRemoteLoading] = useState(false)
+  const [remoteSelectionIndex, setRemoteSelectionIndex] = useState(0)
+  const remoteBrowseRequestRef = useRef(0)
   const connection = connections.find((item) => item.id === connectionId)
   const definition = projectTypeRegistry[type]
   const folderDestination = newProjectFolderDestination(folder, newFolderName)
@@ -72,12 +75,20 @@ export function NewProjectDialog({
     : ''
   const remoteEntries = useMemo(
     () =>
-      fuzzyFilterFolderEntries(
+      rankedRemoteBrowserEntries(
         remoteListing?.entries ?? [],
         remoteFilterQuery
       ),
     [remoteFilterQuery, remoteListing?.entries]
   )
+  const remoteFolderEntries = useMemo(
+    () => remoteEntries.filter((entry) => entry.kind === 'directory'),
+    [remoteEntries]
+  )
+  const selectedRemoteFolder =
+    remoteFolderEntries[
+      Math.min(remoteSelectionIndex, Math.max(0, remoteFolderEntries.length - 1))
+    ] ?? null
   useModalEscape(onClose, true, submitting)
 
   useEffect(() => {
@@ -88,11 +99,17 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (connection?.kind !== 'ssh') {
+      remoteBrowseRequestRef.current += 1
       setRemoteListing(null)
+      setRemoteLoading(false)
       return
     }
     void browseRemote()
   }, [connectionId])
+
+  useEffect(() => {
+    setRemoteSelectionIndex(0)
+  }, [remoteFilterQuery, remoteListing?.currentPath])
 
   async function chooseFolder() {
     const selected = await window.projectConsole.projects.chooseFolder(
@@ -102,17 +119,41 @@ export function NewProjectDialog({
   }
 
   async function browseRemote(path?: string) {
+    const request = ++remoteBrowseRequestRef.current
     setRemoteLoading(true)
     setError('')
     try {
       const listing = await window.projectConsole.remoteFolders.list(connectionId, path)
+      if (request !== remoteBrowseRequestRef.current) return
       setRemoteListing(listing)
       setFolder(listing.currentPath)
+      setRemoteSelectionIndex(0)
     } catch (caught) {
+      if (request !== remoteBrowseRequestRef.current) return
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
-      setRemoteLoading(false)
+      if (request === remoteBrowseRequestRef.current) setRemoteLoading(false)
     }
+  }
+
+  function updateRemotePath(nextValue: string) {
+    if (!remoteListing) {
+      setFolder(nextValue)
+      return
+    }
+    const next = remoteFolderInputValue(
+      remoteListing.currentPath,
+      folder,
+      nextValue
+    )
+    setFolder(next)
+    setRemoteSelectionIndex(0)
+    const target = remoteFolderSlashTarget(
+      remoteListing.currentPath,
+      next,
+      remoteListing.entries
+    )
+    if (target) void browseRemote(target)
   }
 
   async function submit(event: React.FormEvent) {
@@ -193,6 +234,7 @@ export function NewProjectDialog({
             <select
               value={connectionId}
               onChange={(event) => {
+                remoteBrowseRequestRef.current += 1
                 setConnectionId(event.target.value)
                 setFolderMode('existing')
                 setFolder('')
@@ -228,35 +270,65 @@ export function NewProjectDialog({
               <span>{folderMode === 'new' ? 'Create inside' : 'Project folder'}</span>
               <div className="remote-folder-browser">
                 <div className="remote-folder-pathbar">
-                  <Server size={14} />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      remoteListing?.parentPath &&
+                      void browseRemote(remoteListing.parentPath)
+                    }
+                    disabled={!remoteListing?.parentPath || remoteLoading}
+                    aria-label="Open parent folder"
+                    title="Up one folder"
+                  >
+                    <ChevronUp size={15} />
+                  </button>
                   <input
                     value={folder}
-                    onChange={(event) =>
-                      setFolder(
-                        remoteListing
-                          ? remoteFolderInputValue(
-                              remoteListing.currentPath,
-                              folder,
-                              event.target.value
-                            )
-                          : event.target.value
-                      )
-                    }
+                    onChange={(event) => updateRemotePath(event.target.value)}
                     onKeyDown={(event) => {
+                      if (event.key === 'ArrowDown') {
+                        event.preventDefault()
+                        setRemoteSelectionIndex((current) =>
+                          remoteFolderEntries.length === 0
+                            ? 0
+                            : (current + 1) % remoteFolderEntries.length
+                        )
+                        return
+                      }
+                      if (event.key === 'ArrowUp') {
+                        event.preventDefault()
+                        setRemoteSelectionIndex((current) =>
+                          remoteFolderEntries.length === 0
+                            ? 0
+                            : (current - 1 + remoteFolderEntries.length) %
+                              remoteFolderEntries.length
+                        )
+                        return
+                      }
+                      if (event.key === 'Tab' && selectedRemoteFolder) {
+                        event.preventDefault()
+                        setFolder(selectedRemoteFolder.path)
+                        return
+                      }
+                      if (
+                        event.key === '/' &&
+                        remoteFilterQuery &&
+                        selectedRemoteFolder
+                      ) {
+                        event.preventDefault()
+                        void browseRemote(selectedRemoteFolder.path)
+                        return
+                      }
                       if (event.key !== 'Enter') return
                       event.preventDefault()
-                      const firstFolder = remoteEntries.find(
-                        (entry) => entry.kind === 'directory'
-                      )
                       void browseRemote(
-                        remoteFilterQuery && firstFolder
-                          ? firstFolder.path
-                          : folder.trim() || undefined
+                        selectedRemoteFolder?.path ?? (folder.trim() || undefined)
                       )
                     }}
                     placeholder="Remote path"
                     aria-label="Remote project path"
                     spellCheck={false}
+                    readOnly={remoteLoading}
                     autoFocus
                   />
                   {remoteLoading ? (
@@ -309,25 +381,27 @@ export function NewProjectDialog({
                     </code>
                   </div>
                 )}
-                <div className="remote-folder-list">
-                  {remoteListing?.parentPath && (
-                    <button
-                      type="button"
-                      className="remote-folder-entry remote-folder-parent"
-                      onClick={() => void browseRemote(remoteListing.parentPath!)}
-                    >
-                      <ChevronUp size={15} />
-                      <span>..</span>
-                      <small>Parent folder</small>
-                    </button>
-                  )}
+                <div
+                  className="remote-folder-list"
+                  role="listbox"
+                  aria-label="Remote files and folders"
+                >
                   {remoteEntries.map((entry) =>
                     entry.kind === 'directory' ? (
                       <button
                         type="button"
-                        className="remote-folder-entry"
+                        className={`remote-folder-entry ${selectedRemoteFolder?.path === entry.path ? 'selected' : ''}`}
                         key={entry.path}
                         onClick={() => void browseRemote(entry.path)}
+                        onMouseEnter={() =>
+                          setRemoteSelectionIndex(
+                            remoteFolderEntries.findIndex(
+                              (folderEntry) => folderEntry.path === entry.path
+                            )
+                          )
+                        }
+                        role="option"
+                        aria-selected={selectedRemoteFolder?.path === entry.path}
                       >
                         <Folder size={15} />
                         <span>{entry.name}</span>
@@ -366,7 +440,7 @@ export function NewProjectDialog({
                           ).length ?? 0
                         } files`}
                   </span>
-                  <small>Type to filter · Enter to open</small>
+                  <small>↑↓ choose · Tab complete · / or Enter open</small>
                 </div>
               </div>
             </div>
