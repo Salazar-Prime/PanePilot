@@ -162,7 +162,7 @@ function registerIpc(): void {
     }
   )
   ipcMain.handle('projects:archive', (_event, projectId: string) => {
-    store.archiveProject(projectId, true)
+    terminals.archiveProject(projectId)
   })
   ipcMain.handle('projects:restore', (_event, projectId: string) => {
     store.archiveProject(projectId, false)

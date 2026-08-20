@@ -687,9 +687,15 @@ export function App() {
   }
 
   async function archiveProject(target: Project) {
+    const activeSessions = target.sessions.filter(
+      (session) => !['completed', 'error'].includes(session.state)
+    )
+    const stopNotice = activeSessions.length
+      ? ` This will stop ${activeSessions.length} active ${activeSessions.length === 1 ? 'terminal or chat' : 'terminals and chats'}, including detached or hidden sessions.`
+      : ''
     if (
       !window.confirm(
-        `Archive “${target.name}”? All of its ${target.type === 'latex' ? 'writing chats' : 'terminals'} must already be stopped.`
+        `Archive “${target.name}”?${stopNotice} Saved output and provider conversation archives will be kept.`
       )
     )
       return

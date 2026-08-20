@@ -1438,6 +1438,19 @@ export class TerminalManager {
     this.store.setSessionFlagged(sessionId, flagged)
   }
 
+  archiveProject(projectId: string): void {
+    const project = this.store.getProject(projectId)
+    if (!project) throw new Error('Project not found.')
+    if (project.archived) return
+
+    for (const session of project.sessions) {
+      if (['completed', 'error'].includes(session.state)) continue
+      this.terminateSession(session)
+    }
+
+    this.store.archiveProject(projectId, true)
+  }
+
   stop(sessionId: string): void {
     const session = this.requireSession(sessionId)
     if (session.kind === 'terminal') {

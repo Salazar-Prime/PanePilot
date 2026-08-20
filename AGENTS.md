@@ -43,7 +43,7 @@ These are owner-approved decisions and should be treated as product invariants u
 16. Remote Codex lifecycle recovery uses the tmux pane title configured with `activity`, `run-state`, and `task-progress`. Tmux is the shared current-state snapshot across laptops; PanePilot does not maintain a remote lifecycle spool.
 17. A persistent terminal's PanePilot name and tmux session name are identical. Names must be tmux-safe and unique on that connection.
 18. Terminal pinning is persisted. In the main terminal strip, pinned tabs always form the leftmost group; within the pinned and unpinned groups, tab order is renderer-local, persisted per project, and changed by direct drag-and-drop rather than a sort menu.
-19. Projects can be archived only after all of their terminals stop. Archived projects have a separate library view and do not contribute to live status counts.
+19. Confirmed project archiving stops every exact live terminal and capability-chat backend first, including detached or hidden tmux sessions, while preserving terminal records, saved output, and provider archives. The project is archived only after every stop succeeds. Archived projects have a separate library view and do not contribute to live status counts.
 20. SSH port forwards are explicit, bind to `127.0.0.1`, use `ExitOnForwardFailure`, and stop when PanePilot exits.
 21. A new Codex terminal exposes Codex's `thread-id` in its tmux pane title. PanePilot resolves that collision-resistant title reference against the project-scoped Codex archive, stores the full provider thread ID in SQLite, and mirrors it into live tmux metadata. PanePilot never uses `/rename` for identity and resumes only with the exact provider thread ID.
 22. PanePilot-owned tmux sessions carry versioned session-scoped `@panepilot_*` metadata. On an SSH connection, live tagged sessions are discovered with one-shot tmux commands and reconciled into the local database by stable terminal UUID and canonical project folder. This enables another PanePilot machine to attach without a remote daemon. Tmux is authoritative for live-session presence; SQLite remains authoritative for durable local workspace state.
@@ -219,6 +219,7 @@ Archive and deletion rules:
 - Permanent deletion first closes an active terminal's exact backend session, then removes saved terminal output and associated ingested hook events.
 - Provider-owned conversation JSONL is never removed by terminal deletion.
 - Projects can be archived only when every terminal is `completed` or `error`.
+- The confirmed project-archive action stops each exact active backend before applying that guard; a failed local or remote stop leaves the project active and reports the underlying failure.
 - Project archiving is reversible and does not delete terminals, activity, files, or provider archives.
 - An archived project can be permanently removed from the local PanePilot database. Cascading deletion removes its sessions, saved output, activity, and type-owned records while leaving the folder, `.panepilot`, and provider archives untouched.
 
