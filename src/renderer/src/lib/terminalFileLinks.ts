@@ -50,6 +50,17 @@ function looksLikeFilePath(path: string): boolean {
   )
 }
 
+function trimTrailingSentencePeriods(candidate: string): string {
+  let end = candidate.length
+  while (end > 0 && candidate[end - 1] === '.') {
+    const withoutPeriod = candidate.slice(0, end - 1)
+    const name = withoutPeriod.split('/').at(-1) ?? ''
+    if (!name || name === '.' || name === '..') break
+    end -= 1
+  }
+  return candidate.slice(0, end)
+}
+
 export function normalizeTerminalFilePath(
   rawPath: string,
   projectFolder: string
@@ -103,12 +114,15 @@ export function parseTerminalFileLinks(
   FILE_REFERENCE_PATTERN.lastIndex = 0
   return [...line.matchAll(FILE_REFERENCE_PATTERN)].flatMap(
     (match): ParsedTerminalFileLink[] => {
-      const rawPath = match[2]
+      const matchedPath = match[2]
+      if (!matchedPath) return []
+      const rawPath = trimTrailingSentencePeriods(matchedPath)
       if (!rawPath || !looksLikeFilePath(rawPath)) return []
       const path = normalizeTerminalFilePath(rawPath, projectFolder)
       if (!path) return []
       const prefixLength = match[1]?.length ?? 0
-      const text = match[0].slice(prefixLength)
+      const suffix = match[0].slice(prefixLength + matchedPath.length)
+      const text = `${rawPath}${suffix}`
       return [
         {
           startIndex: (match.index ?? 0) + prefixLength,

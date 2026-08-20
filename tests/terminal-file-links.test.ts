@@ -57,6 +57,39 @@ describe('terminal file links', () => {
     ])
   })
 
+  it('excludes a trailing sentence period from file paths', () => {
+    expect(
+      parseTerminalFileLinks(
+        'Open .panepilot/notes/guardian-cryptic-crosswords.md.',
+        projectFolder
+      )
+    ).toEqual([
+      expect.objectContaining({
+        text: '.panepilot/notes/guardian-cryptic-crosswords.md',
+        target: {
+          path: '.panepilot/notes/guardian-cryptic-crosswords.md',
+          line: null,
+          column: null
+        }
+      })
+    ])
+    expect(parseTerminalFileLinks('Open .env', projectFolder)[0]?.target.path).toBe(
+      '.env'
+    )
+    expect(
+      parseTerminalFileLinks('See src/components/App.tsx:42:7.', projectFolder)[0]
+    ).toEqual(
+      expect.objectContaining({
+        text: 'src/components/App.tsx:42:7',
+        target: {
+          path: 'src/components/App.tsx',
+          line: 42,
+          column: 7
+        }
+      })
+    )
+  })
+
   it('does not mistake a bare web dashboard URL for a project path', () => {
     expect(
       parseTerminalFileLinks(
