@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0 — 2026-08-24
+
+This release adds:
+
+- Existing-folder and new-folder project creation for local and SSH connections. The
+  unified SSH browser supports editable canonical paths, inline folder creation,
+  fuzzy filtering, and keyboard completion/navigation without speculative remote
+  requests. New LaTeX folders receive a minimal configured main file.
+- Sanitized GitHub-style Preview/Source modes for project Notes, exact provider
+  session-ID copying in LLM Chats, and a Local repository state for Git projects
+  without an `origin` remote.
+- Safer lifecycle and migration behavior: project archiving stops every exact live
+  ordinary or capability-owned session before archiving, legacy project deletion
+  cascades are repaired, shortcut gestures target only the focused terminal, and
+  terminal file links exclude trailing prose punctuation.
+
+The v0.7.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.6.0 — 2026-08-14
 
 This release adds:
