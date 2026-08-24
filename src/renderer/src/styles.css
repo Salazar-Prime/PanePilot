@@ -4230,6 +4230,19 @@ button.type-switcher {
   white-space: nowrap;
 }
 
+.latex-tab-meta .latex-background-refresh {
+  flex: 0 0 auto;
+  color: #7682b7;
+  opacity: 0.78;
+}
+
+.latex-tab-meta .latex-refresh-error {
+  max-width: none;
+  flex: 0 0 auto;
+  color: #c78f73;
+  cursor: help;
+}
+
 .latex-tab-meta > button {
   height: 25px !important;
   margin-left: 5px;

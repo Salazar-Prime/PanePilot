@@ -3,7 +3,9 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState
 } from 'react'
 import {
@@ -63,6 +65,7 @@ type WorkspaceTab =
 
 const latexWorkspaceTabs = new Map<string, WorkspaceTab>()
 const openedPdfProjects = new Set<string>()
+const latexWorkspaceCache = new Map<string, LatexWorkspace>()
 
 export function LatexProjectWorkspace({
   project,
@@ -82,15 +85,22 @@ export function LatexProjectWorkspace({
   const [pdfOpened, setPdfOpened] = useState(
     () => openedPdfProjects.has(project.id) || tab === 'pdf'
   )
-  const [workspace, setWorkspace] = useState<LatexWorkspace | null>(null)
+  const [workspace, setWorkspace] = useState<LatexWorkspace | null>(
+    () => latexWorkspaceCache.get(project.id) ?? null
+  )
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [showLauncher, setShowLauncher] = useState(false)
   const [filesInitialPath, setFilesInitialPath] = useState('.')
   const [openFileRequest, setOpenFileRequest] =
     useState<ProjectFileOpenRequest | null>(null)
   const [changes, setChanges] = useState<LatexChangeSet | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(
+    () => !latexWorkspaceCache.has(project.id)
+  )
+  const [refreshingWorkspace, setRefreshingWorkspace] = useState(false)
+  const [refreshError, setRefreshError] = useState('')
   const [error, setError] = useState('')
+  const workspaceRequestRef = useRef(0)
   const sessions = useMemo(
     () =>
       project.sessions.filter(
@@ -189,9 +199,16 @@ export function LatexProjectWorkspace({
   })
 
   const loadWorkspace = useCallback(async () => {
+    const requestId = ++workspaceRequestRef.current
+    const cached = latexWorkspaceCache.get(project.id) ?? null
+    setLoading(cached == null)
+    setRefreshingWorkspace(cached != null)
     setError('')
+    setRefreshError('')
     try {
       const next = await window.projectConsole.latex.getWorkspace(project.id)
+      if (requestId !== workspaceRequestRef.current) return
+      latexWorkspaceCache.set(project.id, next)
       setWorkspace(next)
       setSelectedSectionId((current) =>
         current && next.sections.some((section) => section.id === current)
@@ -199,22 +216,35 @@ export function LatexProjectWorkspace({
           : null
       )
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught))
+      if (requestId !== workspaceRequestRef.current) return
+      const message = caught instanceof Error ? caught.message : String(caught)
+      if (cached) setRefreshError(message)
+      else setError(message)
     } finally {
-      setLoading(false)
+      if (requestId === workspaceRequestRef.current) {
+        setLoading(false)
+        setRefreshingWorkspace(false)
+      }
     }
   }, [project.id])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const cached = latexWorkspaceCache.get(project.id) ?? null
     const rememberedTab = latexWorkspaceTabs.get(project.id) ?? 'manuscript'
     setTab(rememberedTab)
     setPdfOpened(openedPdfProjects.has(project.id) || rememberedTab === 'pdf')
-    setLoading(true)
-    setWorkspace(null)
+    setWorkspace(cached)
+    setLoading(cached == null)
+    setRefreshingWorkspace(cached != null)
+    setError('')
+    setRefreshError('')
     setChanges(null)
     setSelectedSectionId(null)
     setOpenFileRequest(null)
     void loadWorkspace()
+    return () => {
+      workspaceRequestRef.current += 1
+    }
   }, [project.id, loadWorkspace])
 
   useEffect(() => {
@@ -385,6 +415,18 @@ export function LatexProjectWorkspace({
         <div className="latex-tab-meta">
           <FileClock size={13} />
           <span>{workspace.details.mainFile}</span>
+          {refreshingWorkspace && (
+            <LoaderCircle
+              className="spin latex-background-refresh"
+              size={11}
+              aria-label="Refreshing manuscript map"
+            />
+          )}
+          {refreshError && (
+            <span className="latex-refresh-error" title={refreshError}>
+              Refresh failed
+            </span>
+          )}
           <button onClick={() => setShowLauncher(true)}>
             <Plus size={12} /> Chat
           </button>
