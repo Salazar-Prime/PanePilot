@@ -239,7 +239,7 @@ function registerIpc(): void {
     }
   )
   ipcMain.handle('terminals:discover', (_event, connectionId?: string) =>
-    terminals.reconcileRemoteSessions(connectionId)
+    terminals.reconcileSessions(connectionId)
   )
   ipcMain.handle(
     'terminals:attach',
@@ -694,7 +694,7 @@ if (!ownsSingleInstanceLock) {
         terminals.reconnectAfterWake()
       })
       void terminals
-        .reconcileRemoteSessions()
+        .reconcileSessions()
         .catch(() => 0)
         .then(() => terminals.discoverSavedProviderSessions())
 

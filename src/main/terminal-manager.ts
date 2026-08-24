@@ -361,7 +361,7 @@ function interactiveLoginCommand(command: string): string {
 export class TerminalManager {
   private readonly runtimes = new Map<string, Runtime>()
   private readonly reconnects = new Map<string, ReconnectRuntime>()
-  private readonly remoteReconciliations = new Map<string, Promise<number>>()
+  private readonly tmuxReconciliations = new Map<string, Promise<number>>()
   private readonly remoteTmuxPaths = new Map<string, string>()
   private readonly pendingOutput = new Map<string, PendingOutput>()
   private readonly volatileOutput = new Map<string, VolatileOutput>()
@@ -860,7 +860,7 @@ export class TerminalManager {
     }
   }
 
-  async reconcileRemoteSessions(connectionId?: string): Promise<number> {
+  async reconcileSessions(connectionId?: string): Promise<number> {
     if (this.shuttingDown) return 0
     const projects = this.store
       .listProjects()
@@ -869,27 +869,30 @@ export class TerminalManager {
       .listConnections()
       .filter(
         (connection) =>
-          connection.kind === 'ssh' &&
           (!connectionId || connection.id === connectionId) &&
           projects.some((project) => project.connectionId === connection.id)
       )
     const changes = await Promise.all(
       connections.map((connection) => {
-        const active = this.remoteReconciliations.get(connection.id)
+        const active = this.tmuxReconciliations.get(connection.id)
         if (active) return active
-        const reconciliation = this.reconcileRemoteConnection(
+        const reconciliation = this.reconcileConnection(
           connection,
           projects.filter((project) => project.connectionId === connection.id)
         )
           .catch(() => 0)
           .finally(() => {
-            this.remoteReconciliations.delete(connection.id)
+            this.tmuxReconciliations.delete(connection.id)
           })
-        this.remoteReconciliations.set(connection.id, reconciliation)
+        this.tmuxReconciliations.set(connection.id, reconciliation)
         return reconciliation
       })
     )
     return changes.reduce((total, count) => total + count, 0)
+  }
+
+  async reconcileRemoteSessions(connectionId?: string): Promise<number> {
+    return this.reconcileSessions(connectionId)
   }
 
   async syncSessionMetadata(
@@ -1040,7 +1043,7 @@ export class TerminalManager {
       session.tmuxName
     ) {
       if (connection.kind === 'ssh') {
-        await this.reconcileRemoteSessions(connection.id)
+        await this.reconcileSessions(connection.id)
       } else if (this.tmuxSessionExists(connection, session.tmuxName)) {
         this.store.setSessionState(
           session.id,
@@ -1574,7 +1577,7 @@ export class TerminalManager {
       if (reconnect.timer) clearTimeout(reconnect.timer)
     }
     this.reconnects.clear()
-    this.remoteReconciliations.clear()
+    this.tmuxReconciliations.clear()
     this.remoteTmuxPaths.clear()
     this.volatileOutput.clear()
     for (const runtime of this.runtimes.values()) {
@@ -2267,6 +2270,33 @@ export class TerminalManager {
     }
   }
 
+  private listLocalTmuxSessions(): ListedTmuxSession[] | null {
+    if (!this.tmuxPath) return null
+    const result = spawnSync(
+      this.tmuxPath,
+      ['list-sessions', '-F', tmuxSessionListFormat()],
+      {
+        encoding: 'utf8',
+        timeout: 4_000,
+        maxBuffer: MAX_TMUX_LIST_OUTPUT
+      }
+    )
+    if (result.error) return null
+    if (result.status === 0) return parseTmuxSessionList(result.stdout)
+    const detail = `${result.stdout}${result.stderr}`
+    return /no server running|failed to connect to server/i.test(detail)
+      ? []
+      : null
+  }
+
+  private listTmuxSessions(
+    connection: Connection
+  ): Promise<ListedTmuxSession[] | null> {
+    return connection.kind === 'local'
+      ? Promise.resolve(this.listLocalTmuxSessions())
+      : this.listRemoteTmuxSessions(connection)
+  }
+
   private beginRemoteReconnect(
     sessionId: string,
     cols: number,
@@ -2465,11 +2495,11 @@ export class TerminalManager {
     )
   }
 
-  private async reconcileRemoteConnection(
+  private async reconcileConnection(
     connection: Connection,
     projects: Project[]
   ): Promise<number> {
-    const listed = await this.listRemoteTmuxSessions(connection)
+    const listed = await this.listTmuxSessions(connection)
     if (this.shuttingDown) return 0
     if (!listed) return 0
 
@@ -2483,7 +2513,7 @@ export class TerminalManager {
 
     for (const listedSession of listed) {
       let metadata = listedSession.metadata
-      let repairRemoteMetadata = false
+      let repairMetadata = false
       if (metadata && metadata.sessionKind == null) {
         const known = this.store.getSession(metadata.terminalId)
         if (known?.projectId) {
@@ -2502,7 +2532,7 @@ export class TerminalManager {
                 }
               : null
           }
-          repairRemoteMetadata = true
+          repairMetadata = true
         }
       }
       const project = this.projectForDiscoveredSession(projects, listedSession)
@@ -2516,7 +2546,7 @@ export class TerminalManager {
           ...known,
           kind: 'latex-chat'
         })
-        repairRemoteMetadata = true
+        repairMetadata = true
       }
       const result = this.store.upsertDiscoveredTmuxSession(
         project.id,
@@ -2539,7 +2569,7 @@ export class TerminalManager {
             listedSession.paneTitle
           )) || changed
       }
-      if (repairRemoteMetadata) {
+      if (repairMetadata) {
         changed = (await this.syncSessionMetadata(result.session.id)) || changed
       }
       if (metadata.action && result.session.kind === 'action') {

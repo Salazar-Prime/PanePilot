@@ -459,15 +459,15 @@ export function App() {
   )
 
   useEffect(() => {
-    if (!paneAConnection || paneAConnection.kind !== 'ssh') return
+    if (!paneAConnection) return
     let active = true
     const discover = async () => {
       try {
         await window.projectConsole.terminals.discover(paneAConnection.id)
         if (active) await refresh()
       } catch {
-        // Remote discovery is supplemental. Offline hosts must not block the
-        // locally cached project and terminal workspace.
+        // Discovery is supplemental. An unavailable tmux server or SSH host
+        // must not block the locally cached project and terminal workspace.
       }
     }
     void discover()
@@ -479,15 +479,15 @@ export function App() {
   }, [paneAConnection?.id, paneAConnection?.kind, refresh])
 
   useEffect(() => {
-    if (!paneBConnection || paneBConnection.kind !== 'ssh') return
+    if (!paneBConnection) return
     let active = true
     const discover = async () => {
       try {
         await window.projectConsole.terminals.discover(paneBConnection.id)
         if (active) await refresh()
       } catch {
-        // Remote discovery is supplemental. Offline hosts must not block the
-        // locally cached project and terminal workspace.
+        // Discovery is supplemental. An unavailable tmux server or SSH host
+        // must not block the locally cached project and terminal workspace.
       }
     }
     void discover()
