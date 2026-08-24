@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.1 — 2026-08-24
+
+This patch release fixes the LaTeX workflow:
+
+- LaTeX chats now preserve their project or section scope and Ask/Edit mode before
+  tmux launch. Remote discovery also repairs stale generic metadata instead of
+  replacing richer local attachment details.
+- PDF preview now uses a continuous, lazily rendered page stack and remembers its
+  tab, page, zoom, and scroll position while switching projects or capabilities and
+  after reload or recompile.
+- A bounded Recompile action runs the existing `latexmk` installation on the local
+  or SSH project machine, then reloads the PDF without returning to page one.
+
+The v0.7.1 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.7.0 — 2026-08-24
 
 This release adds:
