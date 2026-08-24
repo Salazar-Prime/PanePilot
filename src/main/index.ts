@@ -258,6 +258,9 @@ function registerIpc(): void {
   ipcMain.handle('latex:get-workspace', (_event, projectId: string) =>
     latex.getWorkspace(projectId)
   )
+  ipcMain.handle('latex:source-revision', (_event, projectId: string) =>
+    latex.sourceRevision(projectId)
+  )
   ipcMain.handle('latex:get-pdf', (_event, projectId: string) =>
     latex.getPdf(projectId)
   )

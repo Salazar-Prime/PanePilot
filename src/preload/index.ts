@@ -205,6 +205,8 @@ const api: ProjectConsoleApi = {
   latex: {
     getWorkspace: (projectId: string) =>
       ipcRenderer.invoke('latex:get-workspace', projectId),
+    sourceRevision: (projectId: string) =>
+      ipcRenderer.invoke('latex:source-revision', projectId),
     getPdf: (projectId: string) => ipcRenderer.invoke('latex:get-pdf', projectId),
     compile: (projectId: string) => ipcRenderer.invoke('latex:compile', projectId),
     update: (input: UpdateLatexProjectInput) => ipcRenderer.invoke('latex:update', input),

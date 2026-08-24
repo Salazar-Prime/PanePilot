@@ -14,7 +14,8 @@ import {
   Minus,
   Plus,
   Printer,
-  RefreshCw
+  RefreshCw,
+  Zap
 } from 'lucide-react'
 import {
   GlobalWorkerOptions,
@@ -24,6 +25,10 @@ import {
 } from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { LatexPdfDocument } from '@shared/types'
+import {
+  loadLatexAutoCompile,
+  saveLatexAutoCompile
+} from '../lib/latexAutoCompile'
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
@@ -35,6 +40,7 @@ const PRINT_PIXEL_BUDGET = 40_000_000
 const MAX_PRINT_CANVAS_EDGE = 8_192
 const DEFAULT_PAGE_WIDTH = 612
 const DEFAULT_PAGE_HEIGHT = 792
+const AUTO_COMPILE_POLL_MS = 2_500
 
 interface LatexPdfPreviewProps {
   projectId: string
@@ -56,6 +62,7 @@ interface LatexPdfPageProps {
 }
 
 const pdfViewMemory = new Map<string, PdfViewMemory>()
+const pdfSnapshotCache = new Map<string, LatexPdfDocument>()
 
 function decodeBase64(value: string): Uint8Array {
   const decoded = window.atob(value)
@@ -191,6 +198,9 @@ export function LatexPdfPreview({
   const documentRef = useRef<PDFDocumentProxy | null>(null)
   const loadVersionRef = useRef(0)
   const printVersionRef = useRef(0)
+  const compileInFlightRef = useRef(false)
+  const autoCheckInFlightRef = useRef(false)
+  const autoRevisionRef = useRef<string | null>(null)
   const restoredScrollRef = useRef(false)
   const pageNumberRef = useRef(savedViewRef.current?.pageNumber ?? 1)
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null)
@@ -204,8 +214,13 @@ export function LatexPdfPreview({
   const [zoom, setZoom] = useState(savedViewRef.current?.zoom ?? 1)
   const [loading, setLoading] = useState(true)
   const [compiling, setCompiling] = useState(false)
+  const [autoCompile, setAutoCompile] = useState(() =>
+    loadLatexAutoCompile(projectId)
+  )
+  const autoCompileRef = useRef(autoCompile)
   const [printingPage, setPrintingPage] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [autoCompileError, setAutoCompileError] = useState('')
   const expectedPath = compiledPdfPath(mainFile)
 
   const installPdf = useCallback(
@@ -219,6 +234,7 @@ export function LatexPdfPreview({
       }
       const previousDocument = documentRef.current
       documentRef.current = nextDocument
+      pdfSnapshotCache.set(projectId, document)
       setPdf(nextDocument)
       setMetadata(nextMetadata)
       setPageNumber((current) => {
@@ -228,7 +244,7 @@ export function LatexPdfPreview({
       })
       if (previousDocument) await previousDocument.destroy()
     },
-    []
+    [projectId]
   )
 
   const loadPdf = useCallback(async () => {
@@ -236,8 +252,11 @@ export function LatexPdfPreview({
     setLoading(true)
     setError('')
     try {
+      const cached = pdfSnapshotCache.get(projectId)
       await installPdf(
-        await window.projectConsole.latex.getPdf(projectId),
+        cached?.path === expectedPath
+          ? cached
+          : await window.projectConsole.latex.getPdf(projectId),
         version
       )
     } catch (caught) {
@@ -250,10 +269,11 @@ export function LatexPdfPreview({
     } finally {
       if (version === loadVersionRef.current) setLoading(false)
     }
-  }, [installPdf, mainFile, projectId])
+  }, [expectedPath, installPdf, projectId])
 
   const recompilePdf = useCallback(async () => {
-    if (compiling) return
+    if (compileInFlightRef.current) return
+    compileInFlightRef.current = true
     const version = ++loadVersionRef.current
     setCompiling(true)
     setError('')
@@ -262,14 +282,25 @@ export function LatexPdfPreview({
         await window.projectConsole.latex.compile(projectId),
         version
       )
+      void window.projectConsole.latex
+        .sourceRevision(projectId)
+        .then((revision) => {
+          if (version === loadVersionRef.current) {
+            autoRevisionRef.current = revision
+          }
+        })
+        .catch(() => {
+          // The next enabled watcher tick can establish a fresh baseline.
+        })
     } catch (caught) {
       if (version === loadVersionRef.current) {
         setError(caught instanceof Error ? caught.message : String(caught))
       }
     } finally {
+      compileInFlightRef.current = false
       if (version === loadVersionRef.current) setCompiling(false)
     }
-  }, [compiling, installPdf, projectId])
+  }, [installPdf, projectId])
 
   useEffect(() => {
     void loadPdf()
@@ -281,6 +312,47 @@ export function LatexPdfPreview({
       if (currentDocument) void currentDocument.destroy()
     }
   }, [loadPdf])
+
+  useEffect(() => {
+    autoCompileRef.current = autoCompile
+    if (!autoCompile) {
+      autoRevisionRef.current = null
+      return
+    }
+
+    async function checkForSourceChanges() {
+      if (!autoCompileRef.current || autoCheckInFlightRef.current) return
+      autoCheckInFlightRef.current = true
+      try {
+        const revision = await window.projectConsole.latex.sourceRevision(projectId)
+        if (!autoCompileRef.current) return
+        setAutoCompileError('')
+        const previous = autoRevisionRef.current
+        autoRevisionRef.current = revision
+        if (previous != null && previous !== revision) {
+          await recompilePdf()
+        }
+      } catch (caught) {
+        if (autoCompileRef.current) {
+          setAutoCompileError(
+            caught instanceof Error ? caught.message : String(caught)
+          )
+        }
+      } finally {
+        autoCheckInFlightRef.current = false
+      }
+    }
+
+    void checkForSourceChanges()
+    const timer = window.setInterval(
+      () => void checkForSourceChanges(),
+      AUTO_COMPILE_POLL_MS
+    )
+    return () => {
+      autoCompileRef.current = false
+      window.clearInterval(timer)
+    }
+  }, [autoCompile, projectId, recompilePdf])
 
   useLayoutEffect(() => {
     if (!pdf || !scrollRoot || restoredScrollRef.current) return
@@ -366,6 +438,16 @@ export function LatexPdfPreview({
     setZoom((current) =>
       Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, current + delta))
     )
+  }
+
+  function toggleAutoCompile() {
+    const enabled = !autoCompile
+    autoCompileRef.current = enabled
+    autoRevisionRef.current = null
+    setAutoCompile(enabled)
+    saveLatexAutoCompile(projectId, enabled)
+    setError('')
+    setAutoCompileError('')
   }
 
   async function showInFinder() {
@@ -466,12 +548,26 @@ export function LatexPdfPreview({
           <span>PDF</span>
         </div>
         <strong>No compiled PDF to preview</strong>
-        <p>{error || `PanePilot could not open “${expectedPath}”.`}</p>
+        <p>
+          {error ||
+            autoCompileError ||
+            `PanePilot could not open “${expectedPath}”.`}
+        </p>
         <small>
           Recompile uses <code>latexmk</code> on the project machine and places
           the PDF beside the configured main file.
         </small>
         <div className="latex-pdf-missing-actions">
+          <button
+            className={`secondary-button latex-pdf-auto-compile ${
+              autoCompile ? 'active' : ''
+            }`}
+            onClick={toggleAutoCompile}
+            aria-pressed={autoCompile}
+            title="Compile automatically after LaTeX source files change"
+          >
+            <Zap size={13} /> Auto compile
+          </button>
           <button
             className="primary-button"
             onClick={() => void recompilePdf()}
@@ -483,9 +579,6 @@ export function LatexPdfPreview({
               <RefreshCw size={13} />
             )}
             {compiling ? 'Compiling…' : 'Recompile'}
-          </button>
-          <button className="secondary-button" onClick={() => void loadPdf()}>
-            Reload from disk
           </button>
         </div>
       </div>
@@ -557,6 +650,20 @@ export function LatexPdfPreview({
             <Plus size={14} />
           </button>
           <button
+            className={`secondary-button latex-pdf-auto-compile ${
+              autoCompile ? 'active' : ''
+            }`}
+            onClick={toggleAutoCompile}
+            aria-pressed={autoCompile}
+            title={
+              autoCompile
+                ? 'Auto compile is on for this project'
+                : 'Compile automatically after LaTeX source files change'
+            }
+          >
+            <Zap size={13} /> Auto compile
+          </button>
+          <button
             className="secondary-button latex-pdf-compile-button"
             disabled={compiling || printingPage != null}
             onClick={() => void recompilePdf()}
@@ -568,15 +675,6 @@ export function LatexPdfPreview({
               <RefreshCw size={13} />
             )}
             {compiling ? 'Compiling…' : 'Recompile'}
-          </button>
-          <button
-            className="icon-button latex-pdf-refresh"
-            disabled={loading || compiling || printingPage != null}
-            onClick={() => void loadPdf()}
-            aria-label="Reload compiled PDF from disk"
-            title="Reload compiled PDF from disk"
-          >
-            <RefreshCw size={14} />
           </button>
           {local && (
             <button
@@ -605,7 +703,11 @@ export function LatexPdfPreview({
           </button>
         </div>
       </header>
-      {error && <div className="latex-pdf-inline-error">{error}</div>}
+      {(error || autoCompileError) && (
+        <div className="latex-pdf-inline-error">
+          {error || autoCompileError}
+        </div>
+      )}
       <div className="latex-pdf-pasteboard" ref={setScrollRoot}>
         <div className="latex-pdf-pages">
           {Array.from({ length: pdf.numPages }, (_, index) => (

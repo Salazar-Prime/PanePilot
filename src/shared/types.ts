@@ -592,6 +592,7 @@ export interface ProjectConsoleApi {
   }
   latex: {
     getWorkspace(projectId: string): Promise<LatexWorkspace>
+    sourceRevision(projectId: string): Promise<string>
     getPdf(projectId: string): Promise<LatexPdfDocument>
     compile(projectId: string): Promise<LatexPdfDocument>
     update(input: UpdateLatexProjectInput): Promise<LatexWorkspace>

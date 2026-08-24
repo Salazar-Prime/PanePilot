@@ -130,11 +130,6 @@
   text-align: center;
 }
 
-.latex-pdf-refresh {
-  border-left: 1px solid #2a303a;
-  border-radius: 0;
-}
-
 .latex-pdf-toolbar .icon-button {
   width: 27px;
   height: 27px;
@@ -153,12 +148,33 @@
 
 .latex-pdf-compile-button {
   height: 28px;
-  margin-left: 7px;
   padding: 0 10px;
   color: #c5cdfb;
   border-color: #3c466f;
   background: #171d34;
   font-size: 9px;
+}
+
+.latex-pdf-auto-compile {
+  height: 28px;
+  margin-left: 7px;
+  padding: 0 9px;
+  color: #77818e;
+  border-color: #303742;
+  background: #11151c;
+  font-size: 9px;
+}
+
+.latex-pdf-auto-compile.active {
+  color: #a5dfcc;
+  border-color: #3d6e5f;
+  background: #162b24;
+  box-shadow: inset 0 0 0 1px #70c7aa18;
+}
+
+.latex-pdf-auto-compile.active svg {
+  color: #78d0b2;
+  fill: #78d0b226;
 }
 
 .latex-pdf-print-root {

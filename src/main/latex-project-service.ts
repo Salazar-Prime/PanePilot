@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   lstatSync,
   readFileSync,
@@ -28,6 +29,7 @@ import {
 import {
   previewRemoteFile,
   readRemoteBinaryFile,
+  readRemoteSourceRevision,
   readRemoteTextFiles,
   remoteDirectoryExists
 } from './remote-file-service'
@@ -35,6 +37,7 @@ import type { ParsedLatexSection, Store } from './store'
 import type { TerminalManager } from './terminal-manager'
 
 const MAX_LATEX_FILES = 256
+const MAX_LATEX_SCAN_ENTRIES = 20_000
 const MAX_LATEX_BYTES = 8 * 1024 * 1024
 const MAX_PDF_BYTES = 32 * 1024 * 1024
 const MAX_COMPILE_OUTPUT = 2 * 1024 * 1024
@@ -285,6 +288,55 @@ function localLatexFiles(root: string): Record<string, string> {
 
   visit(realRoot)
   return files
+}
+
+export function localLatexSourceRevision(root: string): string {
+  const realRoot = realpathSync(root)
+  const entries: string[] = []
+  const visitedDirectories = new Set<string>()
+  let scannedEntries = 0
+
+  function visit(directory: string): void {
+    if (
+      entries.length >= MAX_LATEX_FILES ||
+      scannedEntries >= MAX_LATEX_SCAN_ENTRIES ||
+      visitedDirectories.has(directory)
+    ) {
+      return
+    }
+    visitedDirectories.add(directory)
+    for (const name of readdirSync(directory).sort()) {
+      scannedEntries += 1
+      if (scannedEntries > MAX_LATEX_SCAN_ENTRIES) return
+      if (name === '.git' || name === 'node_modules' || name.startsWith('.')) {
+        continue
+      }
+      let target: string
+      try {
+        target = realpathSync(resolve(directory, name))
+      } catch {
+        continue
+      }
+      if (target !== realRoot && !target.startsWith(`${realRoot}${sep}`)) continue
+      let stat
+      try {
+        stat = lstatSync(target, { bigint: true })
+      } catch {
+        continue
+      }
+      if (stat.isDirectory()) {
+        visit(target)
+        continue
+      }
+      if (!stat.isFile() || !name.toLocaleLowerCase().endsWith('.tex')) continue
+      const path = relative(realRoot, target).split(sep).join('/')
+      entries.push(`${path}\0${stat.size}\0${stat.mtimeNs}`)
+      if (entries.length >= MAX_LATEX_FILES) return
+    }
+  }
+
+  visit(realRoot)
+  return createHash('sha256').update(entries.sort().join('\0')).digest('hex')
 }
 
 function localDirectoryExists(root: string, requested: string): boolean {
@@ -583,6 +635,20 @@ export class LatexProjectService {
               details.contextFolder
             )
     }
+  }
+
+  async sourceRevision(projectId: string): Promise<string> {
+    const { project, connection } = this.requireProject(projectId)
+    if (connection.kind === 'local') {
+      return localLatexSourceRevision(project.folder)
+    }
+    return readRemoteSourceRevision(
+      connection.sshAlias ?? connection.name,
+      project.folder,
+      '.tex',
+      MAX_LATEX_FILES,
+      MAX_LATEX_SCAN_ENTRIES
+    )
   }
 
   async getPdf(projectId: string): Promise<LatexPdfDocument> {

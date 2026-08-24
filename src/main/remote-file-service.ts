@@ -392,6 +392,51 @@ inside = os.path.commonpath([root, target]) == root
 print(json.dumps({"exists": inside and os.path.isdir(target)}))
 `
 
+const SOURCE_REVISION_SCRIPT = String.raw`
+import hashlib, json, os, sys
+payload = json.load(sys.stdin)
+root = os.path.realpath(os.path.expanduser(payload["root"]))
+extension = str(payload.get("extension") or "").lower()
+max_files = int(payload.get("maxFiles") or 256)
+max_entries = int(payload.get("maxEntries") or 20000)
+entries = []
+scanned = 0
+for directory, names, files in os.walk(root):
+    filtered_names = sorted(
+        name for name in names
+        if name not in (".git", "node_modules") and not name.startswith(".")
+    )
+    remaining = max(0, max_entries - scanned)
+    names[:] = filtered_names[:remaining]
+    scanned += len(names)
+    remaining = max(0, max_entries - scanned)
+    for name in sorted(files)[:remaining]:
+        scanned += 1
+        if len(entries) >= max_files:
+            break
+        if extension and not name.lower().endswith(extension):
+            continue
+        target = os.path.realpath(os.path.join(directory, name))
+        try:
+            if os.path.commonpath([root, target]) != root:
+                continue
+            stat = os.stat(target)
+            if not os.path.isfile(target):
+                continue
+            relative = os.path.relpath(target, root).replace(os.sep, "/")
+            entries.append([relative, stat.st_size, stat.st_mtime_ns])
+        except OSError:
+            pass
+    if len(entries) >= max_files or scanned >= max_entries:
+        break
+digest = hashlib.sha256()
+for path, size, modified in sorted(entries):
+    digest.update(path.encode("utf-8", "surrogateescape"))
+    digest.update(b"\0" + str(size).encode("ascii"))
+    digest.update(b"\0" + str(modified).encode("ascii") + b"\0")
+print(json.dumps({"revision": digest.hexdigest()}))
+`
+
 function quote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
 }
@@ -776,6 +821,23 @@ export function readRemoteTextFiles(
       Buffer.from(content, 'base64').toString('utf8')
     ])
   )
+}
+
+export async function readRemoteSourceRevision(
+  sshAlias: string,
+  root: string,
+  extension: string,
+  maxFiles = 256,
+  maxEntries = 20_000
+): Promise<string> {
+  const result = await runRemotePythonAsync<{ revision: string }>(
+    sshAlias,
+    SOURCE_REVISION_SCRIPT,
+    { root, extension, maxFiles, maxEntries },
+    256 * 1024,
+    20_000
+  )
+  return result.revision
 }
 
 export function remoteDirectoryExists(
