@@ -1307,6 +1307,11 @@ select:focus-visible {
   width: 100%;
 }
 
+.workspace-panel-cache > .latex-pdf-preview,
+.workspace-panel-cache > .latex-pdf-state {
+  width: 100%;
+}
+
 .notes-layout {
   display: grid;
   min-width: 0;

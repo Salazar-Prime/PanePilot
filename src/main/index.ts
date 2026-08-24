@@ -261,6 +261,9 @@ function registerIpc(): void {
   ipcMain.handle('latex:get-pdf', (_event, projectId: string) =>
     latex.getPdf(projectId)
   )
+  ipcMain.handle('latex:compile', (_event, projectId: string) =>
+    latex.compile(projectId)
+  )
   ipcMain.handle('latex:update', (_event, input: UpdateLatexProjectInput) =>
     latex.update(input)
   )

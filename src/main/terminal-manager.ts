@@ -11,6 +11,8 @@ import type {
   Connection,
   ConversationProvider,
   CreateProjectActionInput,
+  LatexChatMode,
+  LatexChatScope,
   LaunchProfile,
   Project,
   ProjectAction,
@@ -387,6 +389,29 @@ export class TerminalManager {
     return this.startSession(input, 'terminal')
   }
 
+  startLatexChat(
+    input: StartTerminalInput,
+    attachment: {
+      scope: LatexChatScope
+      sectionId: string | null
+      mode: LatexChatMode
+    }
+  ): TerminalSession {
+    if (!AGENT_PROFILES.has(input.profile)) {
+      throw new Error('Choose Codex or Claude for a LaTeX chat.')
+    }
+    return this.startSession(
+      input,
+      'latex-chat',
+      (session) => {
+        this.store.attachLatexChat(session.id, {
+          projectId: input.projectId,
+          ...attachment
+        })
+      }
+    )
+  }
+
   restoreLocalSessionsAfterReboot(
     bootTimeMs = systemBootTimeMs()
   ): number {
@@ -704,7 +729,8 @@ export class TerminalManager {
     if (
       (kind === 'action' ||
         kind === 'project-qna' ||
-        kind === 'temporary-chat') &&
+        kind === 'temporary-chat' ||
+        kind === 'latex-chat') &&
       !tmuxAvailable
     ) {
       const capability =
@@ -712,7 +738,9 @@ export class TerminalManager {
           ? 'Actions'
           : kind === 'project-qna'
             ? 'Project Q&A'
-            : 'Temporary Codex chats'
+            : kind === 'temporary-chat'
+              ? 'Temporary Codex chats'
+              : 'LaTeX chats'
       throw new Error(
         `${capability} require tmux on this connection.`
       )
@@ -762,9 +790,13 @@ export class TerminalManager {
         codexThreadId
       )
     }
-    const session = this.requireSession(createdSession.id)
+    let session = this.requireSession(createdSession.id)
     try {
       onPersist?.(session)
+      // Capability attachments can change both the session kind and the
+      // metadata that must be written before tmux launches. Re-read the row so
+      // the first remote snapshot is already complete and portable.
+      session = this.requireSession(createdSession.id)
       this.launch(
         session,
         project.folder,
@@ -2451,7 +2483,7 @@ export class TerminalManager {
 
     for (const listedSession of listed) {
       let metadata = listedSession.metadata
-      let upgradeLegacyMetadata = false
+      let repairRemoteMetadata = false
       if (metadata && metadata.sessionKind == null) {
         const known = this.store.getSession(metadata.terminalId)
         if (known?.projectId) {
@@ -2470,11 +2502,22 @@ export class TerminalManager {
                 }
               : null
           }
-          upgradeLegacyMetadata = true
+          repairRemoteMetadata = true
         }
       }
       const project = this.projectForDiscoveredSession(projects, listedSession)
       if (!metadata || !project) continue
+      const known = this.store.getSession(metadata.terminalId)
+      if (
+        known?.latexChat &&
+        (metadata.sessionKind !== 'latex-chat' || metadata.latex == null)
+      ) {
+        metadata = this.metadataForSession(project, {
+          ...known,
+          kind: 'latex-chat'
+        })
+        repairRemoteMetadata = true
+      }
       const result = this.store.upsertDiscoveredTmuxSession(
         project.id,
         listedSession.name,
@@ -2496,7 +2539,7 @@ export class TerminalManager {
             listedSession.paneTitle
           )) || changed
       }
-      if (upgradeLegacyMetadata) {
+      if (repairRemoteMetadata) {
         changed = (await this.syncSessionMetadata(result.session.id)) || changed
       }
       if (metadata.action && result.session.kind === 'action') {

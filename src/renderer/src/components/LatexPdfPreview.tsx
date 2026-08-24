@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState
+} from 'react'
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,12 +33,29 @@ const ZOOM_STEP = 0.25
 const MAX_PRINT_SCALE = 2
 const PRINT_PIXEL_BUDGET = 40_000_000
 const MAX_PRINT_CANVAS_EDGE = 8_192
+const DEFAULT_PAGE_WIDTH = 612
+const DEFAULT_PAGE_HEIGHT = 792
 
 interface LatexPdfPreviewProps {
   projectId: string
   mainFile: string
   local: boolean
 }
+
+interface PdfViewMemory {
+  pageNumber: number
+  scrollTop: number
+  zoom: number
+}
+
+interface LatexPdfPageProps {
+  pdf: PDFDocumentProxy
+  pageNumber: number
+  scrollRoot: HTMLDivElement | null
+  zoom: number
+}
+
+const pdfViewMemory = new Map<string, PdfViewMemory>()
 
 function decodeBase64(value: string): Uint8Array {
   const decoded = window.atob(value)
@@ -53,90 +76,64 @@ function compiledPdfPath(mainFile: string): string {
   return mainFile.replace(/\.tex$/i, '.pdf')
 }
 
-export function LatexPdfPreview({
-  projectId,
-  mainFile,
-  local
-}: LatexPdfPreviewProps) {
+function LatexPdfPage({
+  pdf,
+  pageNumber,
+  scrollRoot,
+  zoom
+}: LatexPdfPageProps) {
+  const shellRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const documentRef = useRef<PDFDocumentProxy | null>(null)
-  const loadVersionRef = useRef(0)
-  const printVersionRef = useRef(0)
-  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
-  const [metadata, setMetadata] = useState<
-    Pick<LatexPdfDocument, 'path' | 'size' | 'modifiedAt'> | null
-  >(null)
-  const [pageNumber, setPageNumber] = useState(1)
-  const [zoom, setZoom] = useState(1)
-  const [loading, setLoading] = useState(true)
+  const [nearViewport, setNearViewport] = useState(false)
   const [rendering, setRendering] = useState(false)
-  const [printingPage, setPrintingPage] = useState<number | null>(null)
-  const [error, setError] = useState('')
-  const expectedPath = compiledPdfPath(mainFile)
-
-  const loadPdf = useCallback(async () => {
-    const version = ++loadVersionRef.current
-    setLoading(true)
-    setError('')
-    try {
-      const { dataBase64, ...nextMetadata } =
-        await window.projectConsole.latex.getPdf(projectId)
-      const loadingTask = getDocument({ data: decodeBase64(dataBase64) })
-      const nextDocument = await loadingTask.promise
-      if (version !== loadVersionRef.current) {
-        await nextDocument.destroy()
-        return
-      }
-      const previousDocument = documentRef.current
-      documentRef.current = nextDocument
-      setPdf(nextDocument)
-      setMetadata(nextMetadata)
-      setPageNumber(1)
-      if (previousDocument) await previousDocument.destroy()
-    } catch (caught) {
-      if (version !== loadVersionRef.current) return
-      const previousDocument = documentRef.current
-      documentRef.current = null
-      setPdf(null)
-      setMetadata(null)
-      setError(caught instanceof Error ? caught.message : String(caught))
-      if (previousDocument) await previousDocument.destroy()
-    } finally {
-      if (version === loadVersionRef.current) setLoading(false)
-    }
-  }, [mainFile, projectId])
+  const [size, setSize] = useState({
+    width: DEFAULT_PAGE_WIDTH * zoom,
+    height: DEFAULT_PAGE_HEIGHT * zoom
+  })
 
   useEffect(() => {
-    void loadPdf()
-    return () => {
-      loadVersionRef.current += 1
-      printVersionRef.current += 1
-      const currentDocument = documentRef.current
-      documentRef.current = null
-      if (currentDocument) void currentDocument.destroy()
+    const shell = shellRef.current
+    if (!shell || !scrollRoot) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setNearViewport(true)
+      return
     }
-  }, [loadPdf])
+    const observer = new IntersectionObserver(
+      ([entry]) => setNearViewport(entry.isIntersecting),
+      { root: scrollRoot, rootMargin: '1200px 0px' }
+    )
+    observer.observe(shell)
+    return () => observer.disconnect()
+  }, [scrollRoot])
 
   useEffect(() => {
-    if (!pdf || !canvasRef.current) return
-    let renderTask: RenderTask | null = null
     let cancelled = false
-    setRendering(true)
-    setError('')
+    let renderTask: RenderTask | null = null
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    if (!nearViewport) {
+      canvas.width = 1
+      canvas.height = 1
+      setRendering(false)
+    }
 
     void pdf
       .getPage(pageNumber)
       .then((page) => {
-        if (cancelled || !canvasRef.current) return
+        if (cancelled) return
         const viewport = page.getViewport({ scale: zoom })
+        setSize({ width: viewport.width, height: viewport.height })
+        if (!nearViewport || !canvasRef.current) return
+        const target = canvasRef.current
+        const context = target.getContext('2d', { alpha: false })
+        if (!context) throw new Error('PanePilot could not prepare a PDF page.')
         const outputScale = Math.max(1, window.devicePixelRatio || 1)
-        const canvas = canvasRef.current
-        const context = canvas.getContext('2d', { alpha: false })
-        if (!context) throw new Error('PanePilot could not prepare the PDF canvas.')
-        canvas.width = Math.floor(viewport.width * outputScale)
-        canvas.height = Math.floor(viewport.height * outputScale)
-        canvas.style.width = `${Math.floor(viewport.width)}px`
-        canvas.style.height = `${Math.floor(viewport.height)}px`
+        target.width = Math.max(1, Math.floor(viewport.width * outputScale))
+        target.height = Math.max(1, Math.floor(viewport.height * outputScale))
+        target.style.width = `${Math.floor(viewport.width)}px`
+        target.style.height = `${Math.floor(viewport.height)}px`
+        setRendering(true)
         renderTask = page.render({
           canvasContext: context,
           viewport,
@@ -150,7 +147,8 @@ export function LatexPdfPreview({
       })
       .catch((caught) => {
         if (cancelled || caught?.name === 'RenderingCancelledException') return
-        setError(caught instanceof Error ? caught.message : String(caught))
+        // A failed page should not take down navigation for the rest of the PDF.
+        console.error(`Could not render PDF page ${pageNumber}`, caught)
       })
       .finally(() => {
         if (!cancelled) setRendering(false)
@@ -160,11 +158,208 @@ export function LatexPdfPreview({
       cancelled = true
       renderTask?.cancel()
     }
-  }, [pageNumber, pdf, zoom])
+  }, [nearViewport, pageNumber, pdf, zoom])
+
+  return (
+    <div
+      ref={shellRef}
+      className="latex-pdf-page"
+      data-pdf-page={pageNumber}
+      style={{ width: size.width, height: size.height }}
+      aria-label={`Page ${pageNumber}`}
+      aria-busy={rendering}
+    >
+      <span className="latex-pdf-folio" aria-hidden="true">
+        {pageNumber}
+      </span>
+      {rendering && (
+        <div className="latex-pdf-rendering">
+          <LoaderCircle className="spin" size={17} /> Rendering page {pageNumber}
+        </div>
+      )}
+      <canvas ref={canvasRef} />
+    </div>
+  )
+}
+
+export function LatexPdfPreview({
+  projectId,
+  mainFile,
+  local
+}: LatexPdfPreviewProps) {
+  const savedViewRef = useRef(pdfViewMemory.get(projectId))
+  const documentRef = useRef<PDFDocumentProxy | null>(null)
+  const loadVersionRef = useRef(0)
+  const printVersionRef = useRef(0)
+  const restoredScrollRef = useRef(false)
+  const pageNumberRef = useRef(savedViewRef.current?.pageNumber ?? 1)
+  const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null)
+  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
+  const [metadata, setMetadata] = useState<
+    Pick<LatexPdfDocument, 'path' | 'size' | 'modifiedAt'> | null
+  >(null)
+  const [pageNumber, setPageNumber] = useState(
+    savedViewRef.current?.pageNumber ?? 1
+  )
+  const [zoom, setZoom] = useState(savedViewRef.current?.zoom ?? 1)
+  const [loading, setLoading] = useState(true)
+  const [compiling, setCompiling] = useState(false)
+  const [printingPage, setPrintingPage] = useState<number | null>(null)
+  const [error, setError] = useState('')
+  const expectedPath = compiledPdfPath(mainFile)
+
+  const installPdf = useCallback(
+    async (document: LatexPdfDocument, version: number) => {
+      const { dataBase64, ...nextMetadata } = document
+      const loadingTask = getDocument({ data: decodeBase64(dataBase64) })
+      const nextDocument = await loadingTask.promise
+      if (version !== loadVersionRef.current) {
+        await nextDocument.destroy()
+        return
+      }
+      const previousDocument = documentRef.current
+      documentRef.current = nextDocument
+      setPdf(nextDocument)
+      setMetadata(nextMetadata)
+      setPageNumber((current) => {
+        const nextPage = Math.max(1, Math.min(nextDocument.numPages, current))
+        pageNumberRef.current = nextPage
+        return nextPage
+      })
+      if (previousDocument) await previousDocument.destroy()
+    },
+    []
+  )
+
+  const loadPdf = useCallback(async () => {
+    const version = ++loadVersionRef.current
+    setLoading(true)
+    setError('')
+    try {
+      await installPdf(
+        await window.projectConsole.latex.getPdf(projectId),
+        version
+      )
+    } catch (caught) {
+      if (version !== loadVersionRef.current) return
+      if (!documentRef.current) {
+        setPdf(null)
+        setMetadata(null)
+      }
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      if (version === loadVersionRef.current) setLoading(false)
+    }
+  }, [installPdf, mainFile, projectId])
+
+  const recompilePdf = useCallback(async () => {
+    if (compiling) return
+    const version = ++loadVersionRef.current
+    setCompiling(true)
+    setError('')
+    try {
+      await installPdf(
+        await window.projectConsole.latex.compile(projectId),
+        version
+      )
+    } catch (caught) {
+      if (version === loadVersionRef.current) {
+        setError(caught instanceof Error ? caught.message : String(caught))
+      }
+    } finally {
+      if (version === loadVersionRef.current) setCompiling(false)
+    }
+  }, [compiling, installPdf, projectId])
+
+  useEffect(() => {
+    void loadPdf()
+    return () => {
+      loadVersionRef.current += 1
+      printVersionRef.current += 1
+      const currentDocument = documentRef.current
+      documentRef.current = null
+      if (currentDocument) void currentDocument.destroy()
+    }
+  }, [loadPdf])
+
+  useLayoutEffect(() => {
+    if (!pdf || !scrollRoot || restoredScrollRef.current) return
+    restoredScrollRef.current = true
+    scrollRoot.scrollTop = savedViewRef.current?.scrollTop ?? 0
+  }, [pdf, scrollRoot])
+
+  useEffect(() => {
+    if (!scrollRoot || !pdf) return
+    let frame = 0
+    const updateCurrentPage = () => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => {
+        const rootBounds = scrollRoot.getBoundingClientRect()
+        const anchor = rootBounds.top + Math.min(140, rootBounds.height / 3)
+        const pages = Array.from(
+          scrollRoot.querySelectorAll<HTMLElement>('[data-pdf-page]')
+        )
+        let closestPage = pageNumberRef.current
+        let closestDistance = Number.POSITIVE_INFINITY
+        for (const page of pages) {
+          const bounds = page.getBoundingClientRect()
+          const value = Number(page.dataset.pdfPage)
+          if (bounds.top <= anchor && bounds.bottom > anchor) {
+            closestPage = value
+            closestDistance = 0
+            break
+          }
+          const distance = Math.min(
+            Math.abs(bounds.top - anchor),
+            Math.abs(bounds.bottom - anchor)
+          )
+          if (distance < closestDistance) {
+            closestDistance = distance
+            closestPage = value
+          }
+        }
+        pageNumberRef.current = closestPage
+        setPageNumber(closestPage)
+        pdfViewMemory.set(projectId, {
+          pageNumber: closestPage,
+          scrollTop: scrollRoot.scrollTop,
+          zoom
+        })
+      })
+    }
+    scrollRoot.addEventListener('scroll', updateCurrentPage, { passive: true })
+    updateCurrentPage()
+    return () => {
+      scrollRoot.removeEventListener('scroll', updateCurrentPage)
+      window.cancelAnimationFrame(frame)
+    }
+  }, [pdf, projectId, scrollRoot, zoom])
+
+  useEffect(() => {
+    pdfViewMemory.set(projectId, {
+      pageNumber,
+      scrollTop: scrollRoot?.scrollTop ?? savedViewRef.current?.scrollTop ?? 0,
+      zoom
+    })
+  }, [pageNumber, projectId, scrollRoot, zoom])
 
   function goToPage(nextPage: number) {
-    if (!pdf) return
-    setPageNumber(Math.max(1, Math.min(pdf.numPages, nextPage)))
+    if (!pdf || !scrollRoot || !Number.isFinite(nextPage)) return
+    const targetPage = Math.max(1, Math.min(pdf.numPages, nextPage))
+    pageNumberRef.current = targetPage
+    setPageNumber(targetPage)
+    const target = scrollRoot.querySelector<HTMLElement>(
+      `[data-pdf-page="${targetPage}"]`
+    )
+    if (!target) return
+    const rootBounds = scrollRoot.getBoundingClientRect()
+    const targetBounds = target.getBoundingClientRect()
+    scrollRoot.scrollTo({
+      top: scrollRoot.scrollTop + targetBounds.top - rootBounds.top - 20,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth'
+    })
   }
 
   function changeZoom(delta: number) {
@@ -253,7 +448,7 @@ export function LatexPdfPreview({
     }
   }
 
-  if (loading) {
+  if (loading && !pdf) {
     return (
       <div className="latex-pdf-state" role="status">
         <LoaderCircle className="spin" size={28} />
@@ -273,12 +468,26 @@ export function LatexPdfPreview({
         <strong>No compiled PDF to preview</strong>
         <p>{error || `PanePilot could not open “${expectedPath}”.`}</p>
         <small>
-          Build <code>{expectedPath}</code> with your LaTeX command or a project
-          Action, then refresh this view.
+          Recompile uses <code>latexmk</code> on the project machine and places
+          the PDF beside the configured main file.
         </small>
-        <button className="primary-button" onClick={() => void loadPdf()}>
-          <RefreshCw size={13} /> Refresh PDF
-        </button>
+        <div className="latex-pdf-missing-actions">
+          <button
+            className="primary-button"
+            onClick={() => void recompilePdf()}
+            disabled={compiling}
+          >
+            {compiling ? (
+              <LoaderCircle className="spin" size={13} />
+            ) : (
+              <RefreshCw size={13} />
+            )}
+            {compiling ? 'Compiling…' : 'Recompile'}
+          </button>
+          <button className="secondary-button" onClick={() => void loadPdf()}>
+            Reload from disk
+          </button>
+        </div>
       </div>
     )
   }
@@ -327,7 +536,7 @@ export function LatexPdfPreview({
             <ChevronRight size={15} />
           </button>
         </div>
-        <div className="latex-pdf-zoom-controls" aria-label="PDF zoom">
+        <div className="latex-pdf-zoom-controls" aria-label="PDF zoom and actions">
           <button
             className="icon-button"
             disabled={zoom <= MIN_ZOOM}
@@ -348,11 +557,24 @@ export function LatexPdfPreview({
             <Plus size={14} />
           </button>
           <button
+            className="secondary-button latex-pdf-compile-button"
+            disabled={compiling || printingPage != null}
+            onClick={() => void recompilePdf()}
+            title="Run latexmk and reload this PDF"
+          >
+            {compiling ? (
+              <LoaderCircle className="spin" size={13} />
+            ) : (
+              <RefreshCw size={13} />
+            )}
+            {compiling ? 'Compiling…' : 'Recompile'}
+          </button>
+          <button
             className="icon-button latex-pdf-refresh"
-            disabled={printingPage != null}
+            disabled={loading || compiling || printingPage != null}
             onClick={() => void loadPdf()}
-            aria-label="Reload compiled PDF"
-            title="Reload compiled PDF"
+            aria-label="Reload compiled PDF from disk"
+            title="Reload compiled PDF from disk"
           >
             <RefreshCw size={14} />
           </button>
@@ -368,7 +590,7 @@ export function LatexPdfPreview({
           )}
           <button
             className="secondary-button latex-pdf-print-button"
-            disabled={printingPage != null}
+            disabled={printingPage != null || compiling}
             onClick={() => void printPdf()}
             title="Open the system print dialog"
           >
@@ -384,14 +606,17 @@ export function LatexPdfPreview({
         </div>
       </header>
       {error && <div className="latex-pdf-inline-error">{error}</div>}
-      <div className="latex-pdf-pasteboard">
-        <div className="latex-pdf-page" aria-busy={rendering}>
-          {rendering && (
-            <div className="latex-pdf-rendering">
-              <LoaderCircle className="spin" size={17} /> Rendering page
-            </div>
-          )}
-          <canvas ref={canvasRef} />
+      <div className="latex-pdf-pasteboard" ref={setScrollRoot}>
+        <div className="latex-pdf-pages">
+          {Array.from({ length: pdf.numPages }, (_, index) => (
+            <LatexPdfPage
+              key={index + 1}
+              pdf={pdf}
+              pageNumber={index + 1}
+              scrollRoot={scrollRoot}
+              zoom={zoom}
+            />
+          ))}
         </div>
       </div>
     </section>

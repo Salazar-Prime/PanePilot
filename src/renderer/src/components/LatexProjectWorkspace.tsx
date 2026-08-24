@@ -61,6 +61,9 @@ type WorkspaceTab =
   | 'chats'
   | 'activity'
 
+const latexWorkspaceTabs = new Map<string, WorkspaceTab>()
+const openedPdfProjects = new Set<string>()
+
 export function LatexProjectWorkspace({
   project,
   selectedSessionId,
@@ -73,7 +76,12 @@ export function LatexProjectWorkspace({
   onSelectSession,
   onChanged
 }: ProjectWorkspaceProps) {
-  const [tab, setTab] = useState<WorkspaceTab>('manuscript')
+  const [tab, setTab] = useState<WorkspaceTab>(
+    () => latexWorkspaceTabs.get(project.id) ?? 'manuscript'
+  )
+  const [pdfOpened, setPdfOpened] = useState(
+    () => openedPdfProjects.has(project.id) || tab === 'pdf'
+  )
   const [workspace, setWorkspace] = useState<LatexWorkspace | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [showLauncher, setShowLauncher] = useState(false)
@@ -105,44 +113,64 @@ export function LatexProjectWorkspace({
   )
   const activeSession =
     sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null
+
+  function selectWorkspaceTab(nextTab: WorkspaceTab) {
+    latexWorkspaceTabs.set(project.id, nextTab)
+    if (nextTab === 'pdf') {
+      openedPdfProjects.add(project.id)
+      setPdfOpened(true)
+    }
+    setTab(nextTab)
+  }
+
   const shortcutActions: ProjectShortcutAction[] = [
     {
       key: 'm',
       label: 'Manuscript',
       active: tab === 'manuscript',
-      run: () => setTab('manuscript')
+      run: () => selectWorkspaceTab('manuscript')
     },
-    { key: 'p', label: 'PDF', active: tab === 'pdf', run: () => setTab('pdf') },
+    {
+      key: 'p',
+      label: 'PDF',
+      active: tab === 'pdf',
+      run: () => selectWorkspaceTab('pdf')
+    },
     {
       key: 'a',
       label: 'Actions',
       active: tab === 'actions',
-      run: () => setTab('actions')
+      run: () => selectWorkspaceTab('actions')
     },
-    { key: 'q', label: 'Q&A', active: tab === 'qna', run: () => setTab('qna') },
+    {
+      key: 'q',
+      label: 'Q&A',
+      active: tab === 'qna',
+      run: () => selectWorkspaceTab('qna')
+    },
     {
       key: 'n',
       label: 'Notes',
       active: tab === 'notes',
-      run: () => setTab('notes')
+      run: () => selectWorkspaceTab('notes')
     },
     {
       key: 'f',
       label: 'Files',
       active: tab === 'files',
-      run: () => setTab('files')
+      run: () => selectWorkspaceTab('files')
     },
     {
       key: 'c',
       label: 'Chats',
       active: tab === 'chats',
-      run: () => setTab('chats')
+      run: () => selectWorkspaceTab('chats')
     },
     {
       key: 'h',
       label: 'Activity',
       active: tab === 'activity',
-      run: () => setTab('activity')
+      run: () => selectWorkspaceTab('activity')
     },
     ...(onSwapPanes
       ? [{ key: 's', label: 'Swap panes', run: onSwapPanes }]
@@ -178,6 +206,9 @@ export function LatexProjectWorkspace({
   }, [project.id])
 
   useEffect(() => {
+    const rememberedTab = latexWorkspaceTabs.get(project.id) ?? 'manuscript'
+    setTab(rememberedTab)
+    setPdfOpened(openedPdfProjects.has(project.id) || rememberedTab === 'pdf')
     setLoading(true)
     setWorkspace(null)
     setChanges(null)
@@ -210,7 +241,7 @@ export function LatexProjectWorkspace({
 
   useEffect(() => {
     if (openSessionRequest == null) return
-    setTab('manuscript')
+    selectWorkspaceTab('manuscript')
     onOpenSessionRequestHandled(openSessionRequest)
   }, [openSessionRequest, onOpenSessionRequestHandled])
 
@@ -236,12 +267,12 @@ export function LatexProjectWorkspace({
   async function startChat(input: StartLatexChatInput) {
     const session = await window.projectConsole.latex.startChat(input)
     await onChanged()
-    setTab('manuscript')
+    selectWorkspaceTab('manuscript')
     onSelectSession(session.id)
   }
 
   async function selectShortcutSession(id: string) {
-    setTab('manuscript')
+    selectWorkspaceTab('manuscript')
     onSessionSelected(id)
     onSelectSession(id)
     await window.projectConsole.terminals.acknowledge(id)
@@ -257,7 +288,7 @@ export function LatexProjectWorkspace({
   function openContext() {
     if (!workspace) return
     setFilesInitialPath(workspace.details.contextFolder)
-    setTab('files')
+    selectWorkspaceTab('files')
   }
 
   function openFile(target: TerminalFileTarget) {
@@ -266,7 +297,7 @@ export function LatexProjectWorkspace({
       projectId: project.id,
       requestId: (current?.requestId ?? 0) + 1
     }))
-    setTab('files')
+    selectWorkspaceTab('files')
   }
 
   const chatCounts = useMemo(() => {
@@ -281,7 +312,7 @@ export function LatexProjectWorkspace({
     return counts
   }, [sessions])
 
-  if (loading) {
+  if (loading || workspace?.details.projectId !== project.id) {
     return (
       <div className="capability-empty latex-loading">
         <LoaderCircle className="spin" size={30} />
@@ -312,38 +343,41 @@ export function LatexProjectWorkspace({
       <nav className="workspace-tabs" aria-label="LaTeX project tools">
         <button
           className={tab === 'manuscript' ? 'active' : ''}
-          onClick={() => setTab('manuscript')}
+          onClick={() => selectWorkspaceTab('manuscript')}
         >
           <FileText size={15} /> Manuscript
           <ShortcutKeytip value="M" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'pdf' ? 'active' : ''} onClick={() => setTab('pdf')}>
+        <button
+          className={tab === 'pdf' ? 'active' : ''}
+          onClick={() => selectWorkspaceTab('pdf')}
+        >
           <FileType2 size={15} /> PDF Preview
           <ShortcutKeytip value="P" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'actions' ? 'active' : ''} onClick={() => setTab('actions')}>
+        <button className={tab === 'actions' ? 'active' : ''} onClick={() => selectWorkspaceTab('actions')}>
           <Play size={15} /> Actions
           <ShortcutKeytip value="A" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'qna' ? 'active' : ''} onClick={() => setTab('qna')}>
+        <button className={tab === 'qna' ? 'active' : ''} onClick={() => selectWorkspaceTab('qna')}>
           <MessageCircleQuestion size={15} /> Project Q&amp;A
           <ShortcutKeytip value="Q" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>
+        <button className={tab === 'notes' ? 'active' : ''} onClick={() => selectWorkspaceTab('notes')}>
           <FileText size={15} /> Notes
           <ShortcutKeytip value="N" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>
+        <button className={tab === 'files' ? 'active' : ''} onClick={() => selectWorkspaceTab('files')}>
           <Files size={15} /> Files
           <ShortcutKeytip value="F" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'chats' ? 'active' : ''} onClick={() => setTab('chats')}>
+        <button className={tab === 'chats' ? 'active' : ''} onClick={() => selectWorkspaceTab('chats')}>
           <MessageSquareText size={15} /> Chat history
           <ShortcutKeytip value="C" open={projectShortcuts.open} />
         </button>
         <button
           className={tab === 'activity' ? 'active' : ''}
-          onClick={() => setTab('activity')}
+          onClick={() => selectWorkspaceTab('activity')}
         >
           <Activity size={15} /> Activity
           <ShortcutKeytip value="H" open={projectShortcuts.open} />
@@ -398,22 +432,27 @@ export function LatexProjectWorkspace({
           />
         </div>
       )}
-      {tab === 'pdf' && (
-        <Suspense
-          fallback={
-            <div className="latex-pdf-state" role="status">
-              <LoaderCircle className="spin" size={28} />
-              <strong>Preparing the PDF viewer</strong>
-            </div>
-          }
+      {pdfOpened && (
+        <div
+          className={`workspace-panel-cache ${tab === 'pdf' ? 'active' : ''}`}
+          aria-hidden={tab !== 'pdf'}
         >
-          <LatexPdfPreview
-            key={project.id}
-            projectId={project.id}
-            mainFile={workspace.details.mainFile}
-            local={project.connectionId === 'local'}
-          />
-        </Suspense>
+          <Suspense
+            fallback={
+              <div className="latex-pdf-state" role="status">
+                <LoaderCircle className="spin" size={28} />
+                <strong>Preparing the PDF viewer</strong>
+              </div>
+            }
+          >
+            <LatexPdfPreview
+              key={project.id}
+              projectId={project.id}
+              mainFile={workspace.details.mainFile}
+              local={project.connectionId === 'local'}
+            />
+          </Suspense>
+        </div>
       )}
       <div
         className={`workspace-panel-cache ${tab === 'notes' ? 'active' : ''}`}

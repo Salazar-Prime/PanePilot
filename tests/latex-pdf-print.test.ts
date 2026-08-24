@@ -18,4 +18,23 @@ describe('LaTeX PDF print layout', () => {
     expect(printRules).toContain('break-inside: avoid;')
     expect(printRules).toContain('width: 100% !important;')
   })
+
+  it('keeps a continuous page stack instead of replacing one canvas at a time', () => {
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        'src',
+        'renderer',
+        'src',
+        'components',
+        'LatexPdfPreview.tsx'
+      ),
+      'utf8'
+    )
+
+    expect(source).toContain('className="latex-pdf-pages"')
+    expect(source).toContain('data-pdf-page={pageNumber}')
+    expect(source).toContain('window.projectConsole.latex.compile(projectId)')
+    expect(source).not.toContain('setPageNumber(1)')
+  })
 })

@@ -1844,10 +1844,15 @@ export class Store {
     }
     const existing = this.getSession(metadata.terminalId)
     if (existing && existing.projectId !== projectId) return null
+    // A v0.7 LaTeX chat could briefly publish its initial ordinary-terminal
+    // metadata before the attachment was written. Never let that stale remote
+    // snapshot erase a richer attachment already known by this client.
     const sessionKind =
-      metadata.sessionKind ??
-      existing?.kind ??
-      (metadata.latex ? 'latex-chat' : 'terminal')
+      existing?.latexChat && metadata.latex == null
+        ? 'latex-chat'
+        : metadata.sessionKind ??
+          existing?.kind ??
+          (metadata.latex ? 'latex-chat' : 'terminal')
     if (sessionKind === 'project-qna') {
       const existingQna = this.getProjectQnaSession(projectId)
       if (existingQna && existingQna.id !== metadata.terminalId) return null

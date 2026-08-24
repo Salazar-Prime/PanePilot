@@ -593,6 +593,7 @@ export interface ProjectConsoleApi {
   latex: {
     getWorkspace(projectId: string): Promise<LatexWorkspace>
     getPdf(projectId: string): Promise<LatexPdfDocument>
+    compile(projectId: string): Promise<LatexPdfDocument>
     update(input: UpdateLatexProjectInput): Promise<LatexWorkspace>
     startChat(input: StartLatexChatInput): Promise<TerminalSession>
     setChatMode(sessionId: string, mode: LatexChatMode): Promise<void>

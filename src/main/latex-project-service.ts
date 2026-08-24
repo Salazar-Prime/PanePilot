@@ -1,3 +1,4 @@
+import { execFile } from 'node:child_process'
 import {
   lstatSync,
   readFileSync,
@@ -6,6 +7,7 @@ import {
   statSync
 } from 'node:fs'
 import { posix, relative, resolve, sep } from 'node:path'
+import { promisify } from 'node:util'
 import type {
   Connection,
   LatexChangeHighlight,
@@ -35,7 +37,17 @@ import type { TerminalManager } from './terminal-manager'
 const MAX_LATEX_FILES = 256
 const MAX_LATEX_BYTES = 8 * 1024 * 1024
 const MAX_PDF_BYTES = 32 * 1024 * 1024
+const MAX_COMPILE_OUTPUT = 2 * 1024 * 1024
+const COMPILE_TIMEOUT_MS = 180_000
 const MAX_PROMPT_LENGTH = 50_000
+const execFileAsync = promisify(execFile)
+const LOCAL_TEX_PATHS = [
+  '/Library/TeX/texbin',
+  '/opt/homebrew/bin',
+  '/usr/local/bin',
+  '/usr/bin',
+  '/bin'
+]
 const SECTION_LEVELS: Record<string, number> = {
   part: 0,
   chapter: 1,
@@ -292,6 +304,57 @@ export function latexPdfPath(mainFile: string): string {
   return mainFile.replace(/\.tex$/i, '.pdf')
 }
 
+export function latexCompileArguments(mainFile: string): string[] {
+  return [
+    '-pdf',
+    '-interaction=nonstopmode',
+    '-file-line-error',
+    '-halt-on-error',
+    '-cd',
+    mainFile
+  ]
+}
+
+function quoteShell(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+function compilePath(): string {
+  const entries = [process.env.PATH, ...LOCAL_TEX_PATHS]
+    .flatMap((value) => value?.split(':') ?? [])
+    .filter(Boolean)
+  return [...new Set(entries)].join(':')
+}
+
+function compilationError(caught: unknown): Error {
+  const failure = caught as {
+    code?: string | number
+    killed?: boolean
+    stdout?: string | Buffer
+    stderr?: string | Buffer
+    message?: string
+  }
+  const output = [failure.stdout, failure.stderr]
+    .flatMap((value) => value == null ? [] : [String(value).trim()])
+    .filter(Boolean)
+    .join('\n')
+  if (
+    failure.code === 'ENOENT' ||
+    /(?:command not found|not found).*latexmk|latexmk.*(?:command not found|not found)/i.test(
+      output || failure.message || ''
+    )
+  ) {
+    return new Error(
+      'PanePilot could not find latexmk on this project machine. Install latexmk with TeX Live or MacTeX, then recompile again.'
+    )
+  }
+  const reason = failure.killed
+    ? 'LaTeX compilation exceeded the three-minute limit.'
+    : 'LaTeX compilation failed.'
+  const tail = output.slice(-6_000)
+  return new Error(tail ? `${reason}\n\n${tail}` : reason)
+}
+
 function readLocalPdf(root: string, requested: string): LatexPdfDocument {
   let realRoot: string
   let target: string
@@ -540,6 +603,59 @@ export class LatexProjectService {
     return { path, ...remote }
   }
 
+  async compile(projectId: string): Promise<LatexPdfDocument> {
+    // Reuse the workspace read to verify the configured source still exists
+    // inside the canonical local/remote project before starting a compiler.
+    this.getWorkspace(projectId)
+    const { project, connection, details } = this.requireProject(projectId)
+    const mainFile = normalizeProjectRelativePath(
+      details.mainFile,
+      'Main LaTeX file',
+      { extension: '.tex' }
+    )
+    try {
+      if (connection.kind === 'local') {
+        const source = resolve(project.folder, mainFile)
+        await execFileAsync('latexmk', latexCompileArguments(source), {
+          cwd: project.folder,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: compilePath() },
+          timeout: COMPILE_TIMEOUT_MS,
+          maxBuffer: MAX_COMPILE_OUTPUT
+        })
+      } else {
+        const source = posix.join(project.folder, mainFile)
+        const compileCommand = [
+          'latexmk',
+          ...latexCompileArguments(source).map(quoteShell)
+        ].join(' ')
+        const remoteCommand =
+          `cd ${quoteShell(project.folder)} && ` +
+          `exec "\${SHELL:-/bin/sh}" -lic ${quoteShell(compileCommand)}`
+        await execFileAsync(
+          'ssh',
+          [
+            '-T',
+            '-o',
+            'BatchMode=yes',
+            '-o',
+            'ConnectTimeout=8',
+            connection.sshAlias ?? connection.name,
+            remoteCommand
+          ],
+          {
+            encoding: 'utf8',
+            timeout: COMPILE_TIMEOUT_MS,
+            maxBuffer: MAX_COMPILE_OUTPUT
+          }
+        )
+      }
+    } catch (caught) {
+      throw compilationError(caught)
+    }
+    return this.getPdf(projectId)
+  }
+
   update(input: UpdateLatexProjectInput): LatexWorkspace {
     const { project, connection } = this.requireProject(input.projectId)
     const mainFile = normalizeProjectRelativePath(input.mainFile, 'Main LaTeX file', {
@@ -582,25 +698,19 @@ export class LatexProjectService {
         : null
       if (!section) throw new Error('Choose a section for this chat.')
     }
-    const session = this.terminals.start({
-      projectId: input.projectId,
-      name: input.name,
-      profile: input.provider,
-      dangerousMode: input.dangerousMode
-    })
-    try {
-      this.store.attachLatexChat(session.id, {
+    return this.terminals.startLatexChat(
+      {
         projectId: input.projectId,
+        name: input.name,
+        profile: input.provider,
+        dangerousMode: input.dangerousMode
+      },
+      {
         scope: input.scope,
         sectionId: input.scope === 'section' ? input.sectionId ?? null : null,
         mode: input.mode
-      })
-      void this.terminals.syncSessionMetadata(session.id, true)
-    } catch (error) {
-      this.terminals.delete(session.id)
-      throw error
-    }
-    return this.store.getSession(session.id)!
+      }
+    )
   }
 
   setChatMode(sessionId: string, mode: 'ask' | 'edit'): void {

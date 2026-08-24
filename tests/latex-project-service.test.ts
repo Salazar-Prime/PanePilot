@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   diffLatexFile,
+  latexCompileArguments,
   latexPdfPath,
   parseLatexOutline
 } from '../src/main/latex-project-service'
@@ -128,5 +129,16 @@ describe('LaTeX project paths', () => {
     expect(() =>
       normalizeProjectRelativePath('../outside.tex', 'Main file', { extension: '.tex' })
     ).toThrow('inside the project folder')
+  })
+
+  it('uses latexmk in PDF mode from the main file directory', () => {
+    expect(latexCompileArguments('/srv/papers/draft/main.tex')).toEqual([
+      '-pdf',
+      '-interaction=nonstopmode',
+      '-file-line-error',
+      '-halt-on-error',
+      '-cd',
+      '/srv/papers/draft/main.tex'
+    ])
   })
 })

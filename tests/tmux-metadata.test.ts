@@ -324,6 +324,64 @@ describe('tmux discovery persistence', () => {
     }
   })
 
+  it('does not downgrade a known LaTeX chat when remote metadata is stale', () => {
+    appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-stale-latex-tmux-store-'))
+    const store = new Store(appDataPath)
+    try {
+      store.syncConnections(['remote-work'])
+      const project = store.createProject({
+        type: 'latex',
+        name: 'Remote paper',
+        connectionId: 'ssh:remote-work',
+        folder: '/srv/papers/example',
+        repositoryUrl: null,
+        latex: {
+          mainFile: 'main.tex',
+          overleafUrl: null,
+          contextFolder: 'context'
+        }
+      })
+      const session = store.createSession({
+        projectId: project.id,
+        kind: 'latex-chat',
+        name: 'Writing chat',
+        profile: 'codex',
+        providerSessionName: null,
+        customCommand: null,
+        backend: 'tmux',
+        tmuxName: 'Writing chat',
+        dangerousMode: false
+      })
+      store.attachLatexChat(session.id, {
+        projectId: project.id,
+        scope: 'project',
+        sectionId: null,
+        mode: 'ask'
+      })
+
+      const discovered = store.upsertDiscoveredTmuxSession(
+        project.id,
+        session.name,
+        metadata({
+          terminalId: session.id,
+          originProjectId: project.id,
+          sessionKind: 'terminal',
+          latex: null
+        })
+      )
+
+      expect(discovered?.session).toMatchObject({
+        kind: 'latex-chat',
+        latexChat: {
+          scope: 'project',
+          mode: 'ask'
+        }
+      })
+    } finally {
+      store.close()
+    }
+  })
+
   it('restores a live remote Action without exposing it as an ordinary terminal', () => {
     appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-action-tmux-store-'))
     const store = new Store(appDataPath)
