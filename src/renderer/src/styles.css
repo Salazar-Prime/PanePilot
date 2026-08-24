@@ -4258,8 +4258,80 @@ button.type-switcher {
   min-width: 0;
   min-height: 0;
   flex: 1;
-  grid-template-columns: minmax(0, 1fr) 352px;
+  grid-template-columns: minmax(0, 1fr);
   background: #090b10;
+}
+
+.latex-workbench.cached {
+  display: none;
+}
+
+.latex-workbench.chat-visible {
+  grid-template-columns:
+    minmax(0, 1fr) 7px
+    minmax(280px, min(var(--latex-chat-width, 352px), 58%));
+}
+
+.latex-workbench-main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.latex-workbench-main > .latex-manuscript {
+  width: 100%;
+  flex: 1;
+}
+
+.latex-workbench-main > .workspace-panel-cache {
+  width: 100%;
+}
+
+.latex-agent-resizer {
+  position: relative;
+  min-width: 0;
+  touch-action: none;
+  cursor: col-resize;
+  border-right: 1px solid #242a35;
+  border-left: 1px solid #181d25;
+  background: #0a0d12;
+}
+
+.latex-agent-resizer::after {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 1px;
+  height: 34px;
+  border-radius: 1px;
+  background: #3a4352;
+  content: "";
+  transform: translateY(-50%);
+  transition: height 120ms ease, background 120ms ease;
+}
+
+.latex-agent-resizer:hover::after,
+.latex-agent-resizer:focus-visible::after,
+.latex-workbench.resizing .latex-agent-resizer::after {
+  height: 52px;
+  background: var(--latex-ink);
+}
+
+.latex-agent-resizer:focus-visible {
+  outline: 1px solid var(--latex-ink);
+  outline-offset: -1px;
+}
+
+.latex-workbench.resizing,
+.latex-workbench.resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.latex-workbench.chat-hidden > .latex-agent-resizer,
+.latex-workbench.chat-hidden > .latex-agent-pane {
+  display: none;
 }
 
 .latex-manuscript {
@@ -4267,7 +4339,6 @@ button.type-switcher {
   min-width: 0;
   min-height: 0;
   grid-template-columns: 204px minmax(0, 1fr);
-  border-right: 1px solid #272c36;
 }
 
 .latex-outline {
@@ -4687,6 +4758,20 @@ button.type-switcher {
   height: 27px;
   padding: 0 8px;
   font-size: 8px;
+}
+
+.latex-agent-heading .latex-agent-hide-button {
+  width: 27px;
+  height: 27px;
+  color: #717b8b;
+  border: 1px solid #29303a;
+  background: #11151c;
+}
+
+.latex-agent-heading .latex-agent-hide-button:hover {
+  color: #c1c7d1;
+  border-color: #3a4350;
+  background: #181d26;
 }
 
 .latex-agent-heading-actions {
@@ -5375,10 +5460,6 @@ button.type-switcher {
 
   .latex-outline {
     display: none;
-  }
-
-  .latex-workbench {
-    grid-template-columns: minmax(0, 1fr) 318px;
   }
 
   .actions-panel,

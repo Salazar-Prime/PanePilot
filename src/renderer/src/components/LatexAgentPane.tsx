@@ -3,6 +3,7 @@ import {
   Archive,
   ArchiveRestore,
   MessageCircleQuestion,
+  PanelRightClose,
   PencilLine,
   Plus,
   RefreshCw,
@@ -33,6 +34,7 @@ interface Props {
   onChanged(): Promise<void>
   onPromptSent(sessionId: string): void
   onOpenFile?(target: TerminalFileTarget): void
+  onHide(): void
 }
 
 export function LatexAgentPane({
@@ -45,7 +47,8 @@ export function LatexAgentPane({
   onNewChat,
   onChanged,
   onPromptSent,
-  onOpenFile
+  onOpenFile,
+  onHide
 }: Props) {
   const [message, setMessage] = useState('')
   const [showArchived, setShowArchived] = useState(false)
@@ -168,6 +171,14 @@ export function LatexAgentPane({
           <strong>Writing chats</strong>
         </div>
         <div className="latex-agent-heading-actions">
+          <button
+            className="icon-button latex-agent-hide-button"
+            onClick={onHide}
+            title="Hide writing chat"
+            aria-label="Hide writing chat"
+          >
+            <PanelRightClose size={13} />
+          </button>
           {archivedSessions.length > 0 && (
             <button
               className="secondary-button"

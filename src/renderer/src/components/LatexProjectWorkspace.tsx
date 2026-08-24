@@ -8,6 +8,11 @@ import {
   useRef,
   useState
 } from 'react'
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent
+} from 'react'
 import {
   Activity,
   FileClock,
@@ -17,6 +22,7 @@ import {
   LoaderCircle,
   MessageCircleQuestion,
   MessageSquareText,
+  PanelRightOpen,
   Play,
   Plus
 } from 'lucide-react'
@@ -34,6 +40,13 @@ import {
   type ProjectShortcutAction,
   useProjectShortcuts
 } from '../lib/projectShortcuts'
+import {
+  clampLatexChatWidth,
+  loadLatexChatLayout,
+  MAX_LATEX_CHAT_WIDTH,
+  MIN_LATEX_CHAT_WIDTH,
+  saveLatexChatLayout
+} from '../lib/latexChatLayout'
 import { ActionsPanel } from './ActionsPanel'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
 import { FilesPanel } from './FilesPanel'
@@ -100,7 +113,17 @@ export function LatexProjectWorkspace({
   const [refreshingWorkspace, setRefreshingWorkspace] = useState(false)
   const [refreshError, setRefreshError] = useState('')
   const [error, setError] = useState('')
+  const [chatLayout, setChatLayout] = useState(() =>
+    loadLatexChatLayout(project.id)
+  )
+  const [resizingChat, setResizingChat] = useState(false)
   const workspaceRequestRef = useRef(0)
+  const workbenchRef = useRef<HTMLDivElement>(null)
+  const chatResizeRef = useRef<{
+    startX: number
+    startWidth: number
+    latestWidth: number
+  } | null>(null)
   const sessions = useMemo(
     () =>
       project.sessions.filter(
@@ -241,11 +264,50 @@ export function LatexProjectWorkspace({
     setChanges(null)
     setSelectedSectionId(null)
     setOpenFileRequest(null)
+    setChatLayout(loadLatexChatLayout(project.id))
+    chatResizeRef.current = null
+    setResizingChat(false)
     void loadWorkspace()
     return () => {
       workspaceRequestRef.current += 1
     }
   }, [project.id, loadWorkspace])
+
+  useEffect(() => {
+    if (!resizingChat) return
+
+    function handlePointerMove(event: PointerEvent) {
+      const resize = chatResizeRef.current
+      if (!resize) return
+      const width = clampLatexChatWidth(
+        resize.startWidth + resize.startX - event.clientX,
+        workbenchRef.current?.getBoundingClientRect().width
+      )
+      resize.latestWidth = width
+      setChatLayout((current) => ({ ...current, width }))
+    }
+
+    function finishResize() {
+      const resize = chatResizeRef.current
+      if (resize) {
+        saveLatexChatLayout(project.id, {
+          hidden: false,
+          width: resize.latestWidth
+        })
+      }
+      chatResizeRef.current = null
+      setResizingChat(false)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', finishResize)
+    window.addEventListener('pointercancel', finishResize)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', finishResize)
+      window.removeEventListener('pointercancel', finishResize)
+    }
+  }, [project.id, resizingChat])
 
   useEffect(() => {
     if (!activeSession) return
@@ -328,6 +390,40 @@ export function LatexProjectWorkspace({
       requestId: (current?.requestId ?? 0) + 1
     }))
     selectWorkspaceTab('files')
+  }
+
+  function updateChatLayout(next: typeof chatLayout) {
+    setChatLayout(next)
+    saveLatexChatLayout(project.id, next)
+  }
+
+  function beginChatResize(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    chatResizeRef.current = {
+      startX: event.clientX,
+      startWidth: chatLayout.width,
+      latestWidth: chatLayout.width
+    }
+    setResizingChat(true)
+  }
+
+  function handleChatResizeKey(event: ReactKeyboardEvent<HTMLDivElement>) {
+    let nextWidth = chatLayout.width
+    if (event.key === 'ArrowLeft') nextWidth += 24
+    else if (event.key === 'ArrowRight') nextWidth -= 24
+    else if (event.key === 'Home') nextWidth = MIN_LATEX_CHAT_WIDTH
+    else if (event.key === 'End') nextWidth = MAX_LATEX_CHAT_WIDTH
+    else return
+
+    event.preventDefault()
+    updateChatLayout({
+      hidden: false,
+      width: clampLatexChatWidth(
+        nextWidth,
+        workbenchRef.current?.getBoundingClientRect().width
+      )
+    })
   }
 
   const chatCounts = useMemo(() => {
@@ -430,6 +526,17 @@ export function LatexProjectWorkspace({
           <button onClick={() => setShowLauncher(true)}>
             <Plus size={12} /> Chat
           </button>
+          {chatLayout.hidden && (
+            <button
+              className="latex-chat-show-button"
+              onClick={() =>
+                updateChatLayout({ ...chatLayout, hidden: false })
+              }
+              title="Show the writing chat beside the manuscript or PDF"
+            >
+              <PanelRightOpen size={12} /> Show chat
+            </button>
+          )}
         </div>
       </nav>
 
@@ -441,20 +548,75 @@ export function LatexProjectWorkspace({
         activeSessionId={activeSession?.id ?? null}
       />
 
-      {tab === 'manuscript' && (
-        <div className="latex-workbench">
-          <LatexManuscript
-            project={project}
-            workspace={workspace}
-            selectedSectionId={selectedSectionId}
-            chatCounts={chatCounts}
-            changes={changes}
-            onSelectSection={setSelectedSectionId}
-            onOpenContext={openContext}
-            onClearChanges={clearChanges}
-            onWorkspaceRefresh={loadWorkspace}
+      {(tab === 'manuscript' || tab === 'pdf' || pdfOpened) && (
+        <div
+          ref={workbenchRef}
+          className={`latex-workbench ${
+            chatLayout.hidden ? 'chat-hidden' : 'chat-visible'
+          } ${resizingChat ? 'resizing' : ''} ${
+            tab === 'manuscript' || tab === 'pdf' ? '' : 'cached'
+          }`}
+          style={
+            {
+              '--latex-chat-width': `${chatLayout.width}px`
+            } as CSSProperties
+          }
+          aria-hidden={tab !== 'manuscript' && tab !== 'pdf'}
+        >
+          <div className="latex-workbench-main">
+            {tab === 'manuscript' && (
+              <LatexManuscript
+                project={project}
+                workspace={workspace}
+                selectedSectionId={selectedSectionId}
+                chatCounts={chatCounts}
+                changes={changes}
+                onSelectSection={setSelectedSectionId}
+                onOpenContext={openContext}
+                onClearChanges={clearChanges}
+                onWorkspaceRefresh={loadWorkspace}
+              />
+            )}
+            {pdfOpened && (
+              <div
+                className={`workspace-panel-cache ${
+                  tab === 'pdf' ? 'active' : ''
+                }`}
+                aria-hidden={tab !== 'pdf'}
+              >
+                <Suspense
+                  fallback={
+                    <div className="latex-pdf-state" role="status">
+                      <LoaderCircle className="spin" size={28} />
+                      <strong>Preparing the PDF viewer</strong>
+                    </div>
+                  }
+                >
+                  <LatexPdfPreview
+                    key={project.id}
+                    projectId={project.id}
+                    mainFile={workspace.details.mainFile}
+                    local={project.connectionId === 'local'}
+                  />
+                </Suspense>
+              </div>
+            )}
+          </div>
+          <div
+            className="latex-agent-resizer"
+            role="separator"
+            aria-label="Resize writing chat"
+            aria-orientation="vertical"
+            aria-valuemin={MIN_LATEX_CHAT_WIDTH}
+            aria-valuemax={MAX_LATEX_CHAT_WIDTH}
+            aria-valuenow={chatLayout.width}
+            aria-valuetext={`${chatLayout.width} pixels wide`}
+            tabIndex={chatLayout.hidden ? -1 : 0}
+            onPointerDown={beginChatResize}
+            onKeyDown={handleChatResizeKey}
           />
           <LatexAgentPane
+            key={project.id}
             sessions={sessions}
             archivedSessions={archivedSessions}
             sections={workspace.sections}
@@ -471,29 +633,10 @@ export function LatexProjectWorkspace({
               window.setTimeout(() => void refreshChanges(), 700)
             }}
             onOpenFile={openFile}
-          />
-        </div>
-      )}
-      {pdfOpened && (
-        <div
-          className={`workspace-panel-cache ${tab === 'pdf' ? 'active' : ''}`}
-          aria-hidden={tab !== 'pdf'}
-        >
-          <Suspense
-            fallback={
-              <div className="latex-pdf-state" role="status">
-                <LoaderCircle className="spin" size={28} />
-                <strong>Preparing the PDF viewer</strong>
-              </div>
+            onHide={() =>
+              updateChatLayout({ ...chatLayout, hidden: true })
             }
-          >
-            <LatexPdfPreview
-              key={project.id}
-              projectId={project.id}
-              mainFile={workspace.details.mainFile}
-              local={project.connectionId === 'local'}
-            />
-          </Suspense>
+          />
         </div>
       )}
       <div
