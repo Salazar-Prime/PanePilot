@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.2 — 2026-08-24
+
+This patch release improves long-running LaTeX and terminal workflows:
+
+- Previously loaded LaTeX projects reopen from a renderer-lifetime cache while
+  their manuscript maps refresh in the background. Manuscript and PDF Preview now
+  share one persistent writing-chat margin whose visibility and width are saved per
+  project.
+- Project-scoped Auto compile is available in PDF Preview. It is off by default and,
+  when enabled, detects bounded `.tex` metadata changes on the local or SSH project
+  machine before running the existing `latexmk` compile path.
+- Closed terminal sessions no longer leak macOS kqueue, slave PTY, or low-numbered
+  file descriptors, preventing a long-running PanePilot process from eventually
+  failing to launch new terminals.
+
+The v0.7.2 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.7.1 — 2026-08-24
 
 This patch release fixes the LaTeX workflow:
