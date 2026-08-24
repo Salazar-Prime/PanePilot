@@ -23,8 +23,7 @@ import {
   MessageCircleQuestion,
   MessageSquareText,
   PanelRightOpen,
-  Play,
-  Plus
+  Play
 } from 'lucide-react'
 import type {
   LatexChangeSet,
@@ -523,9 +522,6 @@ export function LatexProjectWorkspace({
               Refresh failed
             </span>
           )}
-          <button onClick={() => setShowLauncher(true)}>
-            <Plus size={12} /> Chat
-          </button>
           {chatLayout.hidden && (
             <button
               className="latex-chat-show-button"
@@ -534,7 +530,7 @@ export function LatexProjectWorkspace({
               }
               title="Show the writing chat beside the manuscript or PDF"
             >
-              <PanelRightOpen size={12} /> Show chat
+              <PanelRightOpen size={12} /> Chat
             </button>
           )}
         </div>

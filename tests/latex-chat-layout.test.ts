@@ -70,4 +70,35 @@ describe('LaTeX writing chat layout', () => {
     expect(source).toContain('className="latex-agent-resizer"')
     expect(source).toContain('onHide={() =>')
   })
+
+  it('keeps secondary chat actions out of the persistent toolbar', () => {
+    const paneSource = readFileSync(
+      join(
+        process.cwd(),
+        'src',
+        'renderer',
+        'src',
+        'components',
+        'LatexAgentPane.tsx'
+      ),
+      'utf8'
+    )
+    const workspaceSource = readFileSync(
+      join(
+        process.cwd(),
+        'src',
+        'renderer',
+        'src',
+        'components',
+        'LatexProjectWorkspace.tsx'
+      ),
+      'utf8'
+    )
+
+    expect(paneSource).toContain('Writing chat options')
+    expect(paneSource).toContain("menu.kind === 'sessions'")
+    expect(paneSource).not.toContain('latex-chat-switcher')
+    expect(paneSource).not.toContain('latex-force-reload-button')
+    expect(workspaceSource).not.toContain('<Plus size={12} /> Chat')
+  })
 })
