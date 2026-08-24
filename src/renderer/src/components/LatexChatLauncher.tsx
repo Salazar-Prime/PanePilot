@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import {
   Bot,
-  FileText,
   MessageCircleQuestion,
   PencilLine,
   ShieldAlert,
@@ -16,6 +15,10 @@ import type {
   StartLatexChatInput
 } from '@shared/types'
 import { useModalEscape } from '../lib/modalEscape'
+import {
+  latexSectionKindLabel,
+  latexSectionOptionLabel
+} from '../lib/latexSectionLabels'
 
 interface Props {
   projectId: string
@@ -32,17 +35,29 @@ export function LatexChatLauncher({
   onClose,
   onStart
 }: Props) {
+  const initialSection =
+    sections.find((section) => section.id === initialSectionId) ?? null
   const [provider, setProvider] = useState<ConversationProvider>('codex')
   const [mode, setMode] = useState<LatexChatMode>('ask')
   const [scope, setScope] = useState<LatexChatScope>(
-    initialSectionId ? 'section' : 'project'
+    initialSection ? 'section' : 'project'
   )
-  const [sectionId, setSectionId] = useState(initialSectionId ?? sections[0]?.id ?? '')
+  const [sectionId, setSectionId] = useState(
+    initialSection?.id ?? sections[0]?.id ?? ''
+  )
   const [name, setName] = useState('')
   const [dangerousMode, setDangerousMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   useModalEscape(onClose, true, submitting)
+  const selectedSection = sections.find((section) => section.id === sectionId) ?? null
+  const outlineBaseLevel = sections.length
+    ? Math.min(...sections.map((section) => section.level))
+    : 2
+  const scopeKind =
+    scope === 'project' || !selectedSection
+      ? 'Project'
+      : latexSectionKindLabel(selectedSection.level)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -131,8 +146,8 @@ export function LatexChatLauncher({
             </button>
           </div>
 
-          <label className="field">
-            <span>Attach to</span>
+          <label className="field latex-scope-field">
+            <span>Attach scope</span>
             <select
               value={scope === 'project' ? 'project' : sectionId}
               onChange={(event) => {
@@ -144,22 +159,36 @@ export function LatexChatLauncher({
                 }
               }}
             >
-              <option value="project">Whole project</option>
+              <option value="project">PROJECT — Whole manuscript</option>
               {sections.map((section) => (
                 <option key={section.id} value={section.id}>
-                  {'  '.repeat(Math.max(0, section.level - 2))}
-                  {section.title}
+                  {latexSectionOptionLabel(section, outlineBaseLevel)}
                 </option>
               ))}
             </select>
           </label>
 
-          <div className="latex-scope-note">
-            <FileText size={15} />
-            <span>
-              {scope === 'project'
-                ? 'The agent can use the main file, other sections, and the context folder.'
-                : 'Edit mode is instructed to stay within this section’s source range.'}
+          <div
+            className={`latex-scope-note ${
+              scope === 'project' || !selectedSection
+                ? 'project'
+                : `level-${selectedSection.level}`
+            }`}
+          >
+            <span className="latex-scope-kind">{scopeKind}</span>
+            <span className="latex-scope-note-copy">
+              <strong>
+                {scope === 'project' || !selectedSection
+                  ? 'Whole manuscript'
+                  : selectedSection.title}
+              </strong>
+              <small>
+                {scope === 'project' || !selectedSection
+                  ? 'Main file, included sources, and the context folder'
+                  : `${selectedSection.sourceFile} · lines ${selectedSection.startLine}–${selectedSection.endLine}${
+                      mode === 'edit' ? ' · edits stay within this range' : ''
+                    }`}
+              </small>
             </span>
           </div>
 

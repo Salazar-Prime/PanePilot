@@ -5140,21 +5140,98 @@ button.type-switcher {
 
 .latex-scope-note {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: -5px 0 14px;
-  padding: 8px 9px;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+  margin: -1px 0 14px;
+  padding: 9px 10px 9px 11px;
   color: #75808e;
   border: 1px solid #262c36;
   border-radius: 6px;
   background: #0d1016;
   font-size: 8px;
   line-height: 1.45;
+  box-shadow: inset 2px 0 0 #5d6ca8;
 }
 
-.latex-scope-note svg {
+.latex-scope-field {
+  margin-bottom: 8px;
+}
+
+.latex-scope-field select {
+  color: #cdd2dc;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 9px;
+  letter-spacing: 0.01em;
+}
+
+.latex-scope-kind {
+  min-width: 76px;
   flex: 0 0 auto;
-  color: #74bba4;
+  padding: 3px 5px;
+  color: #aeb9f1;
+  border: 1px solid #39456f;
+  border-radius: 4px;
+  background: #1a213b;
+  font: 700 7px/1.1 "SFMono-Regular", "Cascadia Code", monospace;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.latex-scope-note.level-3 {
+  box-shadow: inset 2px 0 0 #4d8ba3;
+}
+
+.latex-scope-note.level-3 .latex-scope-kind {
+  color: #8fc6da;
+  border-color: #31586a;
+  background: #142b35;
+}
+
+.latex-scope-note.level-4,
+.latex-scope-note.level-5,
+.latex-scope-note.level-6 {
+  box-shadow: inset 2px 0 0 #4b917a;
+}
+
+.latex-scope-note.level-4 .latex-scope-kind,
+.latex-scope-note.level-5 .latex-scope-kind,
+.latex-scope-note.level-6 .latex-scope-kind {
+  color: #91cfba;
+  border-color: #356552;
+  background: #153027;
+}
+
+.latex-scope-note-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.latex-scope-note-copy strong,
+.latex-scope-note-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-scope-note-copy strong {
+  color: #c5cad3;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.latex-scope-note-copy small {
+  color: #626d7b;
+  font: 7px/1.45 "SFMono-Regular", "Cascadia Code", monospace;
+}
+
+.latex-scope-note.project .latex-scope-kind {
+  flex: 0 0 auto;
+  color: #b8c1ef;
 }
 
 .latex-loading {
