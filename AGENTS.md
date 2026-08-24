@@ -461,7 +461,7 @@ npm run build
 git diff --check
 ```
 
-`node-pty` requires its native macOS `spawn-helper` to be executable. npm can reinstall the prebuilt helper without its executable bit, which surfaces as the otherwise opaque `posix_spawnp failed` error before any shell starts. `postinstall`, `predev`, and `prestart` run `scripts/prepare-node-pty.mjs`; keep all three guards.
+`node-pty` requires its native macOS `spawn-helper` to be executable. npm can reinstall the prebuilt helper without its executable bit, which surfaces as the otherwise opaque `posix_spawnp failed` error before any shell starts. The pinned `node-pty` 1.1.0 release also leaks macOS kqueue, slave PTY, and low-numbered file descriptors as sessions exit; a long-running PanePilot process can therefore exhaust its descriptor limit and surface the same error. `scripts/prepare-node-pty.mjs` applies the idempotent source backport before rebuilding and fixes helper permissions. `postinstall`, `predev`, and `prestart` must keep running that preparation guard.
 
 When main-process code changes, stop and restart `npm run dev`; Vite hot reload alone does not restart Electron's main process. Newly injected tmux environment variables only apply to newly created sessions.
 

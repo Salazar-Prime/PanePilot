@@ -15,7 +15,7 @@
     "node": ">=20.18.0"
   },
   "scripts": {
-    "postinstall": "electron-rebuild -f -w node-pty && node scripts/prepare-node-pty.mjs",
+    "postinstall": "node scripts/prepare-node-pty.mjs --force-rebuild",
     "predev": "node scripts/prepare-electron.mjs && node scripts/prepare-node-pty.mjs",
     "dev": "electron-vite dev",
     "docs:dev": "npm --prefix docs run dev",
