@@ -16,6 +16,7 @@ import type {
   LatexChatMode,
   PrintLatexPdfInput,
   ProjectFolderSelectionPurpose,
+  SendLatexInlineEditInput,
   SynthesizeSpeechInput,
   StartLatexChatInput,
   StartTerminalInput,
@@ -287,6 +288,12 @@ function registerIpc(): void {
   ipcMain.handle('latex:send-prompt', (_event, sessionId: string, prompt: string) => {
     latex.sendPrompt(sessionId, prompt)
   })
+  ipcMain.handle(
+    'latex:send-inline-edit',
+    (_event, input: SendLatexInlineEditInput) => {
+      latex.sendInlineEdit(input)
+    }
+  )
   ipcMain.handle('latex:changes', (_event, sessionId: string) =>
     latex.changes(sessionId)
   )

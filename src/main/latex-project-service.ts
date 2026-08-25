@@ -17,11 +17,17 @@ import type {
   LatexPdfDocument,
   LatexProjectDetails,
   LatexSection,
+  LatexSourceSelection,
   LatexWorkspace,
+  SendLatexInlineEditInput,
   StartLatexChatInput,
   TerminalSession,
   UpdateLatexProjectInput
 } from '../shared/types'
+import {
+  latexSectionContainsSelection,
+  latexSelectionLastLine
+} from '../shared/latex-inline-edit'
 import {
   normalizeOptionalWebUrl,
   normalizeProjectRelativePath
@@ -43,6 +49,8 @@ const MAX_PDF_BYTES = 32 * 1024 * 1024
 const MAX_COMPILE_OUTPUT = 2 * 1024 * 1024
 const COMPILE_TIMEOUT_MS = 180_000
 const MAX_PROMPT_LENGTH = 50_000
+const MAX_INLINE_INSTRUCTION_LENGTH = 10_000
+const MAX_INLINE_SELECTION_LENGTH = 20_000
 const execFileAsync = promisify(execFile)
 const LOCAL_TEX_PATHS = [
   '/Library/TeX/texbin',
@@ -73,6 +81,52 @@ interface LatexCommand {
 interface DiffOperation {
   kind: 'equal' | 'add' | 'delete'
   text: string
+}
+
+export function extractLatexSelection(
+  source: string,
+  selection: Pick<
+    LatexSourceSelection,
+    'startLine' | 'startColumn' | 'endLine' | 'endColumn'
+  >
+): string {
+  const values = [
+    selection.startLine,
+    selection.startColumn,
+    selection.endLine,
+    selection.endColumn
+  ]
+  if (values.some((value) => !Number.isSafeInteger(value) || value < 1)) {
+    throw new Error('The inline edit selection has invalid source coordinates.')
+  }
+  if (
+    selection.endLine < selection.startLine ||
+    (selection.endLine === selection.startLine &&
+      selection.endColumn <= selection.startColumn)
+  ) {
+    throw new Error('Select some source text before asking for an inline edit.')
+  }
+
+  const normalized = source.replace(/\r\n?/g, '\n')
+  const lines = normalized.split('\n')
+  function offsetAt(line: number, column: number): number {
+    const content = lines[line - 1]
+    if (content == null || column > content.length + 1) {
+      throw new Error('The inline edit selection no longer matches the saved file.')
+    }
+    let offset = column - 1
+    for (let index = 0; index < line - 1; index += 1) {
+      offset += lines[index].length + 1
+    }
+    return offset
+  }
+
+  const start = offsetAt(selection.startLine, selection.startColumn)
+  const end = offsetAt(selection.endLine, selection.endColumn)
+  if (end <= start) {
+    throw new Error('Select some source text before asking for an inline edit.')
+  }
+  return normalized.slice(start, end)
 }
 
 function stripComments(source: string): string {
@@ -823,6 +877,85 @@ export class LatexProjectService {
     this.terminals.sendPrompt(
       sessionId,
       `[PanePilot LaTeX] ${instruction} ${context}\n\nUser request: ${prompt}`
+    )
+  }
+
+  sendInlineEdit(input: SendLatexInlineEditInput): void {
+    if (!input?.selection) throw new Error('Select some LaTeX source to edit.')
+    const session = this.store.getSession(input.sessionId)
+    const chat = this.store.getLatexChat(input.sessionId)
+    if (!session || !chat || session.projectId !== chat.projectId) {
+      throw new Error('LaTeX chat not found.')
+    }
+    if (['completed', 'error'].includes(session.state)) {
+      throw new Error('Reload this writing chat before asking for an inline edit.')
+    }
+
+    const instruction = input.instruction.trim()
+    if (!instruction) throw new Error('Describe the change you want to make.')
+    if (
+      instruction.length > MAX_INLINE_INSTRUCTION_LENGTH ||
+      /[\u0000\u0003\u0004]/.test(instruction)
+    ) {
+      throw new Error('The inline edit instruction is too large or contains unsupported control characters.')
+    }
+
+    const path = normalizeProjectRelativePath(
+      input.selection.path,
+      'Selected LaTeX file',
+      { extension: '.tex' }
+    )
+    const selection: LatexSourceSelection = { ...input.selection, path }
+    if (
+      !selection.text ||
+      selection.text.length > MAX_INLINE_SELECTION_LENGTH ||
+      /[\u0000\u0003\u0004]/.test(selection.text)
+    ) {
+      throw new Error('Select between 1 and 20,000 characters for an inline edit.')
+    }
+
+    const { project, connection } = this.requireProject(chat.projectId)
+    const files = this.readFiles(project.folder, connection)
+    const source = files[path]
+    if (source == null) throw new Error(`LaTeX source file “${path}” was not found.`)
+    const savedSelection = extractLatexSelection(source, selection)
+    if (savedSelection !== selection.text.replace(/\r\n?/g, '\n')) {
+      throw new Error(
+        'The selected source changed before the inline edit was sent. Select it again and retry.'
+      )
+    }
+
+    if (chat.scope === 'section') {
+      this.getWorkspace(chat.projectId)
+      const section = chat.sectionId
+        ? this.store.getLatexSection(chat.sectionId)
+        : null
+      if (!section || !latexSectionContainsSelection(section, selection)) {
+        throw new Error(
+          'This writing chat is attached to a different section. Choose a compatible chat or attach a new one.'
+        )
+      }
+    }
+
+    if (chat.mode !== 'edit') this.setChatMode(session.id, 'edit')
+    const request = JSON.stringify({
+      file: path,
+      range: {
+        startLine: selection.startLine,
+        startColumn: selection.startColumn,
+        endLine: selection.endLine,
+        endColumn: selection.endColumn,
+        lastSelectedLine: latexSelectionLastLine(selection)
+      },
+      selectedSource: savedSelection,
+      instruction
+    })
+    this.sendPrompt(
+      session.id,
+      'Inline edit request. Modify the saved file at the exact selected range described below. ' +
+        'Change only that selection unless the instruction explicitly requires adjacent source. ' +
+        'Preserve valid LaTeX and surrounding formatting. Apply the edit in the file; do not only explain it. ' +
+        `Request JSON: ${request}`
     )
   }
 

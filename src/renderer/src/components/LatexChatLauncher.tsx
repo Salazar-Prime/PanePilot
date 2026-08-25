@@ -24,6 +24,7 @@ interface Props {
   projectId: string
   sections: LatexSection[]
   initialSectionId: string | null
+  purpose?: 'chat' | 'inline-edit'
   onClose(): void
   onStart(input: StartLatexChatInput): Promise<void>
 }
@@ -32,13 +33,15 @@ export function LatexChatLauncher({
   projectId,
   sections,
   initialSectionId,
+  purpose = 'chat',
   onClose,
   onStart
 }: Props) {
+  const inlineEdit = purpose === 'inline-edit'
   const initialSection =
     sections.find((section) => section.id === initialSectionId) ?? null
   const [provider, setProvider] = useState<ConversationProvider>('codex')
-  const [mode, setMode] = useState<LatexChatMode>('ask')
+  const [mode, setMode] = useState<LatexChatMode>(inlineEdit ? 'edit' : 'ask')
   const [scope, setScope] = useState<LatexChatScope>(
     initialSection ? 'section' : 'project'
   )
@@ -92,8 +95,12 @@ export function LatexChatLauncher({
       >
         <div className="modal-heading">
           <div>
-            <span className="eyebrow">ATTACH A WRITING AGENT</span>
-            <h2 id="latex-chat-launcher-title">Start a LaTeX chat</h2>
+            <span className="eyebrow">
+              {inlineEdit ? 'EDIT THE SELECTION' : 'ATTACH A WRITING AGENT'}
+            </span>
+            <h2 id="latex-chat-launcher-title">
+              {inlineEdit ? 'Choose an inline editor' : 'Start a LaTeX chat'}
+            </h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Close">
             <X size={17} />
@@ -125,6 +132,7 @@ export function LatexChatLauncher({
             <button
               type="button"
               className={mode === 'ask' ? 'selected' : ''}
+              disabled={inlineEdit}
               onClick={() => setMode('ask')}
             >
               <MessageCircleQuestion size={18} />
@@ -150,6 +158,7 @@ export function LatexChatLauncher({
             <span>Attach scope</span>
             <select
               value={scope === 'project' ? 'project' : sectionId}
+              disabled={inlineEdit}
               onChange={(event) => {
                 if (event.target.value === 'project') {
                   setScope('project')
@@ -223,7 +232,11 @@ export function LatexChatLauncher({
               className="primary-button"
               disabled={submitting || (scope === 'section' && !sectionId)}
             >
-              {submitting ? 'Starting…' : 'Start chat'}
+              {submitting
+                ? 'Starting…'
+                : inlineEdit
+                  ? 'Start editing'
+                  : 'Start chat'}
             </button>
           </div>
         </form>

@@ -4701,6 +4701,187 @@ button.type-switcher {
   opacity: 0.55;
 }
 
+.latex-inline-edit {
+  position: absolute;
+  z-index: 80;
+  max-width: calc(100% - 24px);
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.latex-inline-edit::before {
+  position: absolute;
+  left: -7px;
+  width: 2px;
+  height: 24px;
+  border-radius: 2px;
+  background: #8292ee;
+  box-shadow: 0 0 8px #7183dc66;
+  content: "";
+}
+
+.latex-inline-edit.below::before {
+  top: -11px;
+}
+
+.latex-inline-edit.above::before {
+  bottom: -11px;
+}
+
+.latex-inline-chip {
+  display: flex;
+  height: 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  color: #c9d0ff;
+  border: 1px solid #52609b;
+  border-radius: 5px;
+  background: #171d32ee;
+  box-shadow: 0 5px 18px #0008;
+  cursor: pointer;
+  font-size: 8px;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+
+.latex-inline-chip:hover,
+.latex-inline-chip:focus-visible {
+  color: #eef0ff;
+  border-color: #7f90ed;
+  background: #202947;
+}
+
+.latex-inline-card {
+  width: 334px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid #46517e;
+  border-radius: 7px;
+  background: #11151eee;
+  box-shadow: 0 14px 38px #000b, 0 0 0 1px #0a0c11;
+  backdrop-filter: blur(12px);
+}
+
+.latex-inline-card > header {
+  display: grid;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  grid-template-columns: auto minmax(0, 1fr) 20px;
+  padding: 0 7px 0 9px;
+  border-bottom: 1px solid #293044;
+  background: #171c29;
+}
+
+.latex-inline-card > header > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #b8c2ff;
+  font-size: 8px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.latex-inline-card > header > small {
+  overflow: hidden;
+  color: #68748a;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 7px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-inline-card > header > button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: #727c8b;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 18px;
+}
+
+.latex-inline-card > header > button:hover {
+  color: #d9dde6;
+  background: #282e3b;
+}
+
+.latex-inline-card textarea {
+  display: block;
+  width: calc(100% - 16px);
+  min-height: 68px;
+  margin: 8px;
+  padding: 8px 9px;
+  resize: none;
+  color: #d9dde7;
+  border: 1px solid #303847;
+  border-radius: 5px;
+  outline: none;
+  background: #090c12;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.latex-inline-card textarea:focus {
+  border-color: #6879c5;
+  box-shadow: 0 0 0 2px #4f60a333;
+}
+
+.latex-inline-card > footer {
+  display: flex;
+  min-height: 33px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+.latex-inline-card > footer > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #6e7888;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-inline-submit {
+  display: flex;
+  height: 25px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  color: #eef0ff;
+  border: 1px solid #6574bd;
+  border-radius: 5px;
+  background: #394986;
+  cursor: pointer;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.latex-inline-submit:hover:not(:disabled) {
+  border-color: #8494ed;
+  background: #46599f;
+}
+
+.latex-inline-submit:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.latex-inline-card > p {
+  margin: -3px 8px 8px;
+  color: #d48793;
+  font-size: 7px;
+  line-height: 1.35;
+}
+
 .latex-editor-error {
   display: flex;
   min-height: 0;
@@ -5185,6 +5366,15 @@ button.type-switcher {
   background: #172d26;
 }
 
+.latex-mode-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.36;
+}
+
+.latex-mode-grid button.selected:disabled {
+  opacity: 1;
+}
+
 .latex-scope-note {
   display: flex;
   min-width: 0;
@@ -5210,6 +5400,11 @@ button.type-switcher {
   font-family: "SFMono-Regular", "Cascadia Code", monospace;
   font-size: 9px;
   letter-spacing: 0.01em;
+}
+
+.latex-scope-field select:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .latex-scope-kind {
@@ -5594,7 +5789,8 @@ button.type-switcher {
 
   .latex-change-added,
   .latex-change-modified,
-  .latex-deleted-zone {
+  .latex-deleted-zone,
+  .latex-inline-chip {
     animation: none;
   }
 }

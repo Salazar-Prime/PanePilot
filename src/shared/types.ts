@@ -254,6 +254,21 @@ export interface StartLatexChatInput {
   dangerousMode: boolean
 }
 
+export interface LatexSourceSelection {
+  path: string
+  startLine: number
+  startColumn: number
+  endLine: number
+  endColumn: number
+  text: string
+}
+
+export interface SendLatexInlineEditInput {
+  sessionId: string
+  selection: LatexSourceSelection
+  instruction: string
+}
+
 export interface UpdateLatexProjectInput {
   projectId: string
   mainFile: string
@@ -605,6 +620,7 @@ export interface ProjectConsoleApi {
     startChat(input: StartLatexChatInput): Promise<TerminalSession>
     setChatMode(sessionId: string, mode: LatexChatMode): Promise<void>
     sendPrompt(sessionId: string, prompt: string): Promise<void>
+    sendInlineEdit(input: SendLatexInlineEditInput): Promise<void>
     changes(sessionId: string): Promise<LatexChangeSet>
     clearChanges(sessionId: string): Promise<void>
   }

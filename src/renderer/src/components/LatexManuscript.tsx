@@ -15,14 +15,21 @@ import {
   FolderSearch,
   RefreshCw,
   Save,
+  Send,
   Sparkles
 } from 'lucide-react'
 import type {
   LatexChangeSet,
   LatexSection,
+  LatexSourceSelection,
   LatexWorkspace,
-  Project
+  Project,
+  TerminalSession
 } from '@shared/types'
+import {
+  latexChatCoversSelection,
+  latexSectionForSelection
+} from '@shared/latex-inline-edit'
 import { latexMonarchLanguage } from '../lib/latexLanguage'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
 
@@ -66,6 +73,8 @@ monaco.editor.defineTheme('panepilot-latex', {
 interface Props {
   project: Project
   workspace: LatexWorkspace
+  sessions: TerminalSession[]
+  activeSessionId: string | null
   selectedSectionId: string | null
   chatCounts: Map<string, number>
   changes: LatexChangeSet | null
@@ -73,18 +82,42 @@ interface Props {
   onOpenContext(): void
   onClearChanges(): Promise<void>
   onWorkspaceRefresh(): Promise<void>
+  onInlineEdit(
+    sessionId: string,
+    selection: LatexSourceSelection,
+    instruction: string
+  ): Promise<void>
+  onAttachInlineAgent(
+    selection: LatexSourceSelection,
+    instruction: string,
+    sectionId: string | null
+  ): Promise<void>
+}
+
+interface InlineEditState {
+  selection: LatexSourceSelection
+  top: number
+  left: number
+  above: boolean
+  expanded: boolean
+  instruction: string
+  error: string
 }
 
 export function LatexManuscript({
   project,
   workspace,
+  sessions,
+  activeSessionId,
   selectedSectionId,
   chatCounts,
   changes,
   onSelectSection,
   onOpenContext,
   onClearChanges,
-  onWorkspaceRefresh
+  onWorkspaceRefresh,
+  onInlineEdit,
+  onAttachInlineAgent
 }: Props) {
   const [reviewPath, setReviewPath] = useState<string | null>(null)
   const [path, setPath] = useState(workspace.details.mainFile)
@@ -92,12 +125,16 @@ export function LatexManuscript({
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [sendingInlineEdit, setSendingInlineEdit] = useState(false)
+  const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null)
   const [error, setError] = useState('')
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const finderActionRef = useRef<{ dispose(): void } | null>(null)
   const activeFinderPathRef = useRef(path)
   const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
   const viewZoneIdsRef = useRef<string[]>([])
+  const inlineEditDisposablesRef = useRef<{ dispose(): void }[]>([])
+  const inlinePromptRef = useRef<HTMLTextAreaElement | null>(null)
   const dirty = draft !== savedContent
   activeFinderPathRef.current = path
   const selectedSection =
@@ -122,6 +159,28 @@ export function LatexManuscript({
         ].join('\u0000')
       )
       .join('\u0001') ?? ''
+  const inlineSection = inlineEdit
+    ? latexSectionForSelection(workspace.sections, inlineEdit.selection)
+    : null
+  const inlineAgent = inlineEdit
+    ? sessions.find(
+        (session) =>
+          session.id === activeSessionId &&
+          latexChatCoversSelection(
+            session,
+            workspace.sections,
+            inlineEdit.selection
+          )
+      ) ??
+      sessions.find((session) =>
+        latexChatCoversSelection(
+          session,
+          workspace.sections,
+          inlineEdit.selection
+        )
+      ) ??
+      null
+    : null
 
   async function load(nextPath: string, revealSection?: LatexSection | null) {
     setLoading(true)
@@ -160,6 +219,10 @@ export function LatexManuscript({
   useEffect(
     () => () => {
       finderActionRef.current?.dispose()
+      for (const disposable of inlineEditDisposablesRef.current) {
+        disposable.dispose()
+      }
+      inlineEditDisposablesRef.current = []
     },
     []
   )
@@ -185,15 +248,17 @@ export function LatexManuscript({
     applyDecorations()
   }, [fileChanges, draft])
 
-  async function save() {
+  async function save(): Promise<boolean> {
     setSaving(true)
     setError('')
     try {
       await window.projectConsole.files.save(project.id, path, draft)
       setSavedContent(draft)
       await onWorkspaceRefresh()
+      return true
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
+      return false
     } finally {
       setSaving(false)
     }
@@ -235,6 +300,10 @@ export function LatexManuscript({
   const handleMount: OnMount = (editor) => {
     editorRef.current = editor
     finderActionRef.current?.dispose()
+    for (const disposable of inlineEditDisposablesRef.current) {
+      disposable.dispose()
+    }
+    inlineEditDisposablesRef.current = []
     if (project.connectionId === 'local') {
       finderActionRef.current = addShowInFinderAction(
         editor,
@@ -244,6 +313,150 @@ export function LatexManuscript({
     applyDecorations()
     if (selectedSection && selectedSection.sourceFile === path) {
       editor.revealLineInCenter(selectedSection.startLine)
+    }
+
+    function inlinePosition(
+      selection: LatexSourceSelection,
+      expanded: boolean
+    ): Pick<InlineEditState, 'top' | 'left' | 'above'> | null {
+      const visible = editor.getScrolledVisiblePosition({
+        lineNumber: selection.endLine,
+        column: selection.endColumn
+      })
+      if (!visible) return null
+      const layout = editor.getLayoutInfo()
+      const panelWidth = expanded ? 334 : 142
+      const panelHeight = expanded ? 184 : 30
+      const below = visible.top + visible.height + 7
+      const above = below + panelHeight > layout.height - 8
+      return {
+        top: above ? Math.max(8, visible.top - panelHeight - 7) : below,
+        left: Math.max(12, Math.min(visible.left, layout.width - panelWidth - 12)),
+        above
+      }
+    }
+
+    function captureSelection(expanded = false) {
+      const model = editor.getModel()
+      const range = editor.getSelection()
+      if (!model || !range || range.isEmpty()) {
+        setInlineEdit(null)
+        return
+      }
+      const selection: LatexSourceSelection = {
+        path: activeFinderPathRef.current,
+        startLine: range.startLineNumber,
+        startColumn: range.startColumn,
+        endLine: range.endLineNumber,
+        endColumn: range.endColumn,
+        text: model.getValueInRange(range)
+      }
+      const position = inlinePosition(selection, expanded)
+      if (!position) return
+      setInlineEdit({
+        selection,
+        ...position,
+        expanded,
+        instruction: '',
+        error:
+          selection.text.length > 20_000
+            ? 'Select no more than 20,000 characters.'
+            : ''
+      })
+      if (expanded) {
+        window.requestAnimationFrame(() => inlinePromptRef.current?.focus())
+      }
+    }
+
+    function repositionInlineEdit() {
+      setInlineEdit((current) => {
+        if (!current) return null
+        const position = inlinePosition(current.selection, current.expanded)
+        return position ? { ...current, ...position } : current
+      })
+    }
+
+    inlineEditDisposablesRef.current = [
+      editor.onDidChangeCursorSelection(() => captureSelection()),
+      editor.onDidChangeModel(() => captureSelection()),
+      editor.onDidScrollChange(repositionInlineEdit),
+      editor.onDidLayoutChange(repositionInlineEdit),
+      editor.addAction({
+        id: 'panepilot.latex.inline-edit',
+        label: 'Edit Selection with AI',
+        precondition: 'editorHasSelection',
+        contextMenuGroupId: 'navigation',
+        contextMenuOrder: 1.45,
+        run: () => captureSelection(true)
+      })
+    ]
+  }
+
+  function expandInlineEdit() {
+    const editor = editorRef.current
+    if (!editor) return
+    setInlineEdit((current) => {
+      if (!current) return null
+      const visible = editor.getScrolledVisiblePosition({
+        lineNumber: current.selection.endLine,
+        column: current.selection.endColumn
+      })
+      if (!visible) return current
+      const layout = editor.getLayoutInfo()
+      const panelHeight = 184
+      const below = visible.top + visible.height + 7
+      const above = below + panelHeight > layout.height - 8
+      return {
+        ...current,
+        expanded: true,
+        top: above ? Math.max(8, visible.top - panelHeight - 7) : below,
+        left: Math.max(12, Math.min(visible.left, layout.width - 346)),
+        above
+      }
+    })
+    window.requestAnimationFrame(() => inlinePromptRef.current?.focus())
+  }
+
+  function closeInlineEdit() {
+    setInlineEdit(null)
+    editorRef.current?.focus()
+  }
+
+  async function submitInlineEdit() {
+    if (!inlineEdit || !inlineEdit.instruction.trim() || sendingInlineEdit) return
+    const request = inlineEdit
+    setSendingInlineEdit(true)
+    setInlineEdit((current) => current && { ...current, error: '' })
+    try {
+      if (request.selection.text.length > 20_000) {
+        throw new Error('Select no more than 20,000 characters.')
+      }
+      if (dirty && !(await save())) return
+      if (inlineAgent) {
+        await onInlineEdit(
+          inlineAgent.id,
+          request.selection,
+          request.instruction
+        )
+      } else {
+        await onAttachInlineAgent(
+          request.selection,
+          request.instruction,
+          inlineSection?.id ?? null
+        )
+      }
+      setInlineEdit(null)
+    } catch (caught) {
+      setInlineEdit((current) =>
+        current
+          ? {
+              ...current,
+              error: caught instanceof Error ? caught.message : String(caught)
+            }
+          : current
+      )
+    } finally {
+      setSendingInlineEdit(false)
     }
   }
 
@@ -465,6 +678,101 @@ export function LatexManuscript({
                 stickyScroll: { enabled: true }
               }}
             />
+            {inlineEdit && (
+              <div
+                className={`latex-inline-edit ${
+                  inlineEdit.expanded ? 'expanded' : 'collapsed'
+                } ${inlineEdit.above ? 'above' : 'below'}`}
+                style={{ top: inlineEdit.top, left: inlineEdit.left }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                {inlineEdit.expanded ? (
+                  <div className="latex-inline-card">
+                    <header>
+                      <span>
+                        <Sparkles size={12} /> Inline edit
+                      </span>
+                      <small>
+                        {inlineEdit.selection.path} · L{inlineEdit.selection.startLine}
+                        {inlineEdit.selection.endLine !==
+                          inlineEdit.selection.startLine &&
+                          `–${inlineEdit.selection.endLine}`}
+                      </small>
+                      <button
+                        type="button"
+                        onClick={closeInlineEdit}
+                        aria-label="Close inline edit"
+                      >
+                        ×
+                      </button>
+                    </header>
+                    <textarea
+                      ref={inlinePromptRef}
+                      aria-label="Inline edit instruction"
+                      value={inlineEdit.instruction}
+                      onChange={(event) =>
+                        setInlineEdit((current) =>
+                          current
+                            ? { ...current, instruction: event.target.value }
+                            : current
+                        )
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          closeInlineEdit()
+                        } else if (
+                          event.key === 'Enter' &&
+                          (event.metaKey || event.ctrlKey)
+                        ) {
+                          event.preventDefault()
+                          void submitInlineEdit()
+                        }
+                      }}
+                      placeholder="Describe the change to this selection…"
+                      rows={3}
+                    />
+                    <footer>
+                      <span>
+                        {inlineAgent
+                          ? `${inlineAgent.name} · ${inlineAgent.profile === 'codex' ? 'Codex' : 'Claude'}`
+                          : 'No compatible writing agent'}
+                      </span>
+                      <button
+                        type="button"
+                        className="latex-inline-submit"
+                        onClick={() => void submitInlineEdit()}
+                        disabled={
+                          sendingInlineEdit ||
+                          !inlineEdit.instruction.trim() ||
+                          inlineEdit.selection.text.length > 20_000
+                        }
+                      >
+                        {inlineAgent ? <Send size={11} /> : <Sparkles size={11} />}
+                        {sendingInlineEdit
+                          ? 'Sending…'
+                          : inlineAgent
+                            ? 'Apply edit'
+                            : 'Attach agent'}
+                      </button>
+                    </footer>
+                    {inlineEdit.error && (
+                      <p role="alert">{inlineEdit.error}</p>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="latex-inline-chip"
+                    onClick={expandInlineEdit}
+                    title="Ask a writing agent to edit this selection"
+                  >
+                    <Sparkles size={11} /> Edit selection
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
       </section>

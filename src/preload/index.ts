@@ -8,6 +8,7 @@ import type {
   PrintLatexPdfInput,
   ProjectConsoleApi,
   ProjectFolderSelectionPurpose,
+  SendLatexInlineEditInput,
   SynthesizeSpeechInput,
   StartLatexChatInput,
   StartTerminalInput,
@@ -219,6 +220,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('latex:set-chat-mode', sessionId, mode),
     sendPrompt: (sessionId: string, prompt: string) =>
       ipcRenderer.invoke('latex:send-prompt', sessionId, prompt),
+    sendInlineEdit: (input: SendLatexInlineEditInput) =>
+      ipcRenderer.invoke('latex:send-inline-edit', input),
     changes: (sessionId: string) => ipcRenderer.invoke('latex:changes', sessionId),
     clearChanges: (sessionId: string) =>
       ipcRenderer.invoke('latex:clear-changes', sessionId)

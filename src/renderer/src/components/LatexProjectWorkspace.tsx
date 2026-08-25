@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import type {
   LatexChangeSet,
+  LatexSourceSelection,
   LatexWorkspace,
   StartLatexChatInput
 } from '@shared/types'
@@ -79,6 +80,12 @@ const latexWorkspaceTabs = new Map<string, WorkspaceTab>()
 const openedPdfProjects = new Set<string>()
 const latexWorkspaceCache = new Map<string, LatexWorkspace>()
 
+interface PendingInlineEdit {
+  selection: LatexSourceSelection
+  instruction: string
+  sectionId: string | null
+}
+
 export function LatexProjectWorkspace({
   project,
   selectedSessionId,
@@ -102,6 +109,8 @@ export function LatexProjectWorkspace({
   )
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [showLauncher, setShowLauncher] = useState(false)
+  const [pendingInlineEdit, setPendingInlineEdit] =
+    useState<PendingInlineEdit | null>(null)
   const [filesInitialPath, setFilesInitialPath] = useState('.')
   const [openFileRequest, setOpenFileRequest] =
     useState<ProjectFileOpenRequest | null>(null)
@@ -263,6 +272,7 @@ export function LatexProjectWorkspace({
     setChanges(null)
     setSelectedSectionId(null)
     setOpenFileRequest(null)
+    setPendingInlineEdit(null)
     setChatLayout(loadLatexChatLayout(project.id))
     chatResizeRef.current = null
     setResizingChat(false)
@@ -326,6 +336,7 @@ export function LatexProjectWorkspace({
 
   useEffect(() => {
     if (launchTerminalRequest == null) return
+    setPendingInlineEdit(null)
     setShowLauncher(true)
     onLaunchTerminalRequestHandled(launchTerminalRequest)
   }, [launchTerminalRequest, onLaunchTerminalRequestHandled])
@@ -360,6 +371,45 @@ export function LatexProjectWorkspace({
     await onChanged()
     selectWorkspaceTab('manuscript')
     onSelectSession(session.id)
+    if (pendingInlineEdit) {
+      const request = pendingInlineEdit
+      setPendingInlineEdit(null)
+      await sendInlineEdit(
+        session.id,
+        request.selection,
+        request.instruction
+      )
+    }
+  }
+
+  async function sendInlineEdit(
+    sessionId: string,
+    selection: LatexSourceSelection,
+    instruction: string
+  ) {
+    await window.projectConsole.latex.sendInlineEdit({
+      sessionId,
+      selection,
+      instruction
+    })
+    onSessionSelected(sessionId)
+    onSelectSession(sessionId)
+    await onChanged()
+    window.setTimeout(() => {
+      void window.projectConsole.latex
+        .changes(sessionId)
+        .then(setChanges)
+        .catch(() => undefined)
+    }, 700)
+  }
+
+  async function attachInlineAgent(
+    selection: LatexSourceSelection,
+    instruction: string,
+    sectionId: string | null
+  ) {
+    setPendingInlineEdit({ selection, instruction, sectionId })
+    setShowLauncher(true)
   }
 
   async function selectShortcutSession(id: string) {
@@ -564,6 +614,8 @@ export function LatexProjectWorkspace({
               <LatexManuscript
                 project={project}
                 workspace={workspace}
+                sessions={sessions}
+                activeSessionId={activeSession?.id ?? null}
                 selectedSectionId={selectedSectionId}
                 chatCounts={chatCounts}
                 changes={changes}
@@ -571,6 +623,8 @@ export function LatexProjectWorkspace({
                 onOpenContext={openContext}
                 onClearChanges={clearChanges}
                 onWorkspaceRefresh={loadWorkspace}
+                onInlineEdit={sendInlineEdit}
+                onAttachInlineAgent={attachInlineAgent}
               />
             )}
             {pdfOpened && (
@@ -623,7 +677,10 @@ export function LatexProjectWorkspace({
               onSelectSession(id)
               void window.projectConsole.terminals.acknowledge(id).then(onChanged)
             }}
-            onNewChat={() => setShowLauncher(true)}
+            onNewChat={() => {
+              setPendingInlineEdit(null)
+              setShowLauncher(true)
+            }}
             onChanged={onChanged}
             onPromptSent={() => {
               window.setTimeout(() => void refreshChanges(), 700)
@@ -678,8 +735,14 @@ export function LatexProjectWorkspace({
         <LatexChatLauncher
           projectId={project.id}
           sections={workspace.sections}
-          initialSectionId={selectedSectionId}
-          onClose={() => setShowLauncher(false)}
+          initialSectionId={
+            pendingInlineEdit?.sectionId ?? selectedSectionId
+          }
+          purpose={pendingInlineEdit ? 'inline-edit' : 'chat'}
+          onClose={() => {
+            setShowLauncher(false)
+            setPendingInlineEdit(null)
+          }}
           onStart={startChat}
         />
       )}
