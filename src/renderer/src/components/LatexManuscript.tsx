@@ -13,10 +13,12 @@ import {
   CircleDotDashed,
   FileText,
   FolderSearch,
+  MessageSquareText,
   RefreshCw,
   Save,
   Send,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react'
 import type {
   LatexChangeSet,
@@ -26,12 +28,10 @@ import type {
   Project,
   TerminalSession
 } from '@shared/types'
-import {
-  latexChatCoversSelection,
-  latexSectionForSelection
-} from '@shared/latex-inline-edit'
 import { latexMonarchLanguage } from '../lib/latexLanguage'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
+import { ManagedTerminal } from './ManagedTerminal'
+import { StatusDot } from './StatusDot'
 
 loader.config({ monaco })
 self.MonacoEnvironment = {
@@ -73,8 +73,7 @@ monaco.editor.defineTheme('panepilot-latex', {
 interface Props {
   project: Project
   workspace: LatexWorkspace
-  sessions: TerminalSession[]
-  activeSessionId: string | null
+  inlineSession: TerminalSession | null
   selectedSectionId: string | null
   chatCounts: Map<string, number>
   changes: LatexChangeSet | null
@@ -83,14 +82,8 @@ interface Props {
   onClearChanges(): Promise<void>
   onWorkspaceRefresh(): Promise<void>
   onInlineEdit(
-    sessionId: string,
     selection: LatexSourceSelection,
     instruction: string
-  ): Promise<void>
-  onAttachInlineAgent(
-    selection: LatexSourceSelection,
-    instruction: string,
-    sectionId: string | null
   ): Promise<void>
 }
 
@@ -107,8 +100,7 @@ interface InlineEditState {
 export function LatexManuscript({
   project,
   workspace,
-  sessions,
-  activeSessionId,
+  inlineSession,
   selectedSectionId,
   chatCounts,
   changes,
@@ -116,8 +108,7 @@ export function LatexManuscript({
   onOpenContext,
   onClearChanges,
   onWorkspaceRefresh,
-  onInlineEdit,
-  onAttachInlineAgent
+  onInlineEdit
 }: Props) {
   const [reviewPath, setReviewPath] = useState<string | null>(null)
   const [path, setPath] = useState(workspace.details.mainFile)
@@ -127,6 +118,7 @@ export function LatexManuscript({
   const [saving, setSaving] = useState(false)
   const [sendingInlineEdit, setSendingInlineEdit] = useState(false)
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null)
+  const [showInlineChat, setShowInlineChat] = useState(false)
   const [error, setError] = useState('')
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const finderActionRef = useRef<{ dispose(): void } | null>(null)
@@ -159,28 +151,6 @@ export function LatexManuscript({
         ].join('\u0000')
       )
       .join('\u0001') ?? ''
-  const inlineSection = inlineEdit
-    ? latexSectionForSelection(workspace.sections, inlineEdit.selection)
-    : null
-  const inlineAgent = inlineEdit
-    ? sessions.find(
-        (session) =>
-          session.id === activeSessionId &&
-          latexChatCoversSelection(
-            session,
-            workspace.sections,
-            inlineEdit.selection
-          )
-      ) ??
-      sessions.find((session) =>
-        latexChatCoversSelection(
-          session,
-          workspace.sections,
-          inlineEdit.selection
-        )
-      ) ??
-      null
-    : null
 
   async function load(nextPath: string, revealSection?: LatexSection | null) {
     setLoading(true)
@@ -228,6 +198,11 @@ export function LatexManuscript({
   )
 
   useEffect(() => {
+    setInlineEdit(null)
+    setShowInlineChat(false)
+  }, [project.id])
+
+  useEffect(() => {
     const changed = changes?.files.some((file) => file.path === path)
     if (!changed || dirty) return
     void load(path, selectedSection)
@@ -247,6 +222,23 @@ export function LatexManuscript({
   useEffect(() => {
     applyDecorations()
   }, [fileChanges, draft])
+
+  useEffect(() => {
+    if (!showInlineChat) return
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      const target = event.target
+      if (
+        target instanceof Element &&
+        target.closest('.latex-inline-chat-terminal')
+      ) {
+        return
+      }
+      setShowInlineChat(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [showInlineChat])
 
   async function save(): Promise<boolean> {
     setSaving(true)
@@ -432,19 +424,7 @@ export function LatexManuscript({
         throw new Error('Select no more than 20,000 characters.')
       }
       if (dirty && !(await save())) return
-      if (inlineAgent) {
-        await onInlineEdit(
-          inlineAgent.id,
-          request.selection,
-          request.instruction
-        )
-      } else {
-        await onAttachInlineAgent(
-          request.selection,
-          request.instruction,
-          inlineSection?.id ?? null
-        )
-      }
+      await onInlineEdit(request.selection, request.instruction)
       setInlineEdit(null)
     } catch (caught) {
       setInlineEdit((current) =>
@@ -614,6 +594,27 @@ export function LatexManuscript({
             </small>
           )}
           <button
+            className={`secondary-button latex-inline-chat-button ${
+              inlineSession ? 'available' : ''
+            }`}
+            onClick={() => {
+              setInlineEdit(null)
+              setShowInlineChat((current) => !current)
+              if (inlineSession) {
+                void window.projectConsole.terminals.acknowledge(inlineSession.id)
+              }
+            }}
+            aria-expanded={showInlineChat}
+            title="Show the latest persistent inline-edit interaction"
+          >
+            {inlineSession ? (
+              <StatusDot state={inlineSession.state} compact />
+            ) : (
+              <MessageSquareText size={12} />
+            )}
+            Inline chat
+          </button>
+          <button
             className="primary-button"
             onClick={() => void save()}
             disabled={!dirty || saving}
@@ -735,9 +736,9 @@ export function LatexManuscript({
                     />
                     <footer>
                       <span>
-                        {inlineAgent
-                          ? `${inlineAgent.name} · ${inlineAgent.profile === 'codex' ? 'Codex' : 'Claude'}`
-                          : 'No compatible writing agent'}
+                        {inlineSession
+                          ? `${inlineSession.name} · persistent Codex`
+                          : 'Creates one hidden persistent Codex chat'}
                       </span>
                       <button
                         type="button"
@@ -749,12 +750,10 @@ export function LatexManuscript({
                           inlineEdit.selection.text.length > 20_000
                         }
                       >
-                        {inlineAgent ? <Send size={11} /> : <Sparkles size={11} />}
+                        <Send size={11} />
                         {sendingInlineEdit
                           ? 'Sending…'
-                          : inlineAgent
-                            ? 'Apply edit'
-                            : 'Attach agent'}
+                          : 'Send edit'}
                       </button>
                     </footer>
                     {inlineEdit.error && (
@@ -772,6 +771,49 @@ export function LatexManuscript({
                   </button>
                 )}
               </div>
+            )}
+            {showInlineChat && (
+              <aside
+                className="latex-inline-chat-viewer"
+                aria-label="Latest inline edit chat"
+              >
+                <header>
+                  <div>
+                    <span className="eyebrow">LATEST INLINE EDIT</span>
+                    <strong>Inline chat</strong>
+                  </div>
+                  {inlineSession && (
+                    <small>
+                      <StatusDot state={inlineSession.state} compact />
+                      {inlineSession.name}
+                    </small>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowInlineChat(false)}
+                    aria-label="Close inline chat"
+                  >
+                    <X size={14} />
+                  </button>
+                </header>
+                {inlineSession ? (
+                  <div className="latex-inline-chat-terminal">
+                    <ManagedTerminal
+                      session={inlineSession}
+                      projectFolder={project.folder}
+                    />
+                  </div>
+                ) : (
+                  <div className="latex-inline-chat-empty">
+                    <Sparkles size={23} />
+                    <strong>No inline edit yet</strong>
+                    <p>
+                      Select source text and send an edit. PanePilot will create
+                      the hidden persistent Codex session here.
+                    </p>
+                  </div>
+                )}
+              </aside>
             )}
           </div>
         )}

@@ -104,6 +104,7 @@ describe('local tmux discovery', () => {
         metadata(LATEX_CHAT_ID, latexFolder, {
           sessionKind: 'latex-chat',
           latex: {
+            purpose: 'writing',
             scope: 'project',
             mode: 'edit',
             sectionId: null,

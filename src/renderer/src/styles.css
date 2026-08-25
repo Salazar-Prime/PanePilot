@@ -4609,10 +4609,34 @@ button.type-switcher {
   white-space: nowrap;
 }
 
-.latex-source-toolbar .primary-button {
+.latex-source-toolbar .primary-button,
+.latex-source-toolbar .secondary-button {
   height: 27px;
   padding: 0 9px;
   font-size: 8px;
+}
+
+.latex-inline-chat-button {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: #7d8798;
+  border-color: #303746;
+  background: #151922;
+}
+
+.latex-inline-chat-button.available {
+  color: #b6c0f4;
+  border-color: #46527d;
+  background: #1a2033;
+}
+
+.latex-inline-chat-button:hover,
+.latex-inline-chat-button[aria-expanded="true"] {
+  color: #e4e8ff;
+  border-color: #6473b4;
+  background: #222b49;
 }
 
 .latex-unsaved,
@@ -4880,6 +4904,127 @@ button.type-switcher {
   color: #d48793;
   font-size: 7px;
   line-height: 1.35;
+}
+
+.latex-inline-chat-viewer {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  bottom: 9px;
+  z-index: 70;
+  display: flex;
+  width: min(410px, calc(100% - 18px));
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #3e496e;
+  border-radius: 7px;
+  background: #0c0f15f5;
+  box-shadow: 0 18px 52px #000c, -1px 0 0 #1d2331;
+  backdrop-filter: blur(12px);
+}
+
+.latex-inline-chat-viewer > header {
+  display: flex;
+  min-height: 47px;
+  flex: 0 0 47px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px 0 11px;
+  border-bottom: 1px solid #272e3d;
+  background: #141925;
+}
+
+.latex-inline-chat-viewer > header > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.latex-inline-chat-viewer > header .eyebrow {
+  color: #6675ad;
+  font-size: 6px;
+  letter-spacing: 0.13em;
+}
+
+.latex-inline-chat-viewer > header strong {
+  color: #d3d8e5;
+  font-size: 9px;
+}
+
+.latex-inline-chat-viewer > header > small {
+  display: flex;
+  min-width: 0;
+  max-width: 190px;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: #737e91;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-inline-chat-viewer > header > button {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  color: #77808e;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.latex-inline-chat-viewer > header > button:hover,
+.latex-inline-chat-viewer > header > button:focus-visible {
+  color: #e0e4ed;
+  background: #282e3c;
+}
+
+.latex-inline-chat-terminal {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  padding: 3px 0 0 3px;
+  background: #090b10;
+}
+
+.latex-inline-chat-terminal > .managed-terminal {
+  min-height: 0;
+  flex: 1;
+}
+
+.latex-inline-chat-empty {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  flex-direction: column;
+  color: #7886c5;
+  text-align: center;
+}
+
+.latex-inline-chat-empty strong {
+  margin-top: 9px;
+  color: #bdc4d3;
+  font-size: 10px;
+}
+
+.latex-inline-chat-empty p {
+  max-width: 265px;
+  margin: 6px 0 0;
+  color: #687181;
+  font-size: 8px;
+  line-height: 1.5;
 }
 
 .latex-editor-error {
@@ -5366,15 +5511,6 @@ button.type-switcher {
   background: #172d26;
 }
 
-.latex-mode-grid button:disabled {
-  cursor: not-allowed;
-  opacity: 0.36;
-}
-
-.latex-mode-grid button.selected:disabled {
-  opacity: 1;
-}
-
 .latex-scope-note {
   display: flex;
   min-width: 0;
@@ -5400,11 +5536,6 @@ button.type-switcher {
   font-family: "SFMono-Regular", "Cascadia Code", monospace;
   font-size: 9px;
   letter-spacing: 0.01em;
-}
-
-.latex-scope-field select:disabled {
-  cursor: not-allowed;
-  opacity: 0.72;
 }
 
 .latex-scope-kind {

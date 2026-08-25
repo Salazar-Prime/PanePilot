@@ -12,6 +12,7 @@ import type {
   ConversationProvider,
   CreateProjectActionInput,
   LatexChatMode,
+  LatexChatPurpose,
   LatexChatScope,
   LaunchProfile,
   Project,
@@ -392,6 +393,7 @@ export class TerminalManager {
   startLatexChat(
     input: StartTerminalInput,
     attachment: {
+      purpose?: LatexChatPurpose
       scope: LatexChatScope
       sectionId: string | null
       mode: LatexChatMode
@@ -410,6 +412,126 @@ export class TerminalManager {
         })
       }
     )
+  }
+
+  async startLatexInlineChat(projectId: string): Promise<TerminalSession> {
+    let existing = this.store.getLatexInlineEditSession(projectId)
+    const project = this.store.getProject(projectId)
+    if (!project || project.archived || project.type !== 'latex') {
+      throw new Error('Choose an active LaTeX project.')
+    }
+    const connection = this.store.getConnection(project.connectionId)
+    if (!connection) throw new Error('Project connection not found.')
+    this.requireProjectTmux(projectId, 'Inline editing')
+
+    if (existing) {
+      if (!['completed', 'error'].includes(existing.state)) {
+        this.attach(existing.id, 100, 30)
+        return this.requireSession(existing.id)
+      }
+      if (!existing.providerSessionId) {
+        try {
+          await this.discoverProviderSession(existing, project.folder, connection)
+        } catch {
+          // A failed first launch has no provider thread to resume. The fresh
+          // inline editor below replaces that unusable local record.
+        }
+        existing = this.store.getSession(existing.id)
+      }
+      if (existing?.providerSessionId) {
+        this.resumeAgent(existing.id)
+        return this.requireSession(existing.id)
+      }
+      if (
+        existing?.backend === 'tmux' &&
+        existing.tmuxName &&
+        this.tmuxSessionExists(connection, existing.tmuxName)
+      ) {
+        this.changeState(
+          existing,
+          'idle',
+          'Reattached the persistent inline editor.'
+        )
+        const latest = this.requireSession(existing.id)
+        this.launch(latest, project.folder, connection, 100, 30, false)
+        return this.requireSession(existing.id)
+      }
+      if (existing) {
+        this.discardPendingOutput(existing.id)
+        this.store.deleteSession(existing.id)
+      }
+    }
+
+    return this.startSession(
+      {
+        projectId,
+        name: generatedTerminalName(`Inline edits · ${project.name}`),
+        profile: 'codex',
+        dangerousMode: false
+      },
+      'latex-chat',
+      (session) => {
+        this.store.attachLatexChat(session.id, {
+          projectId,
+          purpose: 'inline-edit',
+          scope: 'project',
+          sectionId: null,
+          mode: 'edit'
+        })
+      },
+      true
+    )
+  }
+
+  async clearCodexChatAndSendPrompt(
+    sessionId: string,
+    prompt: string
+  ): Promise<void> {
+    const session = this.requireSession(sessionId)
+    if (
+      session.profile !== 'codex' ||
+      session.latexChat?.purpose !== 'inline-edit'
+    ) {
+      throw new Error('Persistent inline Codex chat not found.')
+    }
+    if (session.state === 'running') {
+      throw new Error('Wait for the current inline edit to finish before sending another.')
+    }
+
+    this.attach(session.id, 100, 30)
+    if (!(await this.waitForVolatileOutput(session.id, 12_000))) {
+      throw new Error(
+        'Codex did not become ready for the inline edit. Open Inline chat and retry.'
+      )
+    }
+    await this.delay(500)
+
+    this.discardPendingOutput(session.id)
+    this.write(session.id, '/clear\r')
+    if (!(await this.waitForVolatileOutput(session.id, 3_000))) {
+      throw new Error(
+        'Codex did not acknowledge /clear. Open Inline chat and retry.'
+      )
+    }
+    await this.delay(250)
+    this.discardPendingOutput(session.id)
+    this.sendPrompt(session.id, prompt)
+  }
+
+  private async waitForVolatileOutput(
+    sessionId: string,
+    timeoutMs: number
+  ): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      if (this.volatileOutput.get(sessionId)?.byteLength) return true
+      await this.delay(50)
+    }
+    return Boolean(this.volatileOutput.get(sessionId)?.byteLength)
+  }
+
+  private delay(milliseconds: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds))
   }
 
   restoreLocalSessionsAfterReboot(

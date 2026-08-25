@@ -91,4 +91,53 @@ describe('LaTeX chat launch metadata', () => {
       store.close()
     }
   })
+
+  it('creates and reuses one hidden persistent inline Codex session', async () => {
+    appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-latex-inline-start-'))
+    const store = new Store(appDataPath)
+    store.syncConnections([])
+    const project = store.createProject({
+      type: 'latex',
+      name: 'Paper',
+      connectionId: 'local',
+      folder: appDataPath,
+      repositoryUrl: null,
+      latex: {
+        mainFile: 'main.tex',
+        overleafUrl: null,
+        contextFolder: 'context'
+      }
+    })
+    const manager = new TerminalManager(
+      store,
+      () => null,
+      new ConversationIndexer(),
+      new RemoteConversationIndexer()
+    )
+    vi.spyOn(manager as never, 'connectionHasTmux' as never).mockReturnValue(true)
+    vi.spyOn(manager as never, 'tmuxSessionExists' as never).mockReturnValue(false)
+    vi.spyOn(manager as never, 'launch' as never).mockImplementation(() => undefined)
+
+    try {
+      const first = await manager.startLatexInlineChat(project.id)
+      const second = await manager.startLatexInlineChat(project.id)
+
+      expect(second.id).toBe(first.id)
+      expect(store.getProject(project.id)?.sessions).toHaveLength(1)
+      expect(second).toMatchObject({
+        profile: 'codex',
+        kind: 'latex-chat',
+        backend: 'tmux',
+        latexChat: {
+          purpose: 'inline-edit',
+          scope: 'project',
+          sectionId: null,
+          mode: 'edit'
+        }
+      })
+    } finally {
+      manager.shutdown()
+      store.close()
+    }
+  })
 })

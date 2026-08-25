@@ -25,7 +25,6 @@ import type {
   UpdateLatexProjectInput
 } from '../shared/types'
 import {
-  latexSectionContainsSelection,
   latexSelectionLastLine
 } from '../shared/latex-inline-edit'
 import {
@@ -127,6 +126,85 @@ export function extractLatexSelection(
     throw new Error('Select some source text before asking for an inline edit.')
   }
   return normalized.slice(start, end)
+}
+
+export interface LatexInlineParagraph {
+  startLine: number
+  endLine: number
+  text: string
+}
+
+export interface LatexInlineParagraphContext {
+  before: LatexInlineParagraph | null
+  selected: LatexInlineParagraph
+  after: LatexInlineParagraph | null
+}
+
+export function latexInlineParagraphContext(
+  source: string,
+  selection: Pick<LatexSourceSelection, 'startLine' | 'endLine' | 'endColumn'>
+): LatexInlineParagraphContext {
+  const lines = source.replace(/\r\n?/g, '\n').split('\n')
+  const paragraphs: LatexInlineParagraph[] = []
+  let start = -1
+  for (let index = 0; index <= lines.length; index += 1) {
+    const content = lines[index] ?? ''
+    if (index < lines.length && content.trim()) {
+      if (start < 0) start = index
+      continue
+    }
+    if (start < 0) continue
+    paragraphs.push({
+      startLine: start + 1,
+      endLine: index,
+      text: lines.slice(start, index).join('\n')
+    })
+    start = -1
+  }
+
+  const lastLine = latexSelectionLastLine(selection)
+  const firstIndex = paragraphs.findIndex(
+    (paragraph) =>
+      paragraph.endLine >= selection.startLine &&
+      paragraph.startLine <= lastLine
+  )
+  if (firstIndex < 0) {
+    let previousIndex = -1
+    for (let index = 0; index < paragraphs.length; index += 1) {
+      if (paragraphs[index].endLine < selection.startLine) {
+        previousIndex = index
+      }
+    }
+    return {
+      before: previousIndex >= 0 ? paragraphs[previousIndex] : null,
+      selected: {
+        startLine: selection.startLine,
+        endLine: lastLine,
+        text: lines.slice(selection.startLine - 1, lastLine).join('\n')
+      },
+      after: paragraphs.find(
+        (paragraph) => paragraph.startLine > lastLine
+      ) ?? null
+    }
+  }
+  let lastIndex = firstIndex
+  while (
+    lastIndex + 1 < paragraphs.length &&
+    paragraphs[lastIndex + 1].startLine <= lastLine
+  ) {
+    lastIndex += 1
+  }
+  const first = paragraphs[firstIndex]
+  const last = paragraphs[lastIndex]
+  return {
+    before: paragraphs[firstIndex - 1] ?? null,
+    selected: {
+      startLine: first.startLine,
+      endLine: last.endLine,
+      text: lines.slice(first.startLine - 1, last.endLine).join('\n')
+    },
+    after: paragraphs[lastIndex + 1] ?? null
+  }
 }
 
 function stripComments(source: string): string {
@@ -838,7 +916,7 @@ export class LatexProjectService {
     void this.terminals.syncSessionMetadata(sessionId)
   }
 
-  sendPrompt(sessionId: string, rawPrompt: string): void {
+  private preparedPrompt(sessionId: string, rawPrompt: string): string {
     const session = this.store.getSession(sessionId)
     const chat = this.store.getLatexChat(sessionId)
     if (!session || !chat) throw new Error('LaTeX chat not found.')
@@ -874,23 +952,20 @@ export class LatexProjectService {
           (section
             ? `Do not edit outside ${section.sourceFile} lines ${section.startLine}-${section.endLine} unless the user explicitly asks to widen the scope.`
             : 'You may edit files inside this project as needed.')
+    return `[PanePilot LaTeX] ${instruction} ${context}\n\nUser request: ${prompt}`
+  }
+
+  sendPrompt(sessionId: string, rawPrompt: string): void {
     this.terminals.sendPrompt(
       sessionId,
-      `[PanePilot LaTeX] ${instruction} ${context}\n\nUser request: ${prompt}`
+      this.preparedPrompt(sessionId, rawPrompt)
     )
   }
 
-  sendInlineEdit(input: SendLatexInlineEditInput): void {
+  async sendInlineEdit(
+    input: SendLatexInlineEditInput
+  ): Promise<TerminalSession> {
     if (!input?.selection) throw new Error('Select some LaTeX source to edit.')
-    const session = this.store.getSession(input.sessionId)
-    const chat = this.store.getLatexChat(input.sessionId)
-    if (!session || !chat || session.projectId !== chat.projectId) {
-      throw new Error('LaTeX chat not found.')
-    }
-    if (['completed', 'error'].includes(session.state)) {
-      throw new Error('Reload this writing chat before asking for an inline edit.')
-    }
-
     const instruction = input.instruction.trim()
     if (!instruction) throw new Error('Describe the change you want to make.')
     if (
@@ -914,7 +989,7 @@ export class LatexProjectService {
       throw new Error('Select between 1 and 20,000 characters for an inline edit.')
     }
 
-    const { project, connection } = this.requireProject(chat.projectId)
+    const { project, connection } = this.requireProject(input.projectId)
     const files = this.readFiles(project.folder, connection)
     const source = files[path]
     if (source == null) throw new Error(`LaTeX source file “${path}” was not found.`)
@@ -924,20 +999,7 @@ export class LatexProjectService {
         'The selected source changed before the inline edit was sent. Select it again and retry.'
       )
     }
-
-    if (chat.scope === 'section') {
-      this.getWorkspace(chat.projectId)
-      const section = chat.sectionId
-        ? this.store.getLatexSection(chat.sectionId)
-        : null
-      if (!section || !latexSectionContainsSelection(section, selection)) {
-        throw new Error(
-          'This writing chat is attached to a different section. Choose a compatible chat or attach a new one.'
-        )
-      }
-    }
-
-    if (chat.mode !== 'edit') this.setChatMode(session.id, 'edit')
+    const paragraphs = latexInlineParagraphContext(source, selection)
     const request = JSON.stringify({
       file: path,
       range: {
@@ -948,15 +1010,32 @@ export class LatexProjectService {
         lastSelectedLine: latexSelectionLastLine(selection)
       },
       selectedSource: savedSelection,
+      paragraphBefore: paragraphs.before,
+      selectedParagraph: paragraphs.selected,
+      paragraphAfter: paragraphs.after,
       instruction
     })
-    this.sendPrompt(
+    if (request.length > MAX_PROMPT_LENGTH - 1_200) {
+      throw new Error(
+        'The selected paragraph context is too large for one inline edit. Split the passage into smaller paragraphs and retry.'
+      )
+    }
+
+    const session = await this.terminals.startLatexInlineChat(input.projectId)
+    const chat = this.store.getLatexChat(session.id)
+    if (!chat || chat.purpose !== 'inline-edit') {
+      throw new Error('Persistent inline Codex chat not found.')
+    }
+    const prompt = this.preparedPrompt(
       session.id,
       'Inline edit request. Modify the saved file at the exact selected range described below. ' +
-        'Change only that selection unless the instruction explicitly requires adjacent source. ' +
+        'The selected paragraph and one neighboring paragraph on each side are context only. ' +
+        'Change only the exact selection unless the instruction explicitly requires adjacent source. ' +
         'Preserve valid LaTeX and surrounding formatting. Apply the edit in the file; do not only explain it. ' +
         `Request JSON: ${request}`
     )
+    await this.terminals.clearCodexChatAndSendPrompt(session.id, prompt)
+    return this.store.getSession(session.id) ?? session
   }
 
   changes(sessionId: string): LatexChangeSet {

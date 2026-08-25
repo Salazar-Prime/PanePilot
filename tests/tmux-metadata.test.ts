@@ -63,6 +63,7 @@ describe('PanePilot tmux metadata', () => {
     const value = metadata({
       dangerousMode: true,
       latex: {
+        purpose: 'writing',
         scope: 'section',
         mode: 'edit',
         sectionId: SECTION_ID,
@@ -83,6 +84,23 @@ describe('PanePilot tmux metadata', () => {
         metadata: value
       }
     ])
+  })
+
+  it('round-trips the hidden inline-edit purpose', () => {
+    const value = metadata({
+      sessionKind: 'latex-chat',
+      latex: {
+        purpose: 'inline-edit',
+        scope: 'project',
+        mode: 'edit',
+        sectionId: null,
+        sectionSource: null,
+        sectionTitle: null,
+        sectionLevel: null
+      }
+    })
+
+    expect(parseTmuxSessionList(tmuxListLine(value))[0]?.metadata).toEqual(value)
   })
 
   it('parses raw field separators emitted by older tmux versions', () => {
@@ -293,6 +311,7 @@ describe('tmux discovery persistence', () => {
       })
       const value = metadata({
         latex: {
+          purpose: 'writing',
           scope: 'section',
           mode: 'edit',
           sectionId: SECTION_ID,

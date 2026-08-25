@@ -291,7 +291,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'latex:send-inline-edit',
     (_event, input: SendLatexInlineEditInput) => {
-      latex.sendInlineEdit(input)
+      return latex.sendInlineEdit(input)
     }
   )
   ipcMain.handle('latex:changes', (_event, sessionId: string) =>

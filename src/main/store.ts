@@ -8,6 +8,7 @@ import type {
   ConversationProvider,
   LatexChatAttachment,
   LatexChatMode,
+  LatexChatPurpose,
   LatexChatScope,
   LatexProjectDetails,
   LatexSection,
@@ -83,6 +84,7 @@ type LatexSectionRow = {
 type LatexChatRow = {
   terminal_session_id: string
   project_id: string
+  purpose: LatexChatPurpose
   scope: LatexChatScope
   section_id: string | null
   mode: LatexChatMode
@@ -334,6 +336,7 @@ function mapLatexChat(row: LatexChatRow): LatexChatAttachment {
   return {
     terminalSessionId: row.terminal_session_id,
     projectId: row.project_id,
+    purpose: row.purpose,
     scope: row.scope,
     sectionId: row.section_id,
     mode: row.mode,
@@ -548,6 +551,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS latex_chat_sessions (
         terminal_session_id TEXT PRIMARY KEY REFERENCES terminal_sessions(id) ON DELETE CASCADE,
         project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        purpose TEXT NOT NULL DEFAULT 'writing'
+          CHECK (purpose IN ('writing', 'inline-edit')),
         scope TEXT NOT NULL CHECK (scope IN ('project', 'section')),
         section_id TEXT REFERENCES latex_sections(id),
         mode TEXT NOT NULL CHECK (mode IN ('ask', 'edit')),
@@ -632,6 +637,11 @@ export class Store {
     this.ensureColumn('terminal_sessions', 'flagged', 'INTEGER NOT NULL DEFAULT 0')
     this.ensureColumn('activities', 'session_id', 'TEXT')
     this.ensureColumn('activities', 'message', `TEXT NOT NULL DEFAULT ''`)
+    this.ensureColumn(
+      'latex_chat_sessions',
+      'purpose',
+      `TEXT NOT NULL DEFAULT 'writing'`
+    )
     this.ensureActivityDeleteCascades()
 
     const connectionColumns = this.tableColumns('connections')
@@ -694,6 +704,8 @@ export class Store {
         ON latex_sections(project_id, missing, ordinal);
       CREATE INDEX IF NOT EXISTS latex_chat_sessions_project_idx
         ON latex_chat_sessions(project_id, scope, section_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS latex_inline_chat_project_idx
+        ON latex_chat_sessions(project_id) WHERE purpose = 'inline-edit';
       CREATE INDEX IF NOT EXISTS project_actions_project_idx
         ON project_actions(project_id, created_at);
       CREATE INDEX IF NOT EXISTS google_drive_files_drive_id_idx
@@ -702,7 +714,7 @@ export class Store {
         ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 14;
+      PRAGMA user_version = 15;
     `)
     this.migrateLegacyTerminalOutput()
   }
@@ -1246,6 +1258,7 @@ export class Store {
     terminalSessionId: string,
     input: {
       projectId: string
+      purpose?: LatexChatPurpose
       scope: LatexChatScope
       sectionId: string | null
       mode: LatexChatMode
@@ -1264,6 +1277,13 @@ export class Store {
       }
     }
     const timestamp = now()
+    const purpose = input.purpose ?? 'writing'
+    if (!['writing', 'inline-edit'].includes(purpose)) {
+      throw new Error('Choose a valid LaTeX chat purpose.')
+    }
+    if (purpose === 'inline-edit' && (input.scope !== 'project' || input.mode !== 'edit')) {
+      throw new Error('Inline edit chats must use project scope in Edit mode.')
+    }
     this.inTransaction(() => {
       this.db
         .prepare(
@@ -1274,12 +1294,13 @@ export class Store {
       this.db
         .prepare(
           `INSERT INTO latex_chat_sessions
-           (terminal_session_id, project_id, scope, section_id, mode, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)`
+           (terminal_session_id, project_id, purpose, scope, section_id, mode, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           terminalSessionId,
           input.projectId,
+          purpose,
           input.scope,
           input.scope === 'section' ? input.sectionId : null,
           input.mode,
@@ -1290,7 +1311,9 @@ export class Store {
       input.projectId,
       terminalSessionId,
       'latex-chat-attached',
-      `Attached ${session.name} to ${input.scope === 'project' ? 'the project' : 'a section'} in ${input.mode} mode`
+      purpose === 'inline-edit'
+        ? `Attached ${session.name} as the project inline editor`
+        : `Attached ${session.name} to ${input.scope === 'project' ? 'the project' : 'a section'} in ${input.mode} mode`
     )
     return this.getLatexChat(terminalSessionId)!
   }
@@ -1298,11 +1321,23 @@ export class Store {
   getLatexChat(terminalSessionId: string): LatexChatAttachment | null {
     const row = this.db
       .prepare(
-        `SELECT terminal_session_id, project_id, scope, section_id, mode, created_at
+        `SELECT terminal_session_id, project_id, purpose, scope, section_id, mode, created_at
          FROM latex_chat_sessions WHERE terminal_session_id = ?`
       )
       .get(terminalSessionId) as LatexChatRow | undefined
     return row ? mapLatexChat(row) : null
+  }
+
+  getLatexInlineEditSession(projectId: string): TerminalSession | null {
+    const row = this.db
+      .prepare(
+        `SELECT terminal_session_id AS id
+         FROM latex_chat_sessions
+         WHERE project_id = ? AND purpose = 'inline-edit'
+         LIMIT 1`
+      )
+      .get(projectId) as { id: string } | undefined
+    return row ? this.getSession(row.id) : null
   }
 
   setLatexChatMode(terminalSessionId: string, mode: LatexChatMode): void {
@@ -1480,7 +1515,7 @@ export class Store {
   private hydrateProject(row: ProjectRow): Project {
     const latexChatRows = this.db
       .prepare(
-        `SELECT terminal_session_id, project_id, scope, section_id, mode, created_at
+        `SELECT terminal_session_id, project_id, purpose, scope, section_id, mode, created_at
          FROM latex_chat_sessions WHERE project_id = ?`
       )
       .all(row.id) as LatexChatRow[]
@@ -2119,6 +2154,7 @@ export class Store {
 
     const existing = this.getLatexChat(terminalSessionId)
     if (
+      existing?.purpose === metadata.purpose &&
       existing?.scope === metadata.scope &&
       existing.mode === metadata.mode &&
       existing.sectionId === sectionId
@@ -2129,9 +2165,10 @@ export class Store {
     this.db
       .prepare(
         `INSERT INTO latex_chat_sessions
-         (terminal_session_id, project_id, scope, section_id, mode, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)
+         (terminal_session_id, project_id, purpose, scope, section_id, mode, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(terminal_session_id) DO UPDATE SET
+           purpose = excluded.purpose,
            scope = excluded.scope,
            section_id = excluded.section_id,
            mode = excluded.mode`
@@ -2139,6 +2176,7 @@ export class Store {
       .run(
         terminalSessionId,
         projectId,
+        metadata.purpose,
         metadata.scope,
         sectionId,
         metadata.mode,
@@ -2149,7 +2187,9 @@ export class Store {
         projectId,
         terminalSessionId,
         'latex-chat-discovered',
-        `Restored ${session.name} as a ${metadata.scope} chat in ${metadata.mode} mode`
+        metadata.purpose === 'inline-edit'
+          ? `Restored ${session.name} as the project inline editor`
+          : `Restored ${session.name} as a ${metadata.scope} chat in ${metadata.mode} mode`
       )
     }
     return true

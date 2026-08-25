@@ -1,7 +1,6 @@
 import type {
   LatexSection,
-  LatexSourceSelection,
-  TerminalSession
+  LatexSourceSelection
 } from './types'
 
 export function latexSelectionLastLine(
@@ -35,17 +34,4 @@ export function latexSectionForSelection(
       latexSectionContainsSelection(section, selection)
     ) ?? null
   )
-}
-
-export function latexChatCoversSelection(
-  session: TerminalSession,
-  sections: LatexSection[],
-  selection: LatexSourceSelection
-): boolean {
-  const chat = session.latexChat
-  if (!chat || session.kind !== 'latex-chat' || session.archived) return false
-  if (['completed', 'error'].includes(session.state)) return false
-  if (chat.scope === 'project') return true
-  const section = sections.find((candidate) => candidate.id === chat.sectionId)
-  return Boolean(section && latexSectionContainsSelection(section, selection))
 }

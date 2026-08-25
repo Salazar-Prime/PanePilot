@@ -15,6 +15,7 @@ export type TerminalSessionKind =
   | 'latex-chat'
 export type LatexChatMode = 'ask' | 'edit'
 export type LatexChatScope = 'project' | 'section'
+export type LatexChatPurpose = 'writing' | 'inline-edit'
 export type AgentState =
   | 'idle'
   | 'running'
@@ -220,6 +221,7 @@ export interface LatexSection {
 export interface LatexChatAttachment {
   terminalSessionId: string
   projectId: string
+  purpose: LatexChatPurpose
   scope: LatexChatScope
   sectionId: string | null
   mode: LatexChatMode
@@ -264,7 +266,7 @@ export interface LatexSourceSelection {
 }
 
 export interface SendLatexInlineEditInput {
-  sessionId: string
+  projectId: string
   selection: LatexSourceSelection
   instruction: string
 }
@@ -620,7 +622,7 @@ export interface ProjectConsoleApi {
     startChat(input: StartLatexChatInput): Promise<TerminalSession>
     setChatMode(sessionId: string, mode: LatexChatMode): Promise<void>
     sendPrompt(sessionId: string, prompt: string): Promise<void>
-    sendInlineEdit(input: SendLatexInlineEditInput): Promise<void>
+    sendInlineEdit(input: SendLatexInlineEditInput): Promise<TerminalSession>
     changes(sessionId: string): Promise<LatexChangeSet>
     clearChanges(sessionId: string): Promise<void>
   }

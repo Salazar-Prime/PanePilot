@@ -133,7 +133,11 @@ type RenameTarget =
   | { kind: 'session'; session: TerminalSession }
 
 function isSidebarSession(session: TerminalSession): boolean {
-  return session.kind === 'terminal' || session.kind === 'latex-chat'
+  return (
+    session.kind === 'terminal' ||
+    (session.kind === 'latex-chat' &&
+      session.latexChat?.purpose === 'writing')
+  )
 }
 
 export function App() {

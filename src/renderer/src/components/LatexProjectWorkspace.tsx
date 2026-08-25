@@ -80,12 +80,6 @@ const latexWorkspaceTabs = new Map<string, WorkspaceTab>()
 const openedPdfProjects = new Set<string>()
 const latexWorkspaceCache = new Map<string, LatexWorkspace>()
 
-interface PendingInlineEdit {
-  selection: LatexSourceSelection
-  instruction: string
-  sectionId: string | null
-}
-
 export function LatexProjectWorkspace({
   project,
   selectedSessionId,
@@ -109,8 +103,6 @@ export function LatexProjectWorkspace({
   )
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [showLauncher, setShowLauncher] = useState(false)
-  const [pendingInlineEdit, setPendingInlineEdit] =
-    useState<PendingInlineEdit | null>(null)
   const [filesInitialPath, setFilesInitialPath] = useState('.')
   const [openFileRequest, setOpenFileRequest] =
     useState<ProjectFileOpenRequest | null>(null)
@@ -138,7 +130,7 @@ export function LatexProjectWorkspace({
         (session) =>
           !session.archived &&
           session.kind === 'latex-chat' &&
-          session.latexChat != null
+          session.latexChat?.purpose === 'writing'
       ),
     [project.sessions]
   )
@@ -148,12 +140,22 @@ export function LatexProjectWorkspace({
         (session) =>
           session.archived &&
           session.kind === 'latex-chat' &&
-          session.latexChat != null
+          session.latexChat?.purpose === 'writing'
       ),
     [project.sessions]
   )
   const activeSession =
     sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null
+  const inlineSession =
+    project.sessions.find(
+      (session) =>
+        !session.archived &&
+        session.kind === 'latex-chat' &&
+        session.latexChat?.purpose === 'inline-edit'
+    ) ?? null
+  const changeSession =
+    inlineSession ??
+    (activeSession?.latexChat?.mode === 'edit' ? activeSession : null)
 
   function selectWorkspaceTab(nextTab: WorkspaceTab) {
     latexWorkspaceTabs.set(project.id, nextTab)
@@ -272,7 +274,6 @@ export function LatexProjectWorkspace({
     setChanges(null)
     setSelectedSectionId(null)
     setOpenFileRequest(null)
-    setPendingInlineEdit(null)
     setChatLayout(loadLatexChatLayout(project.id))
     chatResizeRef.current = null
     setResizingChat(false)
@@ -336,7 +337,6 @@ export function LatexProjectWorkspace({
 
   useEffect(() => {
     if (launchTerminalRequest == null) return
-    setPendingInlineEdit(null)
     setShowLauncher(true)
     onLaunchTerminalRequestHandled(launchTerminalRequest)
   }, [launchTerminalRequest, onLaunchTerminalRequestHandled])
@@ -348,68 +348,47 @@ export function LatexProjectWorkspace({
   }, [openSessionRequest, onOpenSessionRequestHandled])
 
   const refreshChanges = useCallback(async () => {
-    if (!activeSession?.latexChat || activeSession.latexChat.mode !== 'edit') {
+    if (!changeSession) {
       setChanges(null)
       return
     }
     try {
-      setChanges(await window.projectConsole.latex.changes(activeSession.id))
+      setChanges(await window.projectConsole.latex.changes(changeSession.id))
     } catch {
       // Change tracking is supplemental; the editor and terminal should remain usable.
     }
-  }, [activeSession?.id, activeSession?.latexChat?.mode])
+  }, [changeSession?.id])
 
   useEffect(() => {
     void refreshChanges()
-    if (activeSession?.state !== 'running') return
+    if (changeSession?.state !== 'running') return
     const timer = window.setInterval(() => void refreshChanges(), 1_800)
     return () => window.clearInterval(timer)
-  }, [refreshChanges, activeSession?.state])
+  }, [refreshChanges, changeSession?.state])
 
   async function startChat(input: StartLatexChatInput) {
     const session = await window.projectConsole.latex.startChat(input)
     await onChanged()
     selectWorkspaceTab('manuscript')
     onSelectSession(session.id)
-    if (pendingInlineEdit) {
-      const request = pendingInlineEdit
-      setPendingInlineEdit(null)
-      await sendInlineEdit(
-        session.id,
-        request.selection,
-        request.instruction
-      )
-    }
   }
 
   async function sendInlineEdit(
-    sessionId: string,
     selection: LatexSourceSelection,
     instruction: string
   ) {
-    await window.projectConsole.latex.sendInlineEdit({
-      sessionId,
+    const session = await window.projectConsole.latex.sendInlineEdit({
+      projectId: project.id,
       selection,
       instruction
     })
-    onSessionSelected(sessionId)
-    onSelectSession(sessionId)
     await onChanged()
     window.setTimeout(() => {
       void window.projectConsole.latex
-        .changes(sessionId)
+        .changes(session.id)
         .then(setChanges)
         .catch(() => undefined)
     }, 700)
-  }
-
-  async function attachInlineAgent(
-    selection: LatexSourceSelection,
-    instruction: string,
-    sectionId: string | null
-  ) {
-    setPendingInlineEdit({ selection, instruction, sectionId })
-    setShowLauncher(true)
   }
 
   async function selectShortcutSession(id: string) {
@@ -421,9 +400,9 @@ export function LatexProjectWorkspace({
   }
 
   async function clearChanges() {
-    if (!activeSession) return
-    await window.projectConsole.latex.clearChanges(activeSession.id)
-    setChanges({ sessionId: activeSession.id, capturedAt: null, files: [] })
+    if (!changeSession) return
+    await window.projectConsole.latex.clearChanges(changeSession.id)
+    setChanges({ sessionId: changeSession.id, capturedAt: null, files: [] })
   }
 
   function openContext() {
@@ -614,8 +593,7 @@ export function LatexProjectWorkspace({
               <LatexManuscript
                 project={project}
                 workspace={workspace}
-                sessions={sessions}
-                activeSessionId={activeSession?.id ?? null}
+                inlineSession={inlineSession}
                 selectedSectionId={selectedSectionId}
                 chatCounts={chatCounts}
                 changes={changes}
@@ -624,7 +602,6 @@ export function LatexProjectWorkspace({
                 onClearChanges={clearChanges}
                 onWorkspaceRefresh={loadWorkspace}
                 onInlineEdit={sendInlineEdit}
-                onAttachInlineAgent={attachInlineAgent}
               />
             )}
             {pdfOpened && (
@@ -677,10 +654,7 @@ export function LatexProjectWorkspace({
               onSelectSession(id)
               void window.projectConsole.terminals.acknowledge(id).then(onChanged)
             }}
-            onNewChat={() => {
-              setPendingInlineEdit(null)
-              setShowLauncher(true)
-            }}
+            onNewChat={() => setShowLauncher(true)}
             onChanged={onChanged}
             onPromptSent={() => {
               window.setTimeout(() => void refreshChanges(), 700)
@@ -735,14 +709,8 @@ export function LatexProjectWorkspace({
         <LatexChatLauncher
           projectId={project.id}
           sections={workspace.sections}
-          initialSectionId={
-            pendingInlineEdit?.sectionId ?? selectedSectionId
-          }
-          purpose={pendingInlineEdit ? 'inline-edit' : 'chat'}
-          onClose={() => {
-            setShowLauncher(false)
-            setPendingInlineEdit(null)
-          }}
+          initialSectionId={selectedSectionId}
+          onClose={() => setShowLauncher(false)}
           onStart={startChat}
         />
       )}

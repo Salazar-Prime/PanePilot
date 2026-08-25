@@ -1,6 +1,7 @@
 import { posix } from 'node:path'
 import type {
   LatexChatMode,
+  LatexChatPurpose,
   LatexChatScope,
   LaunchProfile,
   Project,
@@ -29,6 +30,7 @@ const TMUX_METADATA_KEYS = {
   actionCommand: '@panepilot_action_command',
   latexScope: '@panepilot_latex_scope',
   latexMode: '@panepilot_latex_mode',
+  latexPurpose: '@panepilot_latex_purpose',
   latexSectionId: '@panepilot_latex_section_id',
   latexSectionSource: '@panepilot_latex_section_source',
   latexSectionTitle: '@panepilot_latex_section_title',
@@ -47,10 +49,15 @@ const VALID_SESSION_KINDS = new Set<TerminalSessionKind>([
 ])
 const VALID_LATEX_SCOPES = new Set<LatexChatScope>(['project', 'section'])
 const VALID_LATEX_MODES = new Set<LatexChatMode>(['ask', 'edit'])
+const VALID_LATEX_PURPOSES = new Set<LatexChatPurpose>([
+  'writing',
+  'inline-edit'
+])
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export interface PanePilotTmuxLatexMetadata {
+  purpose: LatexChatPurpose
   scope: LatexChatScope
   mode: LatexChatMode
   sectionId: string | null
@@ -162,6 +169,7 @@ export function panePilotTmuxMetadata({
         : null,
     latex: chat
       ? {
+          purpose: chat.purpose,
           scope: chat.scope,
           mode: chat.mode,
           sectionId: chat.scope === 'section' ? chat.sectionId : null,
@@ -202,6 +210,7 @@ export function encodePanePilotTmuxMetadata(
       : null,
     [TMUX_METADATA_KEYS.latexScope]: metadata.latex?.scope ?? null,
     [TMUX_METADATA_KEYS.latexMode]: metadata.latex?.mode ?? null,
+    [TMUX_METADATA_KEYS.latexPurpose]: metadata.latex?.purpose ?? null,
     [TMUX_METADATA_KEYS.latexSectionId]: metadata.latex?.sectionId ?? null,
     [TMUX_METADATA_KEYS.latexSectionSource]: metadata.latex?.sectionSource
       ? encodeText(metadata.latex.sectionSource)
@@ -335,7 +344,14 @@ function parseMetadata(values: Map<string, string>): PanePilotTmuxMetadata | nul
   if (scopeValue || modeValue) {
     const scope = scopeValue as LatexChatScope
     const mode = modeValue as LatexChatMode
+    const purposeValue =
+      values.get(TMUX_METADATA_KEYS.latexPurpose) || 'writing'
+    const purpose = purposeValue as LatexChatPurpose
     if (!VALID_LATEX_SCOPES.has(scope) || !VALID_LATEX_MODES.has(mode)) return null
+    if (!VALID_LATEX_PURPOSES.has(purpose)) return null
+    if (purpose === 'inline-edit' && (scope !== 'project' || mode !== 'edit')) {
+      return null
+    }
     const sectionIdValue = values.get(TMUX_METADATA_KEYS.latexSectionId) ?? ''
     const sectionSourceValue =
       values.get(TMUX_METADATA_KEYS.latexSectionSource) ?? ''
@@ -363,6 +379,7 @@ function parseMetadata(values: Map<string, string>): PanePilotTmuxMetadata | nul
       return null
     }
     latex = {
+      purpose,
       scope,
       mode,
       sectionId: scope === 'section' ? sectionIdValue : null,
