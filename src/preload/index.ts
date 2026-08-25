@@ -5,6 +5,7 @@ import type {
   CreateProjectInput,
   CreateProjectActionInput,
   LatexChatMode,
+  PrintLatexPdfInput,
   ProjectConsoleApi,
   ProjectFolderSelectionPurpose,
   SynthesizeSpeechInput,
@@ -209,6 +210,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('latex:source-revision', projectId),
     getPdf: (projectId: string) => ipcRenderer.invoke('latex:get-pdf', projectId),
     compile: (projectId: string) => ipcRenderer.invoke('latex:compile', projectId),
+    printPdf: (input: PrintLatexPdfInput) =>
+      ipcRenderer.invoke('latex:print-pdf', input),
     update: (input: UpdateLatexProjectInput) => ipcRenderer.invoke('latex:update', input),
     startChat: (input: StartLatexChatInput) =>
       ipcRenderer.invoke('latex:start-chat', input),
@@ -249,8 +252,6 @@ const api: ProjectConsoleApi = {
     readText: () => ipcRenderer.invoke('system:read-text'),
     openProjectFolder: (projectId: string) =>
       ipcRenderer.invoke('system:open-project-folder', projectId),
-    printCurrentWindow: (pageCount: number) =>
-      ipcRenderer.invoke('system:print-current-window', pageCount),
     openExternal: (url: string) => ipcRenderer.invoke('system:open-external', url),
     setZoomFactor: (factor: number) => {
       const safeFactor = Number.isFinite(factor)

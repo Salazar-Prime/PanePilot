@@ -14,6 +14,7 @@ import type {
   CreateProjectInput,
   CreateProjectActionInput,
   LatexChatMode,
+  PrintLatexPdfInput,
   ProjectFolderSelectionPurpose,
   SynthesizeSpeechInput,
   StartLatexChatInput,
@@ -39,6 +40,7 @@ import { GoogleDriveService } from './google-drive-service'
 import { GitService } from './git'
 import { LatexProjectService } from './latex-project-service'
 import { normalizeOptionalWebUrl } from './latex-paths'
+import { printLatexPdf } from './pdf-printer'
 import { PortForwardManager, testSshConnection } from './port-forward-manager'
 import { ProjectMetadataService } from './project-metadata-service'
 import { projectTypeServices } from './project-type-services'
@@ -266,6 +268,9 @@ function registerIpc(): void {
   )
   ipcMain.handle('latex:compile', (_event, projectId: string) =>
     latex.compile(projectId)
+  )
+  ipcMain.handle('latex:print-pdf', (event, input: PrintLatexPdfInput) =>
+    printLatexPdf(input, BrowserWindow.fromWebContents(event.sender))
   )
   ipcMain.handle('latex:update', (_event, input: UpdateLatexProjectInput) =>
     latex.update(input)
@@ -570,29 +575,6 @@ function registerIpc(): void {
     clipboard.writeText(text)
   })
   ipcMain.handle('system:read-text', () => clipboard.readText())
-  ipcMain.handle('system:print-current-window', (event, pageCount: number) => {
-    if (!Number.isInteger(pageCount) || pageCount < 1 || pageCount > 10_000) {
-      throw new Error('The PDF page count is invalid.')
-    }
-    return new Promise<void>((resolvePrint, rejectPrint) => {
-      event.sender.print(
-        {
-          silent: false,
-          printBackground: true,
-          pageRanges: [{ from: 0, to: pageCount - 1 }]
-        },
-        (success, failureReason) => {
-          if (success || /cancel/i.test(failureReason ?? '')) {
-            resolvePrint()
-            return
-          }
-          rejectPrint(
-            new Error(failureReason || 'The system print dialog could not be opened.')
-          )
-        }
-      )
-    })
-  })
   ipcMain.handle('system:open-project-folder', async (_event, projectId: string) => {
     const project = store.getProject(projectId)
     if (!project) throw new Error('Project not found.')

@@ -3,23 +3,20 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('LaTeX PDF print layout', () => {
-  it('removes the full-window clipping that would truncate later PDF pages', () => {
-    const css = readFileSync(
-      join(process.cwd(), 'src', 'renderer', 'src', 'latex-pdf.css'),
+  it('sends the original PDF through one native print operation', () => {
+    const printer = readFileSync(
+      join(process.cwd(), 'src', 'main', 'pdf-printer.ts'),
       'utf8'
     )
-    const printRules = css.slice(css.indexOf('@media print'))
 
-    expect(printRules).toContain('height: auto !important;')
-    expect(printRules).toContain('overflow: visible !important;')
-    expect(printRules).toContain('body > #root')
-    expect(printRules).toContain('display: none !important;')
-    expect(printRules).toContain('break-after: page;')
-    expect(printRules).toContain('break-inside: avoid;')
-    expect(printRules).toContain('width: 100% !important;')
+    expect(printer).toContain('plugins: true')
+    expect(printer).toContain("pdfEvents.once('-pdf-ready-to-print'")
+    expect(printer).toContain('await printWindow.loadFile(temporaryPdf)')
+    expect(printer).toContain('window.webContents.print(')
+    expect(printer).not.toContain('pageRanges:')
   })
 
-  it('keeps a continuous page stack instead of replacing one canvas at a time', () => {
+  it('prints the displayed snapshot without constructing print canvases', () => {
     const source = readFileSync(
       join(
         process.cwd(),
@@ -35,6 +32,8 @@ describe('LaTeX PDF print layout', () => {
     expect(source).toContain('className="latex-pdf-pages"')
     expect(source).toContain('data-pdf-page={pageNumber}')
     expect(source).toContain('window.projectConsole.latex.compile(projectId)')
-    expect(source).not.toContain('setPageNumber(1)')
+    expect(source).toContain('window.projectConsole.latex.printPdf({')
+    expect(source).not.toContain('latex-pdf-print-root')
+    expect(source).not.toContain('printCurrentWindow')
   })
 })

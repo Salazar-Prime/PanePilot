@@ -239,6 +239,11 @@ export interface LatexPdfDocument {
   dataBase64: string
 }
 
+export interface PrintLatexPdfInput {
+  path: string
+  dataBase64: string
+}
+
 export interface StartLatexChatInput {
   projectId: string
   name?: string
@@ -595,6 +600,7 @@ export interface ProjectConsoleApi {
     sourceRevision(projectId: string): Promise<string>
     getPdf(projectId: string): Promise<LatexPdfDocument>
     compile(projectId: string): Promise<LatexPdfDocument>
+    printPdf(input: PrintLatexPdfInput): Promise<void>
     update(input: UpdateLatexProjectInput): Promise<LatexWorkspace>
     startChat(input: StartLatexChatInput): Promise<TerminalSession>
     setChatMode(sessionId: string, mode: LatexChatMode): Promise<void>
@@ -620,7 +626,6 @@ export interface ProjectConsoleApi {
     copyText(text: string): Promise<void>
     readText(): Promise<string>
     openProjectFolder(projectId: string): Promise<void>
-    printCurrentWindow(pageCount: number): Promise<void>
     openExternal(url: string): Promise<void>
     setZoomFactor(factor: number): void
   }

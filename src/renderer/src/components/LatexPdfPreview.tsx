@@ -35,9 +35,6 @@ GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 2.5
 const ZOOM_STEP = 0.25
-const MAX_PRINT_SCALE = 2
-const PRINT_PIXEL_BUDGET = 40_000_000
-const MAX_PRINT_CANVAS_EDGE = 8_192
 const DEFAULT_PAGE_WIDTH = 612
 const DEFAULT_PAGE_HEIGHT = 792
 const AUTO_COMPILE_POLL_MS = 2_500
@@ -218,7 +215,7 @@ export function LatexPdfPreview({
     loadLatexAutoCompile(projectId)
   )
   const autoCompileRef = useRef(autoCompile)
-  const [printingPage, setPrintingPage] = useState<number | null>(null)
+  const [printing, setPrinting] = useState(false)
   const [error, setError] = useState('')
   const [autoCompileError, setAutoCompileError] = useState('')
   const expectedPath = compiledPdfPath(mainFile)
@@ -461,72 +458,30 @@ export function LatexPdfPreview({
   }
 
   async function printPdf() {
-    if (!pdf || printingPage != null) return
+    if (!pdf || !metadata || printing) return
     const version = ++printVersionRef.current
-    const printRoot = document.createElement('div')
-    printRoot.className = 'latex-pdf-print-root'
-    printRoot.setAttribute('aria-hidden', 'true')
-    document.body.append(printRoot)
-    setPrintingPage(0)
+    const snapshot = pdfSnapshotCache.get(projectId)
+    setPrinting(true)
     setError('')
 
     try {
-      const pages = []
-      let basePixels = 0
-      for (let pageIndex = 1; pageIndex <= pdf.numPages; pageIndex += 1) {
-        const page = await pdf.getPage(pageIndex)
-        if (version !== printVersionRef.current) return
-        const viewport = page.getViewport({ scale: 1 })
-        pages.push({ page, viewport })
-        basePixels += viewport.width * viewport.height
+      if (
+        !snapshot ||
+        snapshot.path !== metadata.path ||
+        snapshot.modifiedAt !== metadata.modifiedAt
+      ) {
+        throw new Error('Reload the PDF preview before printing this document.')
       }
-
-      const documentScale = Math.min(
-        MAX_PRINT_SCALE,
-        Math.sqrt(PRINT_PIXEL_BUDGET / Math.max(1, basePixels))
-      )
-      for (let index = 0; index < pages.length; index += 1) {
-        if (version !== printVersionRef.current) return
-        const { page, viewport: baseViewport } = pages[index]
-        const scale = Math.min(
-          documentScale,
-          MAX_PRINT_CANVAS_EDGE / baseViewport.width,
-          MAX_PRINT_CANVAS_EDGE / baseViewport.height
-        )
-        const viewport = page.getViewport({ scale })
-        const pageShell = document.createElement('section')
-        pageShell.className = 'latex-pdf-print-page'
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.max(1, Math.ceil(viewport.width))
-        canvas.height = Math.max(1, Math.ceil(viewport.height))
-        const context = canvas.getContext('2d', { alpha: false })
-        if (!context) throw new Error('PanePilot could not prepare the PDF for printing.')
-        pageShell.append(canvas)
-        printRoot.append(pageShell)
-        await page.render({
-          canvasContext: context,
-          viewport,
-          background: '#ffffff'
-        }).promise
-        if (version === printVersionRef.current) setPrintingPage(index + 1)
-      }
-
-      await document.fonts.ready
-      await new Promise<void>((resolveFrame) =>
-        window.requestAnimationFrame(() => resolveFrame())
-      )
-      await new Promise<void>((resolveFrame) =>
-        window.requestAnimationFrame(() => resolveFrame())
-      )
-      if (version !== printVersionRef.current) return
-      await window.projectConsole.system.printCurrentWindow(pdf.numPages)
+      await window.projectConsole.latex.printPdf({
+        path: snapshot.path,
+        dataBase64: snapshot.dataBase64
+      })
     } catch (caught) {
       if (version === printVersionRef.current) {
         setError(caught instanceof Error ? caught.message : String(caught))
       }
     } finally {
-      printRoot.remove()
-      if (version === printVersionRef.current) setPrintingPage(null)
+      if (version === printVersionRef.current) setPrinting(false)
     }
   }
 
@@ -665,7 +620,7 @@ export function LatexPdfPreview({
           </button>
           <button
             className="secondary-button latex-pdf-compile-button"
-            disabled={compiling || printingPage != null}
+            disabled={compiling || printing}
             onClick={() => void recompilePdf()}
             title="Run latexmk and reload this PDF"
           >
@@ -688,18 +643,16 @@ export function LatexPdfPreview({
           )}
           <button
             className="secondary-button latex-pdf-print-button"
-            disabled={printingPage != null || compiling}
+            disabled={printing || compiling}
             onClick={() => void printPdf()}
             title="Open the system print dialog"
           >
-            {printingPage != null ? (
+            {printing ? (
               <LoaderCircle className="spin" size={14} />
             ) : (
               <Printer size={14} />
             )}
-            {printingPage == null
-              ? 'Print'
-              : `Preparing ${printingPage}/${pdf.numPages}`}
+            {printing ? 'Opening print dialog…' : 'Print'}
           </button>
         </div>
       </header>
