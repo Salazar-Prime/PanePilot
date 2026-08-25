@@ -38,7 +38,7 @@ describe('LaTeX Monaco language', () => {
   it('does not treat an escaped percent sign as the start of a comment', () => {
     const tokens = tokenizeLine(String.raw`Accuracy improved by 12\% in one run.`)
 
-    expect(tokens).toContainEqual({ text: String.raw`\%`, type: 'type.identifier' })
+    expect(tokens).toContainEqual({ text: String.raw`\%`, type: '' })
     expect(tokens.some((token) => token.type === 'comment')).toBe(false)
   })
 
@@ -57,5 +57,19 @@ describe('LaTeX Monaco language', () => {
 
     expect(evenTokens).toContainEqual({ text: '% comment', type: 'comment' })
     expect(oddTokens.some((token) => token.type === 'comment')).toBe(false)
+  })
+
+  it('retains the previous formatting for every other LaTeX token', () => {
+    const tokens = tokenizeLine(String.raw`\section{Result} \& \_ $x$`)
+
+    expect(tokens).toEqual([
+      { text: String.raw`\section`, type: 'keyword' },
+      { text: '{', type: 'delimiter.bracket' },
+      { text: '}', type: 'delimiter.bracket' },
+      { text: '&', type: 'operator' },
+      { text: '_', type: 'operator' },
+      { text: '$', type: 'delimiter' },
+      { text: '$', type: 'delimiter' }
+    ])
   })
 })

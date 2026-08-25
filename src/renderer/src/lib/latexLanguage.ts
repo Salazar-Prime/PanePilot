@@ -1,13 +1,13 @@
 import type { languages } from 'monaco-editor'
 
 export const LATEX_ROOT_TOKEN_RULES: Array<[RegExp, string]> = [
+  // Only percent escaping needs to precede the comment rule. An even run of
+  // backslashes leaves % unescaped; an odd run consumes it as literal text.
+  [/(?:\\\\)+(?=%)/, ''],
+  [/(?:\\\\)*\\%/, ''],
+  [/%.*$/, 'comment'],
   [/\\(?:part|chapter|section|subsection|subsubsection)\*?/, 'keyword'],
   [/\\[A-Za-z@]+/, 'type.identifier'],
-  // In TeX, a backslash followed by a non-letter is one control symbol. Match
-  // it before comments so \% remains literal text. Consecutive backslashes are
-  // consumed in pairs, which correctly leaves the percent in \\% unescaped.
-  [/\\./, 'type.identifier'],
-  [/%.*$/, 'comment'],
   [/\$+/, 'delimiter'],
   [/[{}[\]]/, 'delimiter.bracket'],
   [/[&_^]/, 'operator']
