@@ -3,17 +3,18 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('LaTeX PDF print layout', () => {
-  it('sends the original PDF through one native print operation', () => {
+  it('sends the original PDF through one native PDFKit print operation', () => {
     const printer = readFileSync(
       join(process.cwd(), 'src', 'main', 'pdf-printer.ts'),
       'utf8'
     )
 
-    expect(printer).toContain('plugins: true')
-    expect(printer).toContain("pdfEvents.once('-pdf-ready-to-print'")
-    expect(printer).toContain('await printWindow.loadFile(temporaryPdf)')
-    expect(printer).toContain('window.webContents.print(')
-    expect(printer).not.toContain('pageRanges:')
+    expect(printer).toContain("ObjC.import('PDFKit')")
+    expect(printer).toContain('document.printOperationForPrintInfoScalingModeAutoRotate(')
+    expect(printer).toContain('operation.showsPrintPanel = true')
+    expect(printer).toContain('operation.runOperation')
+    expect(printer).not.toContain('BrowserWindow')
+    expect(printer).not.toContain('webContents.print(')
   })
 
   it('prints the displayed snapshot without constructing print canvases', () => {

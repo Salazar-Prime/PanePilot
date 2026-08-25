@@ -269,8 +269,8 @@ function registerIpc(): void {
   ipcMain.handle('latex:compile', (_event, projectId: string) =>
     latex.compile(projectId)
   )
-  ipcMain.handle('latex:print-pdf', (event, input: PrintLatexPdfInput) =>
-    printLatexPdf(input, BrowserWindow.fromWebContents(event.sender))
+  ipcMain.handle('latex:print-pdf', (_event, input: PrintLatexPdfInput) =>
+    printLatexPdf(input)
   )
   ipcMain.handle('latex:update', (_event, input: UpdateLatexProjectInput) =>
     latex.update(input)

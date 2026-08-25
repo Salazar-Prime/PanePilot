@@ -1,19 +1,39 @@
+import { execFile } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { BrowserWindow, type WebContents } from 'electron'
+import { promisify } from 'node:util'
 import type { PrintLatexPdfInput } from '../shared/types'
 
 const MAX_PDF_BYTES = 32 * 1024 * 1024
 const MAX_PDF_BASE64_LENGTH = Math.ceil(MAX_PDF_BYTES / 3) * 4 + 4
-const PDF_READY_FALLBACK_MS = 5_000
+const execFileAsync = promisify(execFile)
+const MACOS_PDF_PRINT_SCRIPT = `
+ObjC.import('AppKit')
+ObjC.import('PDFKit')
+
+function run(argv) {
+  const pdfUrl = $.NSURL.fileURLWithPath(argv[0])
+  const document = $.PDFDocument.alloc.initWithURL(pdfUrl)
+  if (!document) throw new Error('The PDF could not be opened by macOS PDFKit.')
+
+  const operation = document.printOperationForPrintInfoScalingModeAutoRotate(
+    $.NSPrintInfo.sharedPrintInfo.copy,
+    $.kPDFPrintPageScaleToFit,
+    true
+  )
+  if (!operation) throw new Error('macOS could not create a PDF print operation.')
+
+  operation.showsPrintPanel = true
+  operation.showsProgressPanel = true
+  const application = $.NSApplication.sharedApplication
+  application.setActivationPolicy($.NSApplicationActivationPolicyAccessory)
+  application.activateIgnoringOtherApps(true)
+  return operation.runOperation ? 'printed' : 'cancelled'
+}
+`
 
 let printInProgress = false
-
-interface PdfReadyEventTarget {
-  once(event: '-pdf-ready-to-print', listener: () => void): void
-  removeListener(event: '-pdf-ready-to-print', listener: () => void): void
-}
 
 function printablePdf(input: PrintLatexPdfInput): { data: Buffer; name: string } {
   if (
@@ -40,95 +60,27 @@ function printablePdf(input: PrintLatexPdfInput): { data: Buffer; name: string }
   }
 }
 
-function pdfViewerReady(contents: WebContents): {
-  promise: Promise<void>
-  cancel(): void
-} {
-  const pdfEvents = contents as unknown as PdfReadyEventTarget
-  let finish: (() => void) | null = null
-  const promise = new Promise<void>((resolveReady) => {
-    let timeout: ReturnType<typeof setTimeout> | null = null
-    const cleanup = (): void => {
-      if (timeout) clearTimeout(timeout)
-      pdfEvents.removeListener('-pdf-ready-to-print', ready)
-      contents.removeListener('render-process-gone', ready)
-    }
-    const ready = (): void => {
-      cleanup()
-      resolveReady()
-    }
-    finish = ready
-    pdfEvents.once('-pdf-ready-to-print', ready)
-    contents.once('render-process-gone', ready)
-    timeout = setTimeout(ready, PDF_READY_FALLBACK_MS)
-  })
-  return {
-    promise,
-    cancel: () => finish?.()
-  }
-}
-
-function openSystemPrintDialog(window: BrowserWindow): Promise<void> {
-  return new Promise((resolvePrint, rejectPrint) => {
-    window.webContents.print(
-      {
-        silent: false
-      },
-      (success, failureReason) => {
-        if (success || /cancel/i.test(failureReason ?? '')) {
-          resolvePrint()
-          return
-        }
-        rejectPrint(
-          new Error(failureReason || 'The system print dialog could not be opened.')
-        )
-      }
-    )
-  })
-}
-
-export async function printLatexPdf(
-  input: PrintLatexPdfInput,
-  parent: BrowserWindow | null
-): Promise<void> {
+export async function printLatexPdf(input: PrintLatexPdfInput): Promise<void> {
   if (printInProgress) {
     throw new Error('Another PDF print dialog is already open.')
   }
+  if (process.platform !== 'darwin') {
+    throw new Error('Native PDF printing is currently available on macOS.')
+  }
   printInProgress = true
   let temporaryDirectory: string | null = null
-  let printWindow: BrowserWindow | null = null
-  let readiness: ReturnType<typeof pdfViewerReady> | null = null
 
   try {
     const pdf = printablePdf(input)
     temporaryDirectory = await mkdtemp(join(tmpdir(), 'panepilot-pdf-print-'))
     const temporaryPdf = join(temporaryDirectory, pdf.name)
     await writeFile(temporaryPdf, pdf.data, { mode: 0o600 })
-
-    printWindow = new BrowserWindow({
-      show: false,
-      parent: parent && !parent.isDestroyed() ? parent : undefined,
-      title: `Print ${pdf.name}`,
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        plugins: true,
-        sandbox: true
-      }
-    })
-    readiness = pdfViewerReady(printWindow.webContents)
-    await printWindow.loadFile(temporaryPdf)
-    await readiness.promise
-    if (printWindow.isDestroyed() || printWindow.webContents.isDestroyed()) {
-      throw new Error('The PDF print window closed before printing could begin.')
-    }
-
-    // Omitting pageRanges is deliberate: Electron passes the PDF plugin's entire
-    // document to one native system print dialog and preserves its page ordering.
-    await openSystemPrintDialog(printWindow)
+    await execFileAsync(
+      '/usr/bin/osascript',
+      ['-l', 'JavaScript', '-e', MACOS_PDF_PRINT_SCRIPT, '--', temporaryPdf],
+      { encoding: 'utf8', maxBuffer: 64 * 1024 }
+    )
   } finally {
-    readiness?.cancel()
-    if (printWindow && !printWindow.isDestroyed()) printWindow.destroy()
     if (temporaryDirectory) {
       await rm(temporaryDirectory, { recursive: true, force: true })
     }
