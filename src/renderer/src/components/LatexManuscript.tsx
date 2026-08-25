@@ -23,6 +23,7 @@ import type {
   LatexWorkspace,
   Project
 } from '@shared/types'
+import { latexMonarchLanguage } from '../lib/latexLanguage'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
 
 loader.config({ monaco })
@@ -38,18 +39,7 @@ self.MonacoEnvironment = {
 
 if (!monaco.languages.getLanguages().some((language) => language.id === 'latex')) {
   monaco.languages.register({ id: 'latex', extensions: ['.tex'] })
-  monaco.languages.setMonarchTokensProvider('latex', {
-    tokenizer: {
-      root: [
-        [/%.*$/, 'comment'],
-        [/\\(?:part|chapter|section|subsection|subsubsection)\*?/, 'keyword'],
-        [/\\[A-Za-z@]+/, 'type.identifier'],
-        [/\$+/, 'delimiter'],
-        [/[{}[\]]/, 'delimiter.bracket'],
-        [/[&_^]/, 'operator']
-      ]
-    }
-  })
+  monaco.languages.setMonarchTokensProvider('latex', latexMonarchLanguage)
 }
 
 monaco.editor.defineTheme('panepilot-latex', {
