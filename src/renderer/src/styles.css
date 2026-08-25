@@ -38,7 +38,8 @@ select:focus-visible {
 }
 
 .app-shell {
-  --sidebar-width: 264px;
+  --sidebar-preferred-width: 264px;
+  --sidebar-width: var(--sidebar-preferred-width);
   --git-pane-width: 0px;
   display: grid;
   grid-template:
@@ -287,6 +288,56 @@ select:focus-visible {
 .sidebar-collapsed .sidebar {
   pointer-events: none;
   opacity: 0;
+}
+
+.sidebar-resizer {
+  position: relative;
+  z-index: 12;
+  width: 7px;
+  min-width: 0;
+  height: 100%;
+  grid-area: sidebar;
+  justify-self: end;
+  outline: none;
+  cursor: col-resize;
+  touch-action: none;
+  transform: translateX(3px);
+}
+
+.sidebar-resizer::after {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 1px;
+  height: 38px;
+  border-radius: 1px;
+  background: #3a4352;
+  content: "";
+  transform: translateY(-50%);
+  transition: height 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+.sidebar-resizing .sidebar-resizer::after {
+  height: 58px;
+  background: #7f8ee8;
+  box-shadow: 0 0 9px #6f7fd255;
+}
+
+.sidebar-resizer:focus-visible {
+  outline: 1px solid #7387f6;
+  outline-offset: -2px;
+}
+
+.sidebar-collapsed .sidebar-resizer {
+  display: none;
+}
+
+.app-shell.sidebar-resizing,
+.app-shell.sidebar-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .sidebar-brand {
@@ -3454,10 +3505,6 @@ select:focus-visible {
 }
 
 @media (max-width: 1080px) {
-  .app-shell {
-    --sidebar-width: 225px;
-  }
-
   .project-path-copy,
   .header-button.secondary-button {
     display: none;

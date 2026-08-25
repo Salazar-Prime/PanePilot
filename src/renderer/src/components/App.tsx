@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
 import {
   Archive,
   ArchiveRestore,
@@ -71,6 +78,15 @@ import { useProjectAttentionOrder } from '../lib/projectAttentionOrder'
 import { useCollapsedProjects } from '../lib/sidebarCollapse'
 import { useSelectionRecency } from '../lib/selectionRecency'
 import { sortSessions, useSessionSort } from '../lib/sessionSort'
+import {
+  clampSidebarWidth,
+  COMPACT_SIDEBAR_WIDTH,
+  DEFAULT_SIDEBAR_WIDTH,
+  loadSidebarWidth,
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  saveSidebarWidth
+} from '../lib/sidebarLayout'
 import { shouldOfferTmuxReconnect } from '../lib/terminalTransport'
 import { tmuxAttachCommand, tmuxOptionsCommand } from '../lib/tmuxCommands'
 import {
@@ -135,6 +151,18 @@ export function App() {
   const [paneBSessionId, setPaneBSessionId] = useState<string | null>(null)
   const [openSessionIds, openSession, closeSession] = useOpenSessions()
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(() =>
+    loadSidebarWidth(
+      window.localStorage,
+      window.innerWidth <= 1080 ? COMPACT_SIDEBAR_WIDTH : DEFAULT_SIDEBAR_WIDTH
+    )
+  )
+  const [resizingSidebar, setResizingSidebar] = useState(false)
+  const sidebarResizeRef = useRef<{
+    startX: number
+    startWidth: number
+    latestWidth: number
+  } | null>(null)
   const [showNewProject, setShowNewProject] = useState(false)
   const [newProjectConnectionId, setNewProjectConnectionId] = useState<string>()
   const [newProjectType, setNewProjectType] = useState<ProjectType>('terminal')
@@ -197,6 +225,68 @@ export function App() {
   const [loading, setLoading] = useState(true)
   const [refreshingConnections, setRefreshingConnections] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!resizingSidebar) return
+
+    function handlePointerMove(event: PointerEvent) {
+      const resize = sidebarResizeRef.current
+      if (!resize) return
+      const width = clampSidebarWidth(
+        resize.startWidth + event.clientX - resize.startX
+      )
+      resize.latestWidth = width
+      setSidebarWidth(width)
+    }
+
+    function finishResize() {
+      const resize = sidebarResizeRef.current
+      if (resize) saveSidebarWidth(resize.latestWidth)
+      sidebarResizeRef.current = null
+      setResizingSidebar(false)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', finishResize)
+    window.addEventListener('pointercancel', finishResize)
+    window.addEventListener('blur', finishResize)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', finishResize)
+      window.removeEventListener('pointercancel', finishResize)
+      window.removeEventListener('blur', finishResize)
+    }
+  }, [resizingSidebar])
+
+  function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>) {
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    sidebarResizeRef.current = {
+      startX: event.clientX,
+      startWidth: sidebarWidth,
+      latestWidth: sidebarWidth
+    }
+    setResizingSidebar(true)
+  }
+
+  function resizeSidebarFromKeyboard(event: React.KeyboardEvent<HTMLDivElement>) {
+    let nextWidth = sidebarWidth
+    if (event.key === 'ArrowLeft') nextWidth -= 24
+    else if (event.key === 'ArrowRight') nextWidth += 24
+    else if (event.key === 'Home') nextWidth = MIN_SIDEBAR_WIDTH
+    else if (event.key === 'End') nextWidth = MAX_SIDEBAR_WIDTH
+    else return
+
+    event.preventDefault()
+    const width = clampSidebarWidth(nextWidth)
+    setSidebarWidth(width)
+    saveSidebarWidth(width)
+  }
+
+  function resetSidebarWidth() {
+    setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+    saveSidebarWidth(DEFAULT_SIDEBAR_WIDTH)
+  }
 
   const refresh = useCallback(async () => {
     const nextProjects = await window.projectConsole.projects.list()
@@ -1366,7 +1456,12 @@ export function App() {
     <div
       className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'} ${
         gitPaneVisible ? 'git-pane-open' : ''
-      }`}
+      } ${resizingSidebar ? 'sidebar-resizing' : ''}`}
+      style={
+        {
+          '--sidebar-preferred-width': `${sidebarWidth}px`
+        } as CSSProperties
+      }
     >
       <header className="top-bar">
         <div className="traffic-spacer" />
@@ -1925,6 +2020,22 @@ export function App() {
           </div>
         </div>
       </aside>
+
+      <div
+        className="sidebar-resizer"
+        role="separator"
+        aria-label="Resize project sidebar"
+        aria-orientation="vertical"
+        aria-valuemin={MIN_SIDEBAR_WIDTH}
+        aria-valuemax={MAX_SIDEBAR_WIDTH}
+        aria-valuenow={sidebarWidth}
+        aria-valuetext={`${sidebarWidth} pixels wide`}
+        tabIndex={sidebarOpen ? 0 : -1}
+        title="Drag to resize · Double-click to reset"
+        onPointerDown={beginSidebarResize}
+        onKeyDown={resizeSidebarFromKeyboard}
+        onDoubleClick={resetSidebarWidth}
+      />
 
       <main className="main-content">
         {error ? (

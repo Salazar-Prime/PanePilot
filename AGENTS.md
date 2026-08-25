@@ -87,6 +87,7 @@ These are owner-approved decisions and should be treated as product invariants u
 60. The new LaTeX chat launcher presents the parsed manuscript outline in document order with explicit Part, Chapter, Section, Subsection, Sub-subsection, Paragraph, and Subparagraph labels. Nested options use non-collapsing indentation, and the selected scope summary repeats its structural type, title, source file, and line range so hierarchy remains visible after the native dropdown closes.
 61. LaTeX source highlighting treats `\%` as a literal percent sign without changing its ordinary text styling or the established styling of other commands, operators, and delimiters. An unescaped `%` still comments out the remainder of its line, and consecutive backslashes retain their odd/even escaping semantics.
 62. On macOS, printing from PDF Preview sends the exact PDF snapshot currently displayed to one native PDFKit `NSPrintOperation`, which opens the system print panel for the complete document. PanePilot does not route printing through Chromium, rasterize pages into HTML canvases, or submit one job per page, and it removes its permission-restricted temporary PDF after the panel closes or fails.
+63. The left project sidebar has one client-local persisted width and a boundary resizer that survives collapse/reopen. Pointer drag, keyboard arrows, Home/End, and double-click reset keep the width within bounded useful limits; resizing never changes project ordering or pane membership.
 
 ## Agent lifecycle semantics
 
