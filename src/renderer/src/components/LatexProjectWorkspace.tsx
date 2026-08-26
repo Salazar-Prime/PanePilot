@@ -160,6 +160,9 @@ export function LatexProjectWorkspace({
     (activeSession?.latexChat?.mode === 'edit' ? activeSession : null)
 
   const refreshInlineEdits = useCallback(async () => {
+    if (typeof window.projectConsole.latex.listInlineEdits !== 'function') {
+      return
+    }
     try {
       setInlineEdits(
         await window.projectConsole.latex.listInlineEdits(project.id)
@@ -391,6 +394,14 @@ export function LatexProjectWorkspace({
     selection: LatexSourceSelection,
     instruction: string
   ) {
+    if (
+      typeof window.projectConsole.latex.listInlineEdits !== 'function' ||
+      typeof window.projectConsole.latex.rollbackInlineEdit !== 'function'
+    ) {
+      throw new Error(
+        'The inline-edit interface is newer than PanePilot’s backend. Restart PanePilot once, then apply this edit again.'
+      )
+    }
     try {
       const edit = await window.projectConsole.latex.sendInlineEdit({
         projectId: project.id,
