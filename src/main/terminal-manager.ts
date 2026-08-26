@@ -65,6 +65,7 @@ const OUTPUT_FLUSH_DELAY_MS = 250
 const OUTPUT_RETRY_DELAY_MS = 500
 const OUTPUT_BUFFER_LIMIT = 512 * 1024
 const ACTION_COMPLETION_POLL_MS = 250
+const INLINE_EDIT_COMPLETION_POLL_MS = 1_000
 const MAX_ACTION_CAPTURE_OUTPUT = 1024 * 1024
 const ACTION_EXIT_STATUS_OPTION = '@panepilot_action_exit_status'
 const MAX_TERMINAL_CAPTURE_OUTPUT = 4 * 1024 * 1024
@@ -2310,7 +2311,9 @@ export class TerminalManager {
     runtime.actionTimer = setTimeout(() => {
       runtime.actionTimer = null
       void this.finishActionWhenPaneExits(runtime)
-    }, ACTION_COMPLETION_POLL_MS)
+    }, isLatexInlineEditSession(runtime.session)
+      ? INLINE_EDIT_COMPLETION_POLL_MS
+      : ACTION_COMPLETION_POLL_MS)
     runtime.actionTimer.unref()
   }
 
@@ -2412,27 +2415,29 @@ export class TerminalManager {
 
     if (runtime.connection.kind === 'local') {
       if (!this.tmuxPath) return null
-      const state = spawnSync(
-        this.tmuxPath,
-        ['display-message', '-p', '-t', target, stateFormat],
-        { encoding: 'utf8', timeout: 2_000 }
-      )
-      const exitCode =
-        state.status === 0 ? actionExitStatus(state.stdout) : null
-      if (exitCode == null) return null
-      const capture = spawnSync(
-        this.tmuxPath,
-        ['capture-pane', '-p', '-e', '-S', '-', '-t', target],
-        {
-          encoding: 'utf8',
-          timeout: 2_000,
-          maxBuffer: MAX_ACTION_CAPTURE_OUTPUT
+      try {
+        const state = await execFileAsync(
+          this.tmuxPath,
+          ['display-message', '-p', '-t', target, stateFormat],
+          { encoding: 'utf8', timeout: 2_000 }
+        )
+        const exitCode = actionExitStatus(state.stdout)
+        if (exitCode == null) return null
+        const capture = await execFileAsync(
+          this.tmuxPath,
+          ['capture-pane', '-p', '-e', '-S', '-', '-t', target],
+          {
+            encoding: 'utf8',
+            timeout: 2_000,
+            maxBuffer: MAX_ACTION_CAPTURE_OUTPUT
+          }
+        )
+        return {
+          exitCode,
+          output: capture.stdout.replace(/\r?\n/g, '\r\n')
         }
-      )
-      if (capture.status !== 0) return null
-      return {
-        exitCode,
-        output: capture.stdout.replace(/\r?\n/g, '\r\n')
+      } catch {
+        return null
       }
     }
 

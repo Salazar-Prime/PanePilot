@@ -378,7 +378,12 @@ export function LatexProjectWorkspace({
 
   useEffect(() => {
     void refreshChanges()
-    if (changeSession?.state !== 'running') return
+    if (
+      changeSession?.state !== 'running' ||
+      changeSession.latexChat?.purpose === 'inline-edit'
+    ) {
+      return
+    }
     const timer = window.setInterval(() => void refreshChanges(), 1_800)
     return () => window.clearInterval(timer)
   }, [refreshChanges, changeSession?.state])
@@ -633,6 +638,7 @@ export function LatexProjectWorkspace({
           <div className="latex-workbench-main">
             {tab === 'manuscript' && (
               <LatexManuscript
+                key={project.id}
                 project={project}
                 workspace={workspace}
                 inlineEdits={inlineEdits}

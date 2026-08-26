@@ -29,6 +29,10 @@ import {
   loadLatexAutoCompile,
   saveLatexAutoCompile
 } from '../lib/latexAutoCompile'
+import {
+  loadLatexPdfView,
+  saveLatexPdfView
+} from '../lib/latexViewMemory'
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
@@ -45,12 +49,6 @@ interface LatexPdfPreviewProps {
   local: boolean
 }
 
-interface PdfViewMemory {
-  pageNumber: number
-  scrollTop: number
-  zoom: number
-}
-
 interface LatexPdfPageProps {
   pdf: PDFDocumentProxy
   pageNumber: number
@@ -58,7 +56,6 @@ interface LatexPdfPageProps {
   zoom: number
 }
 
-const pdfViewMemory = new Map<string, PdfViewMemory>()
 const pdfSnapshotCache = new Map<string, LatexPdfDocument>()
 
 function decodeBase64(value: string): Uint8Array {
@@ -191,7 +188,7 @@ export function LatexPdfPreview({
   mainFile,
   local
 }: LatexPdfPreviewProps) {
-  const savedViewRef = useRef(pdfViewMemory.get(projectId))
+  const savedViewRef = useRef(loadLatexPdfView(projectId))
   const documentRef = useRef<PDFDocumentProxy | null>(null)
   const loadVersionRef = useRef(0)
   const printVersionRef = useRef(0)
@@ -389,7 +386,7 @@ export function LatexPdfPreview({
         }
         pageNumberRef.current = closestPage
         setPageNumber(closestPage)
-        pdfViewMemory.set(projectId, {
+        saveLatexPdfView(projectId, {
           pageNumber: closestPage,
           scrollTop: scrollRoot.scrollTop,
           zoom
@@ -405,12 +402,23 @@ export function LatexPdfPreview({
   }, [pdf, projectId, scrollRoot, zoom])
 
   useEffect(() => {
-    pdfViewMemory.set(projectId, {
+    saveLatexPdfView(projectId, {
       pageNumber,
       scrollTop: scrollRoot?.scrollTop ?? savedViewRef.current?.scrollTop ?? 0,
       zoom
     })
   }, [pageNumber, projectId, scrollRoot, zoom])
+
+  useEffect(
+    () => () => {
+      saveLatexPdfView(projectId, {
+        pageNumber: pageNumberRef.current,
+        scrollTop: scrollRoot?.scrollTop ?? 0,
+        zoom
+      })
+    },
+    [projectId, scrollRoot, zoom]
+  )
 
   function goToPage(nextPage: number) {
     if (!pdf || !scrollRoot || !Number.isFinite(nextPage)) return

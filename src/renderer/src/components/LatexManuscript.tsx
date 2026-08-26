@@ -5,7 +5,7 @@ import cssWorker from 'monaco-editor/language/css/css.worker.js?worker'
 import htmlWorker from 'monaco-editor/language/html/html.worker.js?worker'
 import jsonWorker from 'monaco-editor/language/json/json.worker.js?worker'
 import tsWorker from 'monaco-editor/language/typescript/ts.worker.js?worker'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   BookOpenText,
   Check,
@@ -32,6 +32,10 @@ import type {
   Project
 } from '@shared/types'
 import { latexMonarchLanguage } from '../lib/latexLanguage'
+import {
+  loadLatexManuscriptView,
+  saveLatexManuscriptView
+} from '../lib/latexViewMemory'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
 
 loader.config({ monaco })
@@ -122,8 +126,17 @@ export function LatexManuscript({
   onRollbackInlineEdit,
   onDeleteInlineEdit
 }: Props) {
-  const [reviewPath, setReviewPath] = useState<string | null>(null)
-  const [path, setPath] = useState(workspace.details.mainFile)
+  const rememberedViewRef = useRef(loadLatexManuscriptView(project.id))
+  const pendingViewRestoreRef = useRef(rememberedViewRef.current)
+  const rememberedPath = rememberedViewRef.current?.path
+  const [reviewPath, setReviewPath] = useState<string | null>(
+    rememberedPath && rememberedPath !== workspace.details.mainFile
+      ? rememberedPath
+      : null
+  )
+  const [path, setPath] = useState(
+    rememberedPath ?? workspace.details.mainFile
+  )
   const [savedContent, setSavedContent] = useState('')
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(true)
@@ -142,7 +155,9 @@ export function LatexManuscript({
   const viewZoneIdsRef = useRef<string[]>([])
   const inlineEditDisposablesRef = useRef<{ dispose(): void }[]>([])
   const inlinePromptRef = useRef<HTMLTextAreaElement | null>(null)
+  const viewMemoryFrameRef = useRef(0)
   const dirty = draft !== savedContent
+  const inlineBusy = sendingInlineEdit || inlineRunning
   activeFinderPathRef.current = path
   const selectedSection =
     workspace.sections.find((section) => section.id === selectedSectionId) ?? null
@@ -167,6 +182,31 @@ export function LatexManuscript({
       )
       .join('\u0001') ?? ''
 
+  function rememberCurrentView(): void {
+    const editor = editorRef.current
+    const selection = editor?.getSelection()
+    if (!editor || !selection) return
+    saveLatexManuscriptView(project.id, {
+      path: activeFinderPathRef.current,
+      selection: {
+        startLineNumber: selection.startLineNumber,
+        startColumn: selection.startColumn,
+        endLineNumber: selection.endLineNumber,
+        endColumn: selection.endColumn
+      },
+      scrollTop: editor.getScrollTop(),
+      scrollLeft: editor.getScrollLeft()
+    })
+  }
+
+  function scheduleViewMemory(): void {
+    if (viewMemoryFrameRef.current) return
+    viewMemoryFrameRef.current = window.requestAnimationFrame(() => {
+      viewMemoryFrameRef.current = 0
+      rememberCurrentView()
+    })
+  }
+
   async function load(nextPath: string, revealSection?: LatexSection | null) {
     setLoading(true)
     setError('')
@@ -185,6 +225,14 @@ export function LatexManuscript({
         }
       })
     } catch (caught) {
+      if (
+        pendingViewRestoreRef.current?.path === nextPath &&
+        nextPath !== workspace.details.mainFile
+      ) {
+        pendingViewRestoreRef.current = null
+        setReviewPath(null)
+        return
+      }
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
       setLoading(false)
@@ -201,8 +249,42 @@ export function LatexManuscript({
     void load(desiredPath, selectedSection)
   }, [project.id, desiredPath])
 
+  useLayoutEffect(() => {
+    const remembered = pendingViewRestoreRef.current
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (
+      loading ||
+      !remembered ||
+      remembered.path !== path ||
+      !editor ||
+      !model
+    ) {
+      return
+    }
+    const selection = model.validateRange(
+      new monaco.Range(
+        remembered.selection.startLineNumber,
+        remembered.selection.startColumn,
+        remembered.selection.endLineNumber,
+        remembered.selection.endColumn
+      )
+    )
+    editor.setSelection(selection)
+    editor.setScrollPosition({
+      scrollTop: remembered.scrollTop,
+      scrollLeft: remembered.scrollLeft
+    })
+    pendingViewRestoreRef.current = null
+  }, [loading, path, savedContent])
+
   useEffect(
     () => () => {
+      if (viewMemoryFrameRef.current) {
+        window.cancelAnimationFrame(viewMemoryFrameRef.current)
+        viewMemoryFrameRef.current = 0
+      }
+      rememberCurrentView()
       finderActionRef.current?.dispose()
       for (const disposable of inlineEditDisposablesRef.current) {
         disposable.dispose()
@@ -229,12 +311,12 @@ export function LatexManuscript({
     function saveShortcut(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 's') {
         event.preventDefault()
-        if (dirty && !saving) void save()
+        if (dirty && !saving && !inlineBusy) void save()
       }
     }
     window.addEventListener('keydown', saveShortcut)
     return () => window.removeEventListener('keydown', saveShortcut)
-  }, [dirty, saving, draft, path])
+  }, [dirty, saving, inlineBusy, draft, path])
 
   useEffect(() => {
     applyDecorations()
@@ -250,6 +332,7 @@ export function LatexManuscript({
   }, [showInlineHistory])
 
   async function save(): Promise<boolean> {
+    if (inlineBusy) return false
     setSaving(true)
     setError('')
     try {
@@ -378,9 +461,15 @@ export function LatexManuscript({
     }
 
     inlineEditDisposablesRef.current = [
-      editor.onDidChangeCursorSelection(() => captureSelection()),
+      editor.onDidChangeCursorSelection(() => {
+        scheduleViewMemory()
+        captureSelection()
+      }),
       editor.onDidChangeModel(() => captureSelection()),
-      editor.onDidScrollChange(repositionInlineEdit),
+      editor.onDidScrollChange(() => {
+        scheduleViewMemory()
+        repositionInlineEdit()
+      }),
       editor.onDidLayoutChange(repositionInlineEdit),
       editor.addAction({
         id: 'panepilot.latex.inline-edit',
@@ -424,28 +513,116 @@ export function LatexManuscript({
   }
 
   async function submitInlineEdit() {
-    if (!inlineEdit || !inlineEdit.instruction.trim() || sendingInlineEdit) return
+    if (
+      !inlineEdit ||
+      !inlineEdit.instruction.trim() ||
+      inlineBusy ||
+      saving
+    ) {
+      return
+    }
     const request = inlineEdit
-    setSendingInlineEdit(true)
     setInlineEdit((current) => current && { ...current, error: '' })
+    let trackedModel: monaco.editor.ITextModel | null = null
+    let trackedDecorationId: string | null = null
+    let dispatched = false
     try {
       if (request.selection.text.length > 20_000) {
         throw new Error('Select no more than 20,000 characters.')
       }
       if (dirty && !(await save())) return
-      await onInlineEdit(request.selection, request.instruction)
-      await load(request.selection.path)
-      setInlineEdit(null)
-    } catch (caught) {
-      setInlineEdit((current) =>
-        current
-          ? {
-              ...current,
-              error: caught instanceof Error ? caught.message : String(caught)
+
+      const editor = editorRef.current
+      const model = editor?.getModel() ?? null
+      if (model && activeFinderPathRef.current === request.selection.path) {
+        const range = model.validateRange(
+          new monaco.Range(
+            request.selection.startLine,
+            request.selection.startColumn,
+            request.selection.endLine,
+            request.selection.endColumn
+          )
+        )
+        if (model.getValueInRange(range) !== request.selection.text) {
+          throw new Error(
+            'The selected text changed before the inline edit started. Select it again and retry.'
+          )
+        }
+        trackedModel = model
+        const decorationIds = model.deltaDecorations([], [
+          {
+            range,
+            options: {
+              stickiness:
+                monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
             }
-          : current
-      )
+          }
+        ])
+        trackedDecorationId = decorationIds[0] ?? null
+      }
+
+      dispatched = true
+      setSendingInlineEdit(true)
+      setInlineEdit(null)
+      const edit = await onInlineEdit(request.selection, request.instruction)
+      const activeModel = editorRef.current?.getModel()
+      if (
+        trackedModel &&
+        !trackedModel.isDisposed() &&
+        activeModel === trackedModel &&
+        activeFinderPathRef.current === edit.path
+      ) {
+        const preview = await window.projectConsole.files.preview(
+          project.id,
+          edit.path
+        )
+        if (!preview.binary && !preview.truncated) {
+          const range = trackedDecorationId
+            ? trackedModel.getDecorationRange(trackedDecorationId)
+            : null
+          if (
+            range &&
+            edit.replacementText != null &&
+            trackedModel.getValueInRange(range) === edit.originalText
+          ) {
+            trackedModel.pushEditOperations(
+              [],
+              [
+                {
+                  range,
+                  text: edit.replacementText,
+                  forceMoveMarkers: true
+                }
+              ],
+              () => null
+            )
+          } else if (trackedModel.getValue() !== preview.content) {
+            setInlineHistoryError(
+              'The inline edit finished, but you changed its selected text while it was running. PanePilot kept your local draft; the applied revision remains in the editorial trail.'
+            )
+          }
+          setSavedContent(preview.content)
+          setDraft(trackedModel.getValue())
+        }
+      }
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      if (dispatched) {
+        setInlineHistoryError(message)
+        setShowInlineHistory(true)
+      } else {
+        setInlineEdit((current) =>
+          current ? { ...current, error: message } : current
+        )
+      }
     } finally {
+      if (
+        trackedModel &&
+        !trackedModel.isDisposed() &&
+        trackedDecorationId
+      ) {
+        trackedModel.deltaDecorations([trackedDecorationId], [])
+      }
       setSendingInlineEdit(false)
     }
   }
@@ -657,7 +834,7 @@ export function LatexManuscript({
             aria-expanded={showInlineHistory}
             title="Show accumulated inline editorial changes"
           >
-            {inlineRunning ? (
+            {inlineBusy ? (
               <CircleDotDashed className="spin" size={12} />
             ) : (
               <History size={12} />
@@ -667,7 +844,12 @@ export function LatexManuscript({
           <button
             className="primary-button"
             onClick={() => void save()}
-            disabled={!dirty || saving}
+            disabled={!dirty || saving || inlineBusy}
+            title={
+              inlineBusy
+                ? 'Saving is available as soon as the pending inline revision finishes'
+                : 'Save the current LaTeX source'
+            }
           >
             {saving ? <CircleDotDashed className="spin" size={13} /> : <Save size={13} />}
             {saving ? 'Saving…' : 'Save'}
@@ -714,7 +896,6 @@ export function LatexManuscript({
               onChange={(value) => setDraft(value ?? '')}
               onMount={handleMount}
               options={{
-                readOnly: sendingInlineEdit,
                 minimap: { enabled: false },
                 fontFamily: '"SFMono-Regular", "Cascadia Code", monospace',
                 fontSize: 12,
@@ -787,7 +968,7 @@ export function LatexManuscript({
                     />
                     <footer>
                       <span>
-                        {inlineRunning
+                        {inlineBusy
                           ? 'Another editorial change is still running'
                           : 'Codex applies the change directly to this selection'}
                       </span>
@@ -796,14 +977,13 @@ export function LatexManuscript({
                         className="latex-inline-submit"
                         onClick={() => void submitInlineEdit()}
                         disabled={
-                          sendingInlineEdit ||
-                          inlineRunning ||
+                          inlineBusy ||
                           !inlineEdit.instruction.trim() ||
                           inlineEdit.selection.text.length > 20_000
                         }
                       >
                         <Send size={11} />
-                        {sendingInlineEdit
+                        {inlineBusy
                           ? 'Applying…'
                           : 'Apply edit'}
                       </button>
@@ -835,7 +1015,7 @@ export function LatexManuscript({
                     <strong>Inline edits</strong>
                   </div>
                   <small>
-                    {inlineRunning
+                    {inlineBusy
                       ? 'Applying change…'
                       : `${inlineEdits.length} saved ${inlineEdits.length === 1 ? 'edit' : 'edits'}`}
                   </small>
