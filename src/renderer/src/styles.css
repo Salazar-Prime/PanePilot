@@ -4988,17 +4988,232 @@ button.type-switcher {
   background: #282e3c;
 }
 
-.latex-inline-chat-terminal {
-  display: flex;
+.latex-inline-history-error {
+  margin: 8px 9px 0;
+  padding: 7px 8px;
+  color: #e6a2aa;
+  border: 1px solid #613743;
+  border-radius: 5px;
+  background: #28151b;
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.latex-inline-history-list {
   min-height: 0;
   flex: 1;
-  padding: 3px 0 0 3px;
+  padding: 8px;
+  overflow-y: auto;
   background: #090b10;
 }
 
-.latex-inline-chat-terminal > .managed-terminal {
-  min-height: 0;
-  flex: 1;
+.latex-inline-history-pill {
+  position: relative;
+  margin-bottom: 7px;
+  overflow: hidden;
+  border: 1px solid #2b3241;
+  border-left: 3px solid #6879c5;
+  border-radius: 6px;
+  background: #11151d;
+}
+
+.latex-inline-history-pill.failed {
+  border-left-color: #b75e6b;
+}
+
+.latex-inline-history-pill.rolled-back {
+  border-left-color: #7e8795;
+  opacity: 0.78;
+}
+
+.latex-inline-history-pill.running {
+  border-left-color: #c5a05d;
+}
+
+.latex-inline-history-summary {
+  display: grid;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px 6px 6px;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  grid-template-columns: 25px minmax(0, 1fr) auto 13px;
+  text-align: left;
+}
+
+.latex-inline-history-summary:hover,
+.latex-inline-history-summary:focus-visible {
+  outline: none;
+  background: #181e2a;
+}
+
+.latex-inline-history-index {
+  color: #7f8cc7;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.latex-inline-history-summary > span:nth-child(2) {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.latex-inline-history-summary strong {
+  overflow: hidden;
+  color: #cbd1dc;
+  font-size: 8px;
+  font-weight: 620;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-inline-history-summary small {
+  overflow: hidden;
+  color: #626d7c;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-inline-history-summary em {
+  padding: 3px 5px;
+  color: #8fcbb8;
+  border-radius: 8px;
+  background: #16271f;
+  font-size: 6px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.latex-inline-history-pill.failed .latex-inline-history-summary em {
+  color: #e0a0a9;
+  background: #2a171d;
+}
+
+.latex-inline-history-pill.rolled-back .latex-inline-history-summary em {
+  color: #9aa2af;
+  background: #20242b;
+}
+
+.latex-inline-history-summary > svg {
+  color: #67717f;
+  transition: transform 120ms ease;
+}
+
+.latex-inline-history-pill.expanded .latex-inline-history-summary > svg {
+  transform: rotate(180deg);
+}
+
+.latex-inline-history-detail {
+  padding: 0 8px 8px 38px;
+  border-top: 1px solid #242b37;
+}
+
+.latex-inline-revision-pair {
+  display: grid;
+  gap: 5px;
+  padding-top: 7px;
+}
+
+.latex-inline-revision-pair section,
+.latex-inline-model-note {
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid #282f3b;
+  border-radius: 4px;
+  background: #0c0f15;
+}
+
+.latex-inline-revision-pair span,
+.latex-inline-model-note span {
+  display: block;
+  margin-bottom: 3px;
+  color: #6e7890;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 6px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.latex-inline-revision-pair p {
+  margin: 0;
+  color: #c5c8ce;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.latex-inline-model-note {
+  margin-top: 5px;
+  border-color: #303957;
+  background: #11172a;
+}
+
+.latex-inline-model-note p {
+  max-height: 160px;
+  margin: 0;
+  overflow: auto;
+  color: #aeb8dc;
+  font-size: 8px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.latex-inline-item-error {
+  margin: 6px 0 0;
+  color: #db8a96;
+  font-size: 7px;
+  line-height: 1.4;
+}
+
+.latex-inline-history-detail > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 7px;
+}
+
+.latex-inline-history-detail > footer button {
+  display: flex;
+  height: 25px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  color: #aeb8dc;
+  border: 1px solid #3a4568;
+  border-radius: 4px;
+  background: #192139;
+  cursor: pointer;
+  font-size: 7px;
+}
+
+.latex-inline-history-detail > footer button.delete {
+  color: #c88a94;
+  border-color: #4e3038;
+  background: #211419;
+}
+
+.latex-inline-history-detail > footer button:hover:not(:disabled),
+.latex-inline-history-detail > footer button:focus-visible {
+  color: #eef0f8;
+  border-color: #6677b6;
+  outline: none;
+}
+
+.latex-inline-history-detail > footer button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .latex-inline-chat-empty {

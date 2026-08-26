@@ -273,6 +273,27 @@ with open(target, "wb") as handle:
 print("{}")
 `
 
+const DELETE_FILE_IF_UNCHANGED_SCRIPT = String.raw`
+import json, os, sys
+payload = json.load(sys.stdin)
+root = os.path.realpath(os.path.expanduser(payload["root"]))
+unresolved = os.path.join(root, payload["relativePath"])
+if os.path.islink(unresolved):
+    raise RuntimeError("PanePilot will not remove a symbolic link while restoring an inline edit.")
+target = os.path.realpath(unresolved)
+if os.path.commonpath([root, target]) != root:
+    raise RuntimeError("The requested path is outside the project folder.")
+if not os.path.isfile(target):
+    raise RuntimeError("The unexpected LaTeX path is no longer a file.")
+with open(target, "rb") as handle:
+    current = handle.read()
+expected = payload["expectedContent"].encode("utf-8")
+if current != expected:
+    raise RuntimeError("The unexpected LaTeX file changed before PanePilot could restore the edit.")
+os.unlink(target)
+print("{}")
+`
+
 const MUTATE_ENTRY_SCRIPT = String.raw`
 import json, os, sys
 payload = json.load(sys.stdin)
@@ -689,6 +710,19 @@ export async function writeRemoteFileAsync(
     sshAlias,
     WRITE_FILE_SCRIPT,
     { root, relativePath, content }
+  )
+}
+
+export async function deleteRemoteFileIfUnchanged(
+  sshAlias: string,
+  root: string,
+  relativePath: string,
+  expectedContent: string
+): Promise<void> {
+  await runRemotePythonAsync<Record<string, never>>(
+    sshAlias,
+    DELETE_FILE_IF_UNCHANGED_SCRIPT,
+    { root, relativePath, expectedContent }
   )
 }
 

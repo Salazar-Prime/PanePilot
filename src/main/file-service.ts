@@ -6,11 +6,13 @@ import {
   mkdirSync,
   openSync,
   promises as fs,
+  readFileSync,
   readSync,
   readdirSync,
   realpathSync,
   renameSync,
   statSync,
+  unlinkSync,
   writeFileSync
 } from 'node:fs'
 import { dirname, extname, relative, resolve, sep } from 'node:path'
@@ -227,6 +229,26 @@ export function writeLocalFile(root: string, requested: string, content: string)
     throw new Error('PanePilot only edits files up to 1 MB.')
   }
   writeFileSync(filePath, content, 'utf8')
+}
+
+export function deleteLocalFileIfUnchanged(
+  root: string,
+  requested: string,
+  expectedContent: string
+): void {
+  const realRoot = realpathSync(root)
+  const unresolved = resolve(realRoot, requested)
+  if (lstatSync(unresolved).isSymbolicLink()) {
+    throw new Error('PanePilot will not remove a symbolic link while restoring an inline edit.')
+  }
+  const filePath = boundedPath(realRoot, requested)
+  if (!statSync(filePath).isFile()) {
+    throw new Error('The unexpected LaTeX path is no longer a file.')
+  }
+  if (readFileSync(filePath, 'utf8') !== expectedContent) {
+    throw new Error('The unexpected LaTeX file changed before PanePilot could restore the edit.')
+  }
+  unlinkSync(filePath)
 }
 
 export function createLocalFile(

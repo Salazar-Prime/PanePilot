@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import type {
   LatexChangeSet,
+  LatexInlineEditHistory,
   LatexSourceSelection,
   LatexWorkspace,
   StartLatexChatInput
@@ -107,6 +108,7 @@ export function LatexProjectWorkspace({
   const [openFileRequest, setOpenFileRequest] =
     useState<ProjectFileOpenRequest | null>(null)
   const [changes, setChanges] = useState<LatexChangeSet | null>(null)
+  const [inlineEdits, setInlineEdits] = useState<LatexInlineEditHistory[]>([])
   const [loading, setLoading] = useState(
     () => !latexWorkspaceCache.has(project.id)
   )
@@ -156,6 +158,16 @@ export function LatexProjectWorkspace({
   const changeSession =
     inlineSession ??
     (activeSession?.latexChat?.mode === 'edit' ? activeSession : null)
+
+  const refreshInlineEdits = useCallback(async () => {
+    try {
+      setInlineEdits(
+        await window.projectConsole.latex.listInlineEdits(project.id)
+      )
+    } catch {
+      // Editorial history is supplemental to the source editor.
+    }
+  }, [project.id])
 
   function selectWorkspaceTab(nextTab: WorkspaceTab) {
     latexWorkspaceTabs.set(project.id, nextTab)
@@ -272,16 +284,18 @@ export function LatexProjectWorkspace({
     setError('')
     setRefreshError('')
     setChanges(null)
+    setInlineEdits([])
     setSelectedSectionId(null)
     setOpenFileRequest(null)
     setChatLayout(loadLatexChatLayout(project.id))
     chatResizeRef.current = null
     setResizingChat(false)
     void loadWorkspace()
+    void refreshInlineEdits()
     return () => {
       workspaceRequestRef.current += 1
     }
-  }, [project.id, loadWorkspace])
+  }, [project.id, loadWorkspace, refreshInlineEdits])
 
   useEffect(() => {
     if (!resizingChat) return
@@ -377,18 +391,35 @@ export function LatexProjectWorkspace({
     selection: LatexSourceSelection,
     instruction: string
   ) {
-    const session = await window.projectConsole.latex.sendInlineEdit({
-      projectId: project.id,
-      selection,
-      instruction
-    })
-    await onChanged()
-    window.setTimeout(() => {
-      void window.projectConsole.latex
-        .changes(session.id)
-        .then(setChanges)
-        .catch(() => undefined)
-    }, 700)
+    try {
+      const edit = await window.projectConsole.latex.sendInlineEdit({
+        projectId: project.id,
+        selection,
+        instruction
+      })
+      await Promise.all([onChanged(), refreshInlineEdits(), loadWorkspace()])
+      if (changeSession) {
+        setChanges(await window.projectConsole.latex.changes(changeSession.id))
+      }
+      return edit
+    } catch (error) {
+      await Promise.all([onChanged(), refreshInlineEdits()])
+      throw error
+    }
+  }
+
+  async function rollbackInlineEdit(editId: string) {
+    const edit = await window.projectConsole.latex.rollbackInlineEdit(editId)
+    await Promise.all([refreshInlineEdits(), loadWorkspace()])
+    if (changeSession) {
+      setChanges(await window.projectConsole.latex.changes(changeSession.id))
+    }
+    return edit
+  }
+
+  async function deleteInlineEdit(editId: string) {
+    await window.projectConsole.latex.deleteInlineEdit(editId)
+    await refreshInlineEdits()
   }
 
   async function selectShortcutSession(id: string) {
@@ -593,7 +624,8 @@ export function LatexProjectWorkspace({
               <LatexManuscript
                 project={project}
                 workspace={workspace}
-                inlineSession={inlineSession}
+                inlineEdits={inlineEdits}
+                inlineRunning={inlineSession?.state === 'running'}
                 selectedSectionId={selectedSectionId}
                 chatCounts={chatCounts}
                 changes={changes}
@@ -602,6 +634,8 @@ export function LatexProjectWorkspace({
                 onClearChanges={clearChanges}
                 onWorkspaceRefresh={loadWorkspace}
                 onInlineEdit={sendInlineEdit}
+                onRollbackInlineEdit={rollbackInlineEdit}
+                onDeleteInlineEdit={deleteInlineEdit}
               />
             )}
             {pdfOpened && (

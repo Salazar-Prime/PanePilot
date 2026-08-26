@@ -9,29 +9,30 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BookOpenText,
   Check,
+  ChevronDown,
   ChevronRight,
   CircleDotDashed,
   FileText,
   FolderSearch,
-  MessageSquareText,
+  History,
   RefreshCw,
+  RotateCcw,
   Save,
   Send,
   Sparkles,
+  Trash2,
   X
 } from 'lucide-react'
 import type {
   LatexChangeSet,
+  LatexInlineEditHistory,
   LatexSection,
   LatexSourceSelection,
   LatexWorkspace,
-  Project,
-  TerminalSession
+  Project
 } from '@shared/types'
 import { latexMonarchLanguage } from '../lib/latexLanguage'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
-import { ManagedTerminal } from './ManagedTerminal'
-import { StatusDot } from './StatusDot'
 
 loader.config({ monaco })
 self.MonacoEnvironment = {
@@ -73,7 +74,8 @@ monaco.editor.defineTheme('panepilot-latex', {
 interface Props {
   project: Project
   workspace: LatexWorkspace
-  inlineSession: TerminalSession | null
+  inlineEdits: LatexInlineEditHistory[]
+  inlineRunning: boolean
   selectedSectionId: string | null
   chatCounts: Map<string, number>
   changes: LatexChangeSet | null
@@ -84,7 +86,9 @@ interface Props {
   onInlineEdit(
     selection: LatexSourceSelection,
     instruction: string
-  ): Promise<void>
+  ): Promise<LatexInlineEditHistory>
+  onRollbackInlineEdit(editId: string): Promise<LatexInlineEditHistory>
+  onDeleteInlineEdit(editId: string): Promise<void>
 }
 
 interface InlineEditState {
@@ -97,10 +101,16 @@ interface InlineEditState {
   error: string
 }
 
+function inlineEditStatusLabel(status: LatexInlineEditHistory['status']): string {
+  if (status === 'rolled-back') return 'Rolled back'
+  return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
 export function LatexManuscript({
   project,
   workspace,
-  inlineSession,
+  inlineEdits,
+  inlineRunning,
   selectedSectionId,
   chatCounts,
   changes,
@@ -108,7 +118,9 @@ export function LatexManuscript({
   onOpenContext,
   onClearChanges,
   onWorkspaceRefresh,
-  onInlineEdit
+  onInlineEdit,
+  onRollbackInlineEdit,
+  onDeleteInlineEdit
 }: Props) {
   const [reviewPath, setReviewPath] = useState<string | null>(null)
   const [path, setPath] = useState(workspace.details.mainFile)
@@ -118,7 +130,10 @@ export function LatexManuscript({
   const [saving, setSaving] = useState(false)
   const [sendingInlineEdit, setSendingInlineEdit] = useState(false)
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null)
-  const [showInlineChat, setShowInlineChat] = useState(false)
+  const [showInlineHistory, setShowInlineHistory] = useState(false)
+  const [expandedInlineEditId, setExpandedInlineEditId] = useState<string | null>(null)
+  const [busyInlineEditId, setBusyInlineEditId] = useState<string | null>(null)
+  const [inlineHistoryError, setInlineHistoryError] = useState('')
   const [error, setError] = useState('')
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const finderActionRef = useRef<{ dispose(): void } | null>(null)
@@ -199,7 +214,9 @@ export function LatexManuscript({
 
   useEffect(() => {
     setInlineEdit(null)
-    setShowInlineChat(false)
+    setShowInlineHistory(false)
+    setExpandedInlineEditId(null)
+    setInlineHistoryError('')
   }, [project.id])
 
   useEffect(() => {
@@ -224,21 +241,13 @@ export function LatexManuscript({
   }, [fileChanges, draft])
 
   useEffect(() => {
-    if (!showInlineChat) return
+    if (!showInlineHistory) return
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return
-      const target = event.target
-      if (
-        target instanceof Element &&
-        target.closest('.latex-inline-chat-terminal')
-      ) {
-        return
-      }
-      setShowInlineChat(false)
+      if (event.key === 'Escape') setShowInlineHistory(false)
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [showInlineChat])
+  }, [showInlineHistory])
 
   async function save(): Promise<boolean> {
     setSaving(true)
@@ -425,6 +434,7 @@ export function LatexManuscript({
       }
       if (dirty && !(await save())) return
       await onInlineEdit(request.selection, request.instruction)
+      await load(request.selection.path)
       setInlineEdit(null)
     } catch (caught) {
       setInlineEdit((current) =>
@@ -437,6 +447,48 @@ export function LatexManuscript({
       )
     } finally {
       setSendingInlineEdit(false)
+    }
+  }
+
+  async function rollbackInlineEdit(edit: LatexInlineEditHistory) {
+    if (
+      !window.confirm(
+        'Restore the original selected text? The editorial-history entry will remain.'
+      )
+    ) {
+      return
+    }
+    setBusyInlineEditId(edit.id)
+    setInlineHistoryError('')
+    try {
+      const rolledBack = await onRollbackInlineEdit(edit.id)
+      await load(rolledBack.path)
+    } catch (caught) {
+      setInlineHistoryError(
+        caught instanceof Error ? caught.message : String(caught)
+      )
+    } finally {
+      setBusyInlineEditId(null)
+    }
+  }
+
+  async function deleteInlineEdit(edit: LatexInlineEditHistory) {
+    if (!window.confirm('Delete this editorial-history entry? The document will not change.')) {
+      return
+    }
+    setBusyInlineEditId(edit.id)
+    setInlineHistoryError('')
+    try {
+      await onDeleteInlineEdit(edit.id)
+      setExpandedInlineEditId((current) =>
+        current === edit.id ? null : current
+      )
+    } catch (caught) {
+      setInlineHistoryError(
+        caught instanceof Error ? caught.message : String(caught)
+      )
+    } finally {
+      setBusyInlineEditId(null)
     }
   }
 
@@ -595,24 +647,22 @@ export function LatexManuscript({
           )}
           <button
             className={`secondary-button latex-inline-chat-button ${
-              inlineSession ? 'available' : ''
+              inlineEdits.length ? 'available' : ''
             }`}
             onClick={() => {
               setInlineEdit(null)
-              setShowInlineChat((current) => !current)
-              if (inlineSession) {
-                void window.projectConsole.terminals.acknowledge(inlineSession.id)
-              }
+              setInlineHistoryError('')
+              setShowInlineHistory((current) => !current)
             }}
-            aria-expanded={showInlineChat}
-            title="Show the latest persistent inline-edit interaction"
+            aria-expanded={showInlineHistory}
+            title="Show accumulated inline editorial changes"
           >
-            {inlineSession ? (
-              <StatusDot state={inlineSession.state} compact />
+            {inlineRunning ? (
+              <CircleDotDashed className="spin" size={12} />
             ) : (
-              <MessageSquareText size={12} />
+              <History size={12} />
             )}
-            Inline chat
+            Edits{inlineEdits.length ? ` ${inlineEdits.length}` : ''}
           </button>
           <button
             className="primary-button"
@@ -664,6 +714,7 @@ export function LatexManuscript({
               onChange={(value) => setDraft(value ?? '')}
               onMount={handleMount}
               options={{
+                readOnly: sendingInlineEdit,
                 minimap: { enabled: false },
                 fontFamily: '"SFMono-Regular", "Cascadia Code", monospace',
                 fontSize: 12,
@@ -736,9 +787,9 @@ export function LatexManuscript({
                     />
                     <footer>
                       <span>
-                        {inlineSession
-                          ? `${inlineSession.name} · persistent Codex`
-                          : 'Creates one hidden persistent Codex chat'}
+                        {inlineRunning
+                          ? 'Another editorial change is still running'
+                          : 'Codex applies the change directly to this selection'}
                       </span>
                       <button
                         type="button"
@@ -746,14 +797,15 @@ export function LatexManuscript({
                         onClick={() => void submitInlineEdit()}
                         disabled={
                           sendingInlineEdit ||
+                          inlineRunning ||
                           !inlineEdit.instruction.trim() ||
                           inlineEdit.selection.text.length > 20_000
                         }
                       >
                         <Send size={11} />
                         {sendingInlineEdit
-                          ? 'Sending…'
-                          : 'Send edit'}
+                          ? 'Applying…'
+                          : 'Apply edit'}
                       </button>
                     </footer>
                     {inlineEdit.error && (
@@ -772,44 +824,124 @@ export function LatexManuscript({
                 )}
               </div>
             )}
-            {showInlineChat && (
+            {showInlineHistory && (
               <aside
                 className="latex-inline-chat-viewer"
-                aria-label="Latest inline edit chat"
+                aria-label="Inline editorial history"
               >
                 <header>
                   <div>
-                    <span className="eyebrow">LATEST INLINE EDIT</span>
-                    <strong>Inline chat</strong>
+                    <span className="eyebrow">EDITORIAL TRAIL</span>
+                    <strong>Inline edits</strong>
                   </div>
-                  {inlineSession && (
-                    <small>
-                      <StatusDot state={inlineSession.state} compact />
-                      {inlineSession.name}
-                    </small>
-                  )}
+                  <small>
+                    {inlineRunning
+                      ? 'Applying change…'
+                      : `${inlineEdits.length} saved ${inlineEdits.length === 1 ? 'edit' : 'edits'}`}
+                  </small>
                   <button
                     type="button"
-                    onClick={() => setShowInlineChat(false)}
-                    aria-label="Close inline chat"
+                    onClick={() => setShowInlineHistory(false)}
+                    aria-label="Close editorial history"
                   >
                     <X size={14} />
                   </button>
                 </header>
-                {inlineSession ? (
-                  <div className="latex-inline-chat-terminal">
-                    <ManagedTerminal
-                      session={inlineSession}
-                      projectFolder={project.folder}
-                    />
+                {inlineHistoryError && (
+                  <p className="latex-inline-history-error" role="alert">
+                    {inlineHistoryError}
+                  </p>
+                )}
+                {inlineEdits.length ? (
+                  <div className="latex-inline-history-list">
+                    {inlineEdits.map((edit, index) => {
+                      const expanded = expandedInlineEditId === edit.id
+                      const busy = busyInlineEditId === edit.id
+                      return (
+                        <article
+                          key={edit.id}
+                          className={`latex-inline-history-pill ${edit.status} ${
+                            expanded ? 'expanded' : ''
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            className="latex-inline-history-summary"
+                            onClick={() =>
+                              setExpandedInlineEditId((current) =>
+                                current === edit.id ? null : edit.id
+                              )
+                            }
+                            aria-expanded={expanded}
+                          >
+                            <span className="latex-inline-history-index">
+                              {String(inlineEdits.length - index).padStart(2, '0')}
+                            </span>
+                            <span>
+                              <strong>{edit.instruction}</strong>
+                              <small>
+                                {edit.path} · L{edit.startLine} ·{' '}
+                                {new Date(edit.createdAt).toLocaleString()}
+                              </small>
+                            </span>
+                            <em>{inlineEditStatusLabel(edit.status)}</em>
+                            <ChevronDown size={13} />
+                          </button>
+                          {expanded && (
+                            <div className="latex-inline-history-detail">
+                              <div className="latex-inline-revision-pair">
+                                <section>
+                                  <span>Before</span>
+                                  <p>{edit.originalText}</p>
+                                </section>
+                                <section>
+                                  <span>After</span>
+                                  <p>{edit.replacementText ?? 'No replacement was applied.'}</p>
+                                </section>
+                              </div>
+                              {edit.modelOutput && (
+                                <section className="latex-inline-model-note">
+                                  <span>Codex note</span>
+                                  <p>{edit.modelOutput}</p>
+                                </section>
+                              )}
+                              {edit.error && (
+                                <p className="latex-inline-item-error">{edit.error}</p>
+                              )}
+                              <footer>
+                                {edit.status === 'applied' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void rollbackInlineEdit(edit)}
+                                    disabled={busy}
+                                  >
+                                    <RotateCcw size={12} />
+                                    Restore original
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="delete"
+                                  onClick={() => void deleteInlineEdit(edit)}
+                                  disabled={busy || edit.status === 'running'}
+                                >
+                                  <Trash2 size={12} />
+                                  Delete history
+                                </button>
+                              </footer>
+                            </div>
+                          )}
+                        </article>
+                      )
+                    })}
                   </div>
                 ) : (
                   <div className="latex-inline-chat-empty">
                     <Sparkles size={23} />
-                    <strong>No inline edit yet</strong>
+                    <strong>No editorial changes yet</strong>
                     <p>
-                      Select source text and send an edit. PanePilot will create
-                      the hidden persistent Codex session here.
+                      Select manuscript text and apply an edit. Its request,
+                      before text, replacement, and Codex note will collect here.
                     </p>
                   </div>
                 )}

@@ -10,6 +10,8 @@ import type {
   LatexChatMode,
   LatexChatPurpose,
   LatexChatScope,
+  LatexInlineEditHistory,
+  LatexInlineEditStatus,
   LatexProjectDetails,
   LatexSection,
   LaunchProfile,
@@ -89,6 +91,28 @@ type LatexChatRow = {
   section_id: string | null
   mode: LatexChatMode
   created_at: string
+}
+
+type LatexInlineEditRow = {
+  id: string
+  project_id: string
+  terminal_session_id: string
+  relative_path: string
+  instruction: string
+  original_text: string
+  replacement_text: string | null
+  model_output: string | null
+  start_line: number
+  start_column: number
+  end_line: number
+  end_column: number
+  prefix_context: string
+  suffix_context: string
+  status: LatexInlineEditStatus
+  error: string | null
+  created_at: string
+  updated_at: string
+  rolled_back_at: string | null
 }
 
 export interface ParsedLatexSection {
@@ -344,6 +368,30 @@ function mapLatexChat(row: LatexChatRow): LatexChatAttachment {
   }
 }
 
+function mapLatexInlineEdit(row: LatexInlineEditRow): LatexInlineEditHistory {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    terminalSessionId: row.terminal_session_id,
+    path: row.relative_path,
+    instruction: row.instruction,
+    originalText: row.original_text,
+    replacementText: row.replacement_text,
+    modelOutput: row.model_output,
+    startLine: row.start_line,
+    startColumn: row.start_column,
+    endLine: row.end_line,
+    endColumn: row.end_column,
+    prefixContext: row.prefix_context,
+    suffixContext: row.suffix_context,
+    status: row.status,
+    error: row.error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    rolledBackAt: row.rolled_back_at
+  }
+}
+
 function mapSession(
   row: SessionRow,
   latexChat: LatexChatAttachment | null = null,
@@ -567,6 +615,31 @@ export class Store {
         PRIMARY KEY (terminal_session_id, relative_path)
       );
 
+      CREATE TABLE IF NOT EXISTS latex_inline_edits (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        terminal_session_id TEXT NOT NULL
+          REFERENCES terminal_sessions(id) ON DELETE CASCADE,
+        relative_path TEXT NOT NULL,
+        instruction TEXT NOT NULL,
+        original_text TEXT NOT NULL,
+        replacement_text TEXT,
+        model_output TEXT,
+        start_line INTEGER NOT NULL,
+        start_column INTEGER NOT NULL,
+        end_line INTEGER NOT NULL,
+        end_column INTEGER NOT NULL,
+        prefix_context TEXT NOT NULL DEFAULT '',
+        suffix_context TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL CHECK (
+          status IN ('running', 'applied', 'failed', 'rolled-back')
+        ),
+        error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        rolled_back_at TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS speech_settings (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         provider TEXT NOT NULL DEFAULT 'google-neural2'
@@ -706,6 +779,8 @@ export class Store {
         ON latex_chat_sessions(project_id, scope, section_id);
       CREATE UNIQUE INDEX IF NOT EXISTS latex_inline_chat_project_idx
         ON latex_chat_sessions(project_id) WHERE purpose = 'inline-edit';
+      CREATE INDEX IF NOT EXISTS latex_inline_edits_project_idx
+        ON latex_inline_edits(project_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS project_actions_project_idx
         ON project_actions(project_id, created_at);
       CREATE INDEX IF NOT EXISTS google_drive_files_drive_id_idx
@@ -714,7 +789,7 @@ export class Store {
         ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 15;
+      PRAGMA user_version = 16;
     `)
     this.migrateLegacyTerminalOutput()
   }
@@ -1399,6 +1474,156 @@ export class Store {
     this.db
       .prepare('DELETE FROM latex_edit_snapshots WHERE terminal_session_id = ?')
       .run(terminalSessionId)
+  }
+
+  createLatexInlineEdit(input: {
+    projectId: string
+    terminalSessionId: string
+    path: string
+    instruction: string
+    originalText: string
+    startLine: number
+    startColumn: number
+    endLine: number
+    endColumn: number
+    prefixContext: string
+    suffixContext: string
+  }): LatexInlineEditHistory {
+    const project = this.getProject(input.projectId)
+    const session = this.getSession(input.terminalSessionId)
+    if (
+      !project ||
+      project.type !== 'latex' ||
+      !session ||
+      session.projectId !== project.id ||
+      session.latexChat?.purpose !== 'inline-edit'
+    ) {
+      throw new Error('Persistent inline Codex session not found.')
+    }
+    const id = randomUUID()
+    const timestamp = now()
+    this.db
+      .prepare(
+        `INSERT INTO latex_inline_edits
+         (id, project_id, terminal_session_id, relative_path, instruction,
+          original_text, replacement_text, model_output, start_line,
+          start_column, end_line, end_column, prefix_context, suffix_context,
+          status, error, created_at, updated_at, rolled_back_at)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?,
+                 'running', NULL, ?, ?, NULL)`
+      )
+      .run(
+        id,
+        input.projectId,
+        input.terminalSessionId,
+        input.path,
+        input.instruction,
+        input.originalText,
+        input.startLine,
+        input.startColumn,
+        input.endLine,
+        input.endColumn,
+        input.prefixContext,
+        input.suffixContext,
+        timestamp,
+        timestamp
+      )
+    return this.getLatexInlineEdit(id)!
+  }
+
+  getLatexInlineEdit(id: string): LatexInlineEditHistory | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, project_id, terminal_session_id, relative_path,
+                instruction, original_text, replacement_text, model_output,
+                start_line, start_column, end_line, end_column,
+                prefix_context, suffix_context, status, error, created_at,
+                updated_at, rolled_back_at
+         FROM latex_inline_edits WHERE id = ?`
+      )
+      .get(id) as LatexInlineEditRow | undefined
+    return row ? mapLatexInlineEdit(row) : null
+  }
+
+  listLatexInlineEdits(projectId: string): LatexInlineEditHistory[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, project_id, terminal_session_id, relative_path,
+                instruction, original_text, replacement_text, model_output,
+                start_line, start_column, end_line, end_column,
+                prefix_context, suffix_context, status, error, created_at,
+                updated_at, rolled_back_at
+         FROM latex_inline_edits
+         WHERE project_id = ?
+         ORDER BY created_at DESC, id DESC`
+      )
+      .all(projectId) as LatexInlineEditRow[]
+    return rows.map(mapLatexInlineEdit)
+  }
+
+  completeLatexInlineEdit(
+    id: string,
+    replacementText: string,
+    modelOutput: string
+  ): LatexInlineEditHistory {
+    const edit = this.getLatexInlineEdit(id)
+    if (!edit) throw new Error('Inline edit history entry not found.')
+    if (edit.status !== 'running') {
+      throw new Error('This inline edit is no longer running.')
+    }
+    this.db
+      .prepare(
+        `UPDATE latex_inline_edits
+         SET replacement_text = ?, model_output = ?, status = 'applied',
+             error = NULL, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(replacementText, modelOutput, now(), id)
+    return this.getLatexInlineEdit(id)!
+  }
+
+  failLatexInlineEdit(
+    id: string,
+    error: string,
+    modelOutput: string | null = null
+  ): LatexInlineEditHistory | null {
+    const edit = this.getLatexInlineEdit(id)
+    if (!edit) return null
+    if (edit.status !== 'running') return edit
+    this.db
+      .prepare(
+        `UPDATE latex_inline_edits
+         SET model_output = ?, status = 'failed', error = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(modelOutput, error, now(), id)
+    return this.getLatexInlineEdit(id)
+  }
+
+  markLatexInlineEditRolledBack(id: string): LatexInlineEditHistory {
+    const edit = this.getLatexInlineEdit(id)
+    if (!edit) throw new Error('Inline edit history entry not found.')
+    if (edit.status !== 'applied') {
+      throw new Error('Only an applied inline edit can be rolled back.')
+    }
+    const timestamp = now()
+    this.db
+      .prepare(
+        `UPDATE latex_inline_edits
+         SET status = 'rolled-back', rolled_back_at = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(timestamp, timestamp, id)
+    return this.getLatexInlineEdit(id)!
+  }
+
+  deleteLatexInlineEdit(id: string): void {
+    const edit = this.getLatexInlineEdit(id)
+    if (!edit) return
+    if (edit.status === 'running') {
+      throw new Error('Wait for this inline edit to finish before deleting it.')
+    }
+    this.db.prepare('DELETE FROM latex_inline_edits WHERE id = ?').run(id)
   }
 
   private outputBySessionForProject(projectId: string): Map<string, string> {
@@ -2365,6 +2590,19 @@ export class Store {
       'provider-session-linked',
       `Linked ${session.name} to ${provider === 'claude' ? 'Claude' : 'Codex'} session ${cleaned}`
     )
+    return true
+  }
+
+  clearSessionProviderId(id: string): boolean {
+    const session = this.requireSession(id)
+    if (!session.providerSessionId) return false
+    this.db
+      .prepare(
+        `UPDATE terminal_sessions
+         SET provider_session_id = NULL, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(now(), id)
     return true
   }
 

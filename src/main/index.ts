@@ -294,6 +294,15 @@ function registerIpc(): void {
       return latex.sendInlineEdit(input)
     }
   )
+  ipcMain.handle('latex:list-inline-edits', (_event, projectId: string) =>
+    latex.listInlineEdits(projectId)
+  )
+  ipcMain.handle('latex:rollback-inline-edit', (_event, editId: string) =>
+    latex.rollbackInlineEdit(editId)
+  )
+  ipcMain.handle('latex:delete-inline-edit', (_event, editId: string) => {
+    latex.deleteInlineEdit(editId)
+  })
   ipcMain.handle('latex:changes', (_event, sessionId: string) =>
     latex.changes(sessionId)
   )

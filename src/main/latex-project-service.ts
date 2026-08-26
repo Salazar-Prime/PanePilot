@@ -14,6 +14,7 @@ import type {
   LatexChangeHighlight,
   LatexChangeSet,
   LatexFileChanges,
+  LatexInlineEditHistory,
   LatexPdfDocument,
   LatexProjectDetails,
   LatexSection,
@@ -25,6 +26,8 @@ import type {
   UpdateLatexProjectInput
 } from '../shared/types'
 import {
+  LATEX_INLINE_OUTPUT_END,
+  LATEX_INLINE_OUTPUT_START,
   latexSelectionLastLine
 } from '../shared/latex-inline-edit'
 import {
@@ -32,11 +35,19 @@ import {
   normalizeProjectRelativePath
 } from './latex-paths'
 import {
+  createLocalFile,
+  deleteLocalFileIfUnchanged,
+  writeLocalFile
+} from './file-service'
+import {
+  createRemoteFile,
+  deleteRemoteFileIfUnchanged,
   previewRemoteFile,
   readRemoteBinaryFile,
   readRemoteSourceRevision,
   readRemoteTextFiles,
-  remoteDirectoryExists
+  remoteDirectoryExists,
+  writeRemoteFileAsync
 } from './remote-file-service'
 import type { ParsedLatexSection, Store } from './store'
 import type { TerminalManager } from './terminal-manager'
@@ -89,6 +100,18 @@ export function extractLatexSelection(
     'startLine' | 'startColumn' | 'endLine' | 'endColumn'
   >
 ): string {
+  const normalized = source.replace(/\r\n?/g, '\n')
+  const { start, end } = latexSelectionOffsets(normalized, selection)
+  return normalized.slice(start, end)
+}
+
+export function latexSelectionOffsets(
+  source: string,
+  selection: Pick<
+    LatexSourceSelection,
+    'startLine' | 'startColumn' | 'endLine' | 'endColumn'
+  >
+): { start: number; end: number } {
   const values = [
     selection.startLine,
     selection.startColumn,
@@ -125,7 +148,50 @@ export function extractLatexSelection(
   if (end <= start) {
     throw new Error('Select some source text before asking for an inline edit.')
   }
-  return normalized.slice(start, end)
+  return { start, end }
+}
+
+export function codexExecModelOutput(output: string): string {
+  const withoutAnsi = output
+    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, '')
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\u001b[()][A-Z0-9]/g, '')
+  const markerPattern = new RegExp(
+    `${LATEX_INLINE_OUTPUT_START}([A-Za-z0-9+/=\\s]*)${LATEX_INLINE_OUTPUT_END}`,
+    'g'
+  )
+  let encodedMessage = ''
+  for (const match of withoutAnsi.matchAll(markerPattern)) {
+    encodedMessage = match[1].replace(/\s/g, '')
+  }
+  if (encodedMessage) {
+    const decoded = Buffer.from(encodedMessage, 'base64').toString('utf8').trim()
+    if (decoded) return decoded.slice(0, 50_000)
+  }
+
+  const messages: string[] = []
+  for (const line of withoutAnsi.replace(/\r/g, '').split('\n')) {
+    const candidate = line.trim()
+    if (!candidate.startsWith('{') || !candidate.endsWith('}')) continue
+    try {
+      const event = JSON.parse(candidate) as {
+        type?: string
+        item?: { type?: string; text?: string; content?: string }
+        message?: string
+      }
+      if (
+        event.type === 'item.completed' &&
+        event.item?.type === 'agent_message'
+      ) {
+        const text = event.item.text ?? event.item.content
+        if (typeof text === 'string' && text.trim()) messages.push(text.trim())
+      }
+    } catch {
+      // `codex exec --json` may share the PTY with a small amount of startup
+      // text. Only complete JSON events are candidates for saved model output.
+    }
+  }
+  return messages.at(-1)?.slice(0, 50_000) ?? ''
 }
 
 export interface LatexInlineParagraph {
@@ -964,7 +1030,7 @@ export class LatexProjectService {
 
   async sendInlineEdit(
     input: SendLatexInlineEditInput
-  ): Promise<TerminalSession> {
+  ): Promise<LatexInlineEditHistory> {
     if (!input?.selection) throw new Error('Select some LaTeX source to edit.')
     const instruction = input.instruction.trim()
     if (!instruction) throw new Error('Describe the change you want to make.')
@@ -1034,8 +1100,102 @@ export class LatexProjectService {
         'Preserve valid LaTeX and surrounding formatting. Apply the edit in the file; do not only explain it. ' +
         `Request JSON: ${request}`
     )
-    await this.terminals.clearCodexChatAndSendPrompt(session.id, prompt)
-    return this.store.getSession(session.id) ?? session
+    const offsets = latexSelectionOffsets(source, selection)
+    const history = this.store.createLatexInlineEdit({
+      projectId: project.id,
+      terminalSessionId: session.id,
+      path,
+      instruction,
+      originalText: savedSelection,
+      startLine: selection.startLine,
+      startColumn: selection.startColumn,
+      endLine: selection.endLine,
+      endColumn: selection.endColumn,
+      prefixContext: source.slice(Math.max(0, offsets.start - 240), offsets.start),
+      suffixContext: source.slice(offsets.end, offsets.end + 240)
+    })
+
+    let modelOutput = ''
+    try {
+      const result = await this.terminals.runLatexInlineEditExec(
+        session.id,
+        prompt
+      )
+      modelOutput = codexExecModelOutput(result.output)
+      if (result.exitCode !== 0) {
+        throw new Error(`Codex exited with code ${result.exitCode}.`)
+      }
+
+      const updatedFiles = this.readFiles(project.folder, connection)
+      const unexpectedPaths = [...new Set([
+        ...Object.keys(files),
+        ...Object.keys(updatedFiles)
+      ])].filter(
+        (candidate) =>
+          candidate !== path && files[candidate] !== updatedFiles[candidate]
+      )
+      const updatedSource = updatedFiles[path]
+      const prefix = source.slice(0, offsets.start)
+      const suffix = source.slice(offsets.end)
+      if (
+        unexpectedPaths.length > 0 ||
+        updatedSource == null ||
+        !updatedSource.startsWith(prefix) ||
+        !updatedSource.endsWith(suffix)
+      ) {
+        await this.restoreLatexSources(project.folder, connection, files, updatedFiles)
+        throw new Error(
+          'Codex changed source outside the selected range, so PanePilot restored the original LaTeX files.'
+        )
+      }
+      const replacementEnd = updatedSource.length - suffix.length
+      const replacement = updatedSource.slice(offsets.start, replacementEnd)
+      if (replacement === savedSelection) {
+        throw new Error('Codex finished without changing the selected text.')
+      }
+      return this.store.completeLatexInlineEdit(
+        history.id,
+        replacement,
+        modelOutput || 'Codex applied the requested inline edit.'
+      )
+    } catch (caught) {
+      const error = caught instanceof Error ? caught : new Error(String(caught))
+      this.store.failLatexInlineEdit(history.id, error.message, modelOutput || null)
+      throw error
+    }
+  }
+
+  listInlineEdits(projectId: string): LatexInlineEditHistory[] {
+    this.requireProject(projectId)
+    return this.store.listLatexInlineEdits(projectId)
+  }
+
+  async rollbackInlineEdit(editId: string): Promise<LatexInlineEditHistory> {
+    const edit = this.store.getLatexInlineEdit(editId)
+    if (!edit) throw new Error('Inline edit history entry not found.')
+    if (edit.status !== 'applied' || edit.replacementText == null) {
+      throw new Error('Only an applied inline edit can be rolled back.')
+    }
+    const { project, connection } = this.requireProject(edit.projectId)
+    const files = this.readFiles(project.folder, connection)
+    const source = files[edit.path]
+    if (source == null) throw new Error(`LaTeX source file “${edit.path}” was not found.`)
+    const offset = this.locateInlineReplacement(source, edit)
+    if (offset < 0) {
+      throw new Error(
+        'The replacement text has changed since this edit. PanePilot left the file untouched.'
+      )
+    }
+    const restored =
+      source.slice(0, offset) +
+      edit.originalText +
+      source.slice(offset + edit.replacementText.length)
+    await this.writeSource(project.folder, connection, edit.path, restored)
+    return this.store.markLatexInlineEditRolledBack(edit.id)
+  }
+
+  deleteInlineEdit(editId: string): void {
+    this.store.deleteLatexInlineEdit(editId)
   }
 
   changes(sessionId: string): LatexChangeSet {
@@ -1063,6 +1223,99 @@ export class LatexProjectService {
   clearChanges(sessionId: string): void {
     if (!this.store.getLatexChat(sessionId)) throw new Error('LaTeX chat not found.')
     this.store.clearLatexSnapshots(sessionId)
+  }
+
+  private locateInlineReplacement(
+    source: string,
+    edit: LatexInlineEditHistory
+  ): number {
+    const replacement = edit.replacementText ?? ''
+    if (replacement) {
+      try {
+        const expected = latexSelectionOffsets(source, {
+          startLine: edit.startLine,
+          startColumn: edit.startColumn,
+          endLine: edit.startLine,
+          endColumn: edit.startColumn + replacement.length
+        }).start
+        if (source.slice(expected, expected + replacement.length) === replacement) {
+          return expected
+        }
+      } catch {
+        // Later edits can move the original line. The anchored and unique-match
+        // fallbacks below safely recover that case.
+      }
+    }
+
+    const anchored = `${edit.prefixContext}${replacement}${edit.suffixContext}`
+    if (anchored) {
+      const anchorIndex = source.indexOf(anchored)
+      if (anchorIndex >= 0 && source.indexOf(anchored, anchorIndex + 1) < 0) {
+        return anchorIndex + edit.prefixContext.length
+      }
+    }
+    if (!replacement) return -1
+    const first = source.indexOf(replacement)
+    return first >= 0 && source.indexOf(replacement, first + 1) < 0
+      ? first
+      : -1
+  }
+
+  private async restoreLatexSources(
+    folder: string,
+    connection: Connection,
+    before: Record<string, string>,
+    after: Record<string, string>
+  ): Promise<void> {
+    for (const [path, content] of Object.entries(after)) {
+      if (before[path] != null) continue
+      if (connection.kind === 'local') {
+        deleteLocalFileIfUnchanged(folder, path, content)
+      } else {
+        await deleteRemoteFileIfUnchanged(
+          connection.sshAlias ?? connection.name,
+          folder,
+          path,
+          content
+        )
+      }
+    }
+    for (const [path, content] of Object.entries(before)) {
+      if (after[path] === content) continue
+      if (after[path] == null) {
+        const parent = posix.dirname(path)
+        const name = posix.basename(path)
+        if (connection.kind === 'local') {
+          createLocalFile(folder, parent, name)
+        } else {
+          await createRemoteFile(
+            connection.sshAlias ?? connection.name,
+            folder,
+            parent,
+            name
+          )
+        }
+      }
+      await this.writeSource(folder, connection, path, content)
+    }
+  }
+
+  private async writeSource(
+    folder: string,
+    connection: Connection,
+    path: string,
+    content: string
+  ): Promise<void> {
+    if (connection.kind === 'local') {
+      writeLocalFile(folder, path, content)
+      return
+    }
+    await writeRemoteFileAsync(
+      connection.sshAlias ?? connection.name,
+      folder,
+      path,
+      content
+    )
   }
 
   private readFiles(folder: string, connection: Connection): Record<string, string> {

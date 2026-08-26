@@ -222,6 +222,12 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('latex:send-prompt', sessionId, prompt),
     sendInlineEdit: (input: SendLatexInlineEditInput) =>
       ipcRenderer.invoke('latex:send-inline-edit', input),
+    listInlineEdits: (projectId: string) =>
+      ipcRenderer.invoke('latex:list-inline-edits', projectId),
+    rollbackInlineEdit: (editId: string) =>
+      ipcRenderer.invoke('latex:rollback-inline-edit', editId),
+    deleteInlineEdit: (editId: string) =>
+      ipcRenderer.invoke('latex:delete-inline-edit', editId),
     changes: (sessionId: string) => ipcRenderer.invoke('latex:changes', sessionId),
     clearChanges: (sessionId: string) =>
       ipcRenderer.invoke('latex:clear-changes', sessionId)

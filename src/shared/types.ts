@@ -271,6 +271,34 @@ export interface SendLatexInlineEditInput {
   instruction: string
 }
 
+export type LatexInlineEditStatus =
+  | 'running'
+  | 'applied'
+  | 'failed'
+  | 'rolled-back'
+
+export interface LatexInlineEditHistory {
+  id: string
+  projectId: string
+  terminalSessionId: string
+  path: string
+  instruction: string
+  originalText: string
+  replacementText: string | null
+  modelOutput: string | null
+  startLine: number
+  startColumn: number
+  endLine: number
+  endColumn: number
+  prefixContext: string
+  suffixContext: string
+  status: LatexInlineEditStatus
+  error: string | null
+  createdAt: string
+  updatedAt: string
+  rolledBackAt: string | null
+}
+
 export interface UpdateLatexProjectInput {
   projectId: string
   mainFile: string
@@ -622,7 +650,10 @@ export interface ProjectConsoleApi {
     startChat(input: StartLatexChatInput): Promise<TerminalSession>
     setChatMode(sessionId: string, mode: LatexChatMode): Promise<void>
     sendPrompt(sessionId: string, prompt: string): Promise<void>
-    sendInlineEdit(input: SendLatexInlineEditInput): Promise<TerminalSession>
+    sendInlineEdit(input: SendLatexInlineEditInput): Promise<LatexInlineEditHistory>
+    listInlineEdits(projectId: string): Promise<LatexInlineEditHistory[]>
+    rollbackInlineEdit(editId: string): Promise<LatexInlineEditHistory>
+    deleteInlineEdit(editId: string): Promise<void>
     changes(sessionId: string): Promise<LatexChangeSet>
     clearChanges(sessionId: string): Promise<void>
   }

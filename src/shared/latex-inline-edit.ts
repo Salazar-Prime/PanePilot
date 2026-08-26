@@ -3,6 +3,9 @@ import type {
   LatexSourceSelection
 } from './types'
 
+export const LATEX_INLINE_OUTPUT_START = '__PANEPILOT_INLINE_OUTPUT_START__'
+export const LATEX_INLINE_OUTPUT_END = '__PANEPILOT_INLINE_OUTPUT_END__'
+
 export function latexSelectionLastLine(
   selection: Pick<
     LatexSourceSelection,

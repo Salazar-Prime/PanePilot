@@ -24,6 +24,10 @@ import type {
   UpdateProjectActionInput
 } from '../shared/types'
 import {
+  LATEX_INLINE_OUTPUT_END,
+  LATEX_INLINE_OUTPUT_START
+} from '../shared/latex-inline-edit'
+import {
   codexStateFromPaneTitle,
   codexThreadReferenceFromPaneTitle
 } from './codex-pane-status'
@@ -117,6 +121,17 @@ interface ActionPaneSnapshot {
   output: string
 }
 
+export interface LatexInlineExecResult {
+  exitCode: number
+  output: string
+}
+
+interface LatexInlineExecWaiter {
+  resolve(result: LatexInlineExecResult): void
+  reject(error: Error): void
+  timer: NodeJS.Timeout
+}
+
 function quote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
 }
@@ -144,6 +159,27 @@ function actionExitStatus(value: string): number | null {
   return match[2] === '1' && deadStatus != null && Number.isInteger(deadStatus)
     ? deadStatus
     : null
+}
+
+function isLatexInlineEditSession(session: TerminalSession): boolean {
+  return session.latexChat?.purpose === 'inline-edit'
+}
+
+function latexInlineExecCommand(prompt: string): string {
+  return [
+    'panepilot_inline_output=$(mktemp "${TMPDIR:-/tmp}/panepilot-inline-output.XXXXXX") || exit 1',
+    'panepilot_inline_log=$(mktemp "${TMPDIR:-/tmp}/panepilot-inline-log.XXXXXX") || { rm -f "$panepilot_inline_output"; exit 1; }',
+    'codex exec --sandbox workspace-write --skip-git-repo-check --color never ' +
+      `--output-last-message "$panepilot_inline_output" ${quote(prompt)} ` +
+      '>"$panepilot_inline_log" 2>&1',
+    'panepilot_inline_status=$?',
+    `printf '\n${LATEX_INLINE_OUTPUT_START}'`,
+    'head -c 50000 "$panepilot_inline_output" | base64 | tr -d \'\\n\'',
+    `printf '${LATEX_INLINE_OUTPUT_END}\n'`,
+    'if [ "$panepilot_inline_status" -ne 0 ]; then tail -c 16000 "$panepilot_inline_log"; fi',
+    'rm -f "$panepilot_inline_output" "$panepilot_inline_log"',
+    'exit "$panepilot_inline_status"'
+  ].join('; ')
 }
 
 export function systemBootTimeMs(
@@ -366,6 +402,10 @@ export class TerminalManager {
   private readonly remoteTmuxPaths = new Map<string, string>()
   private readonly pendingOutput = new Map<string, PendingOutput>()
   private readonly volatileOutput = new Map<string, VolatileOutput>()
+  private readonly latexInlineExecWaiters = new Map<
+    string,
+    LatexInlineExecWaiter
+  >()
   private readonly tmuxPath = resolveTmux()
   private readonly metadata: ProjectMetadataService
   private shuttingDown = false
@@ -415,7 +455,7 @@ export class TerminalManager {
   }
 
   async startLatexInlineChat(projectId: string): Promise<TerminalSession> {
-    let existing = this.store.getLatexInlineEditSession(projectId)
+    const existing = this.store.getLatexInlineEditSession(projectId)
     const project = this.store.getProject(projectId)
     if (!project || project.archived || project.type !== 'latex') {
       throw new Error('Choose an active LaTeX project.')
@@ -424,70 +464,42 @@ export class TerminalManager {
     if (!connection) throw new Error('Project connection not found.')
     this.requireProjectTmux(projectId, 'Inline editing')
 
-    if (existing) {
-      if (!['completed', 'error'].includes(existing.state)) {
-        this.attach(existing.id, 100, 30)
-        return this.requireSession(existing.id)
-      }
-      if (!existing.providerSessionId) {
-        try {
-          await this.discoverProviderSession(existing, project.folder, connection)
-        } catch {
-          // A failed first launch has no provider thread to resume. The fresh
-          // inline editor below replaces that unusable local record.
-        }
-        existing = this.store.getSession(existing.id)
-      }
-      if (existing?.providerSessionId) {
-        this.resumeAgent(existing.id)
-        return this.requireSession(existing.id)
-      }
-      if (
-        existing?.backend === 'tmux' &&
-        existing.tmuxName &&
-        this.tmuxSessionExists(connection, existing.tmuxName)
-      ) {
-        this.changeState(
-          existing,
-          'idle',
-          'Reattached the persistent inline editor.'
-        )
-        const latest = this.requireSession(existing.id)
-        this.launch(latest, project.folder, connection, 100, 30, false)
-        return this.requireSession(existing.id)
-      }
-      if (existing) {
-        this.discardPendingOutput(existing.id)
-        this.store.deleteSession(existing.id)
-      }
-    }
+    if (existing) return existing
 
-    return this.startSession(
-      {
-        projectId,
-        name: generatedTerminalName(`Inline edits · ${project.name}`),
-        profile: 'codex',
-        dangerousMode: false
-      },
-      'latex-chat',
-      (session) => {
-        this.store.attachLatexChat(session.id, {
-          projectId,
-          purpose: 'inline-edit',
-          scope: 'project',
-          sectionId: null,
-          mode: 'edit'
-        })
-      },
-      true
-    )
+    const baseName = generatedTerminalName(`Inline edits · ${project.name}`)
+    let name = baseName
+    let suffix = 2
+    while (this.tmuxSessionExists(connection, name)) {
+      const suffixText = ` ${suffix}`
+      name = `${baseName.slice(0, 80 - suffixText.length).trimEnd()}${suffixText}`
+      suffix += 1
+    }
+    const created = this.store.createSession({
+      projectId,
+      kind: 'latex-chat',
+      name,
+      profile: 'codex',
+      providerSessionName: null,
+      customCommand: null,
+      backend: 'tmux',
+      tmuxName: name,
+      dangerousMode: false
+    })
+    this.store.attachLatexChat(created.id, {
+      projectId,
+      purpose: 'inline-edit',
+      scope: 'project',
+      sectionId: null,
+      mode: 'edit'
+    })
+    return this.requireSession(created.id)
   }
 
-  async clearCodexChatAndSendPrompt(
+  async runLatexInlineEditExec(
     sessionId: string,
     prompt: string
-  ): Promise<void> {
-    const session = this.requireSession(sessionId)
+  ): Promise<LatexInlineExecResult> {
+    let session = this.requireSession(sessionId)
     if (
       session.profile !== 'codex' ||
       session.latexChat?.purpose !== 'inline-edit'
@@ -497,41 +509,81 @@ export class TerminalManager {
     if (session.state === 'running') {
       throw new Error('Wait for the current inline edit to finish before sending another.')
     }
-
-    this.attach(session.id, 100, 30)
-    if (!(await this.waitForVolatileOutput(session.id, 12_000))) {
-      throw new Error(
-        'Codex did not become ready for the inline edit. Open Inline chat and retry.'
-      )
+    const project = this.store.getProject(session.projectId)
+    const connection = project
+      ? this.store.getConnection(project.connectionId)
+      : null
+    if (!project || !connection) {
+      throw new Error('The LaTeX project connection is unavailable.')
     }
-    await this.delay(500)
+    this.requireProjectTmux(project.id, 'Inline editing')
 
+    const runtime = this.runtimes.get(session.id)
+    const cols = runtime?.cols ?? 100
+    const rows = runtime?.rows ?? 30
+    this.cancelReconnect(session.id)
+    if (runtime) this.closeRuntimeForReconnect(runtime)
+    if (session.tmuxName && this.tmuxSessionExists(connection, session.tmuxName)) {
+      this.killTmuxSession(connection, session.tmuxName)
+    }
     this.discardPendingOutput(session.id)
-    this.write(session.id, '/clear\r')
-    if (!(await this.waitForVolatileOutput(session.id, 3_000))) {
-      throw new Error(
-        'Codex did not acknowledge /clear. Open Inline chat and retry.'
+    this.store.clearSessionProviderId(session.id)
+    session = this.requireSession(session.id)
+    this.changeState(session, 'running', `${session.name} is applying an edit.`)
+
+    const result = new Promise<LatexInlineExecResult>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (!this.latexInlineExecWaiters.delete(session.id)) return
+        const timedOutRuntime = this.runtimes.get(session.id)
+        if (timedOutRuntime) this.closeRuntimeForReconnect(timedOutRuntime)
+        try {
+          if (
+            session.tmuxName &&
+            this.tmuxSessionExists(connection, session.tmuxName)
+          ) {
+            this.killTmuxSession(connection, session.tmuxName)
+          }
+        } catch {
+          // The persisted error still lets the next ask replace this exact
+          // runner after a host reconnect.
+        }
+        const latest = this.store.getSession(session.id)
+        if (latest) {
+          this.changeState(
+            latest,
+            'error',
+            `${latest.name} exceeded the 15-minute inline-edit limit.`
+          )
+        }
+        reject(new Error('Codex exceeded the 15-minute inline-edit limit.'))
+      }, 15 * 60_000)
+      timer.unref()
+      this.latexInlineExecWaiters.set(session.id, { resolve, reject, timer })
+    })
+
+    try {
+      this.launch(
+        this.requireSession(session.id),
+        project.folder,
+        connection,
+        cols,
+        rows,
+        true,
+        false,
+        latexInlineExecCommand(prompt)
       )
+    } catch (error) {
+      const normalized =
+        error instanceof Error ? error : new Error(String(error))
+      this.rejectLatexInlineExec(
+        session.id,
+        normalized
+      )
+      const latest = this.store.getSession(session.id)
+      if (latest) this.changeState(latest, 'error', `${latest.name} could not start.`)
+      return result
     }
-    await this.delay(250)
-    this.discardPendingOutput(session.id)
-    this.sendPrompt(session.id, prompt)
-  }
-
-  private async waitForVolatileOutput(
-    sessionId: string,
-    timeoutMs: number
-  ): Promise<boolean> {
-    const deadline = Date.now() + timeoutMs
-    while (Date.now() < deadline) {
-      if (this.volatileOutput.get(sessionId)?.byteLength) return true
-      await this.delay(50)
-    }
-    return Boolean(this.volatileOutput.get(sessionId)?.byteLength)
-  }
-
-  private delay(milliseconds: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, milliseconds))
+    return result
   }
 
   restoreLocalSessionsAfterReboot(
@@ -1640,6 +1692,12 @@ export class TerminalManager {
     if (runtime) {
       runtime.intentionalStop = true
     }
+    if (isLatexInlineEditSession(session)) {
+      this.rejectLatexInlineExec(
+        session.id,
+        new Error('The inline edit was stopped before it finished.')
+      )
+    }
     if (session.backend === 'tmux' && session.tmuxName) {
       const project = this.store.getProject(session.projectId)
       const connection = project ? this.store.getConnection(project.connectionId) : null
@@ -1692,6 +1750,11 @@ export class TerminalManager {
   shutdown(): void {
     if (this.shuttingDown) return
     this.shuttingDown = true
+    for (const [sessionId, waiter] of this.latexInlineExecWaiters) {
+      clearTimeout(waiter.timer)
+      waiter.reject(new Error('PanePilot closed before the inline edit finished.'))
+      this.latexInlineExecWaiters.delete(sessionId)
+    }
     for (const sessionId of this.pendingOutput.keys()) {
       this.flushOutput(sessionId, true)
     }
@@ -1720,15 +1783,18 @@ export class TerminalManager {
     cols: number,
     rows: number,
     create: boolean,
-    resumeProvider = false
+    resumeProvider = false,
+    commandOverride?: string
   ): void {
     if (this.runtimes.has(session.id)) return
-    const command = launchCommand(
-      session.profile,
-      session.customCommand,
-      session.dangerousMode,
-      resumeProvider ? session.providerSessionId : null
-    )
+    const command =
+      commandOverride ??
+      launchCommand(
+        session.profile,
+        session.customCommand,
+        session.dangerousMode,
+        resumeProvider ? session.providerSessionId : null
+      )
     const child = this.spawnTerminal(session, folder, connection, command, cols, rows, create)
     const screen = new HeadlessTerminal({
       cols,
@@ -1782,6 +1848,19 @@ export class TerminalManager {
       const latest = this.store.getSession(session.id)
       if (!latest) return
       if (runtime.intentionalStop || latest.state === 'completed') return
+      if (isLatexInlineEditSession(latest)) {
+        const error = new Error(
+          `${latest.name} exited before Codex returned an inline-edit result.`
+        )
+        this.rejectLatexInlineExec(latest.id, error)
+        this.changeState(
+          latest,
+          exitCode === 0 ? 'completed' : 'error',
+          error.message
+        )
+        this.emitTransport(latest.id, 'detached', 0, error.message)
+        return
+      }
       if (
         connection.kind === 'ssh' &&
         latest.backend === 'tmux' &&
@@ -1827,7 +1906,13 @@ export class TerminalManager {
     connection: Connection
   ): void {
     if (this.shuttingDown) return
-    if (!AGENT_PROFILES.has(runtime.session.profile) || runtime.session.providerSessionId) return
+    if (
+      !AGENT_PROFILES.has(runtime.session.profile) ||
+      runtime.session.providerSessionId ||
+      isLatexInlineEditSession(runtime.session)
+    ) {
+      return
+    }
     if (runtime.providerTimer || runtime.providerAttempts >= 45) return
     runtime.providerTimer = setTimeout(() => {
       if (this.shuttingDown) return
@@ -1968,7 +2053,7 @@ export class TerminalManager {
             )
             remoteLaunchCommand =
               `(${metadataCommand}) || true; ${
-                session.kind === 'action'
+                session.kind === 'action' || isLatexInlineEditSession(session)
                   ? actionRunCommand(remoteTmuxPath, remoteLaunchCommand)
                   : remoteLaunchCommand
               }`
@@ -2017,8 +2102,8 @@ export class TerminalManager {
               undefined,
               false,
               this.tmuxPath
-            )}) || true; ${
-              session.kind === 'action'
+          )}) || true; ${
+              session.kind === 'action' || isLatexInlineEditSession(session)
                 ? actionRunCommand(this.tmuxPath, command)
                 : command
             }`
@@ -2191,10 +2276,30 @@ export class TerminalManager {
     this.volatileOutput.delete(sessionId)
   }
 
+  private resolveLatexInlineExec(
+    sessionId: string,
+    result: LatexInlineExecResult
+  ): void {
+    const waiter = this.latexInlineExecWaiters.get(sessionId)
+    if (!waiter) return
+    clearTimeout(waiter.timer)
+    this.latexInlineExecWaiters.delete(sessionId)
+    waiter.resolve(result)
+  }
+
+  private rejectLatexInlineExec(sessionId: string, error: Error): void {
+    const waiter = this.latexInlineExecWaiters.get(sessionId)
+    if (!waiter) return
+    clearTimeout(waiter.timer)
+    this.latexInlineExecWaiters.delete(sessionId)
+    waiter.reject(error)
+  }
+
   private scheduleActionCompletion(runtime: Runtime): void {
     if (
       this.shuttingDown ||
-      runtime.session.kind !== 'action' ||
+      (runtime.session.kind !== 'action' &&
+        !isLatexInlineEditSession(runtime.session)) ||
       runtime.session.backend !== 'tmux' ||
       !runtime.session.tmuxName ||
       runtime.actionTimer ||
@@ -2227,6 +2332,39 @@ export class TerminalManager {
     }
     if (!snapshot) {
       this.scheduleActionCompletion(runtime)
+      return
+    }
+
+    if (isLatexInlineEditSession(runtime.session)) {
+      runtime.outputClosed = true
+      const streamedOutput =
+        this.volatileOutput.get(runtime.session.id)?.chunks.join('') ?? ''
+      const output = retainedVolatileTerminalOutput(
+        snapshot.output || streamedOutput
+      )
+      this.volatileOutput.set(runtime.session.id, {
+        chunks: output ? [output] : [],
+        byteLength: Buffer.byteLength(output, 'utf8')
+      })
+      const latest = this.store.getSession(runtime.session.id)
+      if (!latest) {
+        this.rejectLatexInlineExec(
+          runtime.session.id,
+          new Error('The inline-edit session disappeared before completion.')
+        )
+        return
+      }
+      const state = snapshot.exitCode === 0 ? 'response-ready' : 'error'
+      const message =
+        snapshot.exitCode === 0
+          ? `${latest.name} applied an inline edit.`
+          : `${latest.name} exited with code ${snapshot.exitCode}.`
+      this.changeState(latest, state, message)
+      this.emitTransport(latest.id, 'detached', 0, message)
+      this.resolveLatexInlineExec(latest.id, {
+        exitCode: snapshot.exitCode,
+        output
+      })
       return
     }
 
