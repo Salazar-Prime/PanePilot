@@ -87,8 +87,6 @@ if os.path.commonpath([root, target]) != root:
 if not os.path.isfile(target):
     raise RuntimeError("The requested path is not a file.")
 size = os.path.getsize(target)
-with open(target, "rb") as handle:
-    content = handle.read(1024 * 1024)
 image_mimes = {
     ".avif": "image/avif",
     ".bmp": "image/bmp",
@@ -100,12 +98,15 @@ image_mimes = {
     ".webp": "image/webp",
 }
 image_mime = image_mimes.get(os.path.splitext(target)[1].lower())
-image_data = base64.b64encode(content).decode("ascii") if image_mime and size <= 1024 * 1024 else None
+preview_limit = 5 * 1024 * 1024 if image_mime else 1024 * 1024
+with open(target, "rb") as handle:
+    content = handle.read(preview_limit)
+image_data = base64.b64encode(content).decode("ascii") if image_mime and size <= preview_limit else None
 binary = image_mime is not None or b"\0" in content
 print(json.dumps({
     "path": payload["relativePath"],
     "content": "" if binary else base64.b64encode(content).decode("ascii"),
-    "truncated": size > 1024 * 1024,
+    "truncated": size > preview_limit,
     "binary": binary,
     "imageMimeType": image_mime,
     "imageDataUrl": None if image_data is None else "data:" + image_mime + ";base64," + image_data,
@@ -182,8 +183,6 @@ if os.path.isdir(target):
     }))
 elif os.path.isfile(target):
     size = os.path.getsize(target)
-    with open(target, "rb") as handle:
-        content = handle.read(1024 * 1024)
     image_mimes = {
         ".avif": "image/avif",
         ".bmp": "image/bmp",
@@ -195,7 +194,10 @@ elif os.path.isfile(target):
         ".webp": "image/webp",
     }
     image_mime = image_mimes.get(os.path.splitext(target)[1].lower())
-    image_data = base64.b64encode(content).decode("ascii") if image_mime and size <= 1024 * 1024 else None
+    preview_limit = 5 * 1024 * 1024 if image_mime else 1024 * 1024
+    with open(target, "rb") as handle:
+        content = handle.read(preview_limit)
+    image_data = base64.b64encode(content).decode("ascii") if image_mime and size <= preview_limit else None
     binary = image_mime is not None or b"\0" in content
     path = relative(target)
     directory = os.path.dirname(target)
@@ -207,7 +209,7 @@ elif os.path.isfile(target):
         "preview": {
             "path": path,
             "content": "" if binary else base64.b64encode(content).decode("ascii"),
-            "truncated": size > 1024 * 1024,
+            "truncated": size > preview_limit,
             "binary": binary,
             "imageMimeType": image_mime,
             "imageDataUrl": None if image_data is None else "data:" + image_mime + ";base64," + image_data,
@@ -621,10 +623,12 @@ export function previewRemoteFile(
   root: string,
   relativePath: string
 ): FilePreview {
-  const preview = runRemotePython<FilePreview>(sshAlias, PREVIEW_FILE_SCRIPT, {
-    root,
-    relativePath
-  })
+  const preview = runRemotePython<FilePreview>(
+    sshAlias,
+    PREVIEW_FILE_SCRIPT,
+    { root, relativePath },
+    8 * 1024 * 1024
+  )
   if (!preview.binary) preview.content = Buffer.from(preview.content, 'base64').toString('utf8')
   return preview
 }
@@ -637,7 +641,8 @@ export async function previewRemoteFileAsync(
   const preview = await runRemotePythonAsync<FilePreview>(
     sshAlias,
     PREVIEW_FILE_SCRIPT,
-    { root, relativePath }
+    { root, relativePath },
+    8 * 1024 * 1024
   )
   if (!preview.binary) {
     preview.content = Buffer.from(preview.content, 'base64').toString('utf8')

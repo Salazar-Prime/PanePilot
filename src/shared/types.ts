@@ -271,6 +271,28 @@ export interface SendLatexInlineEditInput {
   instruction: string
 }
 
+export interface LatexComment {
+  id: string
+  projectId: string
+  path: string
+  body: string
+  selectedText: string
+  startLine: number
+  startColumn: number
+  endLine: number
+  endColumn: number
+  prefixContext: string
+  suffixContext: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateLatexCommentInput {
+  projectId: string
+  selection: LatexSourceSelection
+  body: string
+}
+
 export type LatexInlineEditStatus =
   | 'running'
   | 'applied'
@@ -654,6 +676,9 @@ export interface ProjectConsoleApi {
     listInlineEdits(projectId: string): Promise<LatexInlineEditHistory[]>
     rollbackInlineEdit(editId: string): Promise<LatexInlineEditHistory>
     deleteInlineEdit(editId: string): Promise<void>
+    listComments(projectId: string): Promise<LatexComment[]>
+    createComment(input: CreateLatexCommentInput): Promise<LatexComment>
+    deleteComment(commentId: string): Promise<void>
     changes(sessionId: string): Promise<LatexChangeSet>
     clearChanges(sessionId: string): Promise<void>
   }

@@ -71,6 +71,29 @@ describe('local file editing', () => {
     expect(preview.imageDataUrl).toBe(`data:image/png;base64,${png.toString('base64')}`)
   })
 
+  it('allows image previews up to 5 MB while keeping text previews at 1 MB', () => {
+    const root = mkdtempSync(join(tmpdir(), 'panepilot-image-limit-'))
+    temporaryRoots.push(root)
+    const twoMegabytes = Buffer.alloc(2 * 1024 * 1024, 0x61)
+    writeFileSync(join(root, 'figure.png'), twoMegabytes)
+    writeFileSync(join(root, 'large.txt'), twoMegabytes)
+    writeFileSync(
+      join(root, 'too-large.png'),
+      Buffer.alloc(5 * 1024 * 1024 + 1, 0x62)
+    )
+
+    const image = previewLocalFile(root, 'figure.png')
+    const text = previewLocalFile(root, 'large.txt')
+    const tooLarge = previewLocalFile(root, 'too-large.png')
+
+    expect(image.truncated).toBe(false)
+    expect(image.imageDataUrl).toContain('data:image/png;base64,')
+    expect(text.truncated).toBe(true)
+    expect(Buffer.byteLength(text.content)).toBe(1024 * 1024)
+    expect(tooLarge.truncated).toBe(true)
+    expect(tooLarge.imageDataUrl).toBeNull()
+  })
+
   it('opens project directories with their file listing', () => {
     const root = mkdtempSync(join(tmpdir(), 'panepilot-directory-links-'))
     temporaryRoots.push(root)

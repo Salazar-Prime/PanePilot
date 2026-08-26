@@ -10,6 +10,7 @@ import type {
   LatexChatMode,
   LatexChatPurpose,
   LatexChatScope,
+  LatexComment,
   LatexInlineEditHistory,
   LatexInlineEditStatus,
   LatexProjectDetails,
@@ -113,6 +114,22 @@ type LatexInlineEditRow = {
   created_at: string
   updated_at: string
   rolled_back_at: string | null
+}
+
+type LatexCommentRow = {
+  id: string
+  project_id: string
+  relative_path: string
+  body: string
+  selected_text: string
+  start_line: number
+  start_column: number
+  end_line: number
+  end_column: number
+  prefix_context: string
+  suffix_context: string
+  created_at: string
+  updated_at: string
 }
 
 export interface ParsedLatexSection {
@@ -392,6 +409,24 @@ function mapLatexInlineEdit(row: LatexInlineEditRow): LatexInlineEditHistory {
   }
 }
 
+function mapLatexComment(row: LatexCommentRow): LatexComment {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    path: row.relative_path,
+    body: row.body,
+    selectedText: row.selected_text,
+    startLine: row.start_line,
+    startColumn: row.start_column,
+    endLine: row.end_line,
+    endColumn: row.end_column,
+    prefixContext: row.prefix_context,
+    suffixContext: row.suffix_context,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
 function mapSession(
   row: SessionRow,
   latexChat: LatexChatAttachment | null = null,
@@ -640,6 +675,22 @@ export class Store {
         rolled_back_at TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS latex_comments (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        relative_path TEXT NOT NULL,
+        body TEXT NOT NULL,
+        selected_text TEXT NOT NULL,
+        start_line INTEGER NOT NULL,
+        start_column INTEGER NOT NULL,
+        end_line INTEGER NOT NULL,
+        end_column INTEGER NOT NULL,
+        prefix_context TEXT NOT NULL DEFAULT '',
+        suffix_context TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS speech_settings (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         provider TEXT NOT NULL DEFAULT 'google-neural2'
@@ -781,6 +832,8 @@ export class Store {
         ON latex_chat_sessions(project_id) WHERE purpose = 'inline-edit';
       CREATE INDEX IF NOT EXISTS latex_inline_edits_project_idx
         ON latex_inline_edits(project_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS latex_comments_project_path_idx
+        ON latex_comments(project_id, relative_path, start_line, created_at);
       CREATE INDEX IF NOT EXISTS project_actions_project_idx
         ON project_actions(project_id, created_at);
       CREATE INDEX IF NOT EXISTS google_drive_files_drive_id_idx
@@ -789,7 +842,7 @@ export class Store {
         ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
-      PRAGMA user_version = 16;
+      PRAGMA user_version = 17;
     `)
     this.migrateLegacyTerminalOutput()
   }
@@ -1624,6 +1677,80 @@ export class Store {
       throw new Error('Wait for this inline edit to finish before deleting it.')
     }
     this.db.prepare('DELETE FROM latex_inline_edits WHERE id = ?').run(id)
+  }
+
+  createLatexComment(input: {
+    projectId: string
+    path: string
+    body: string
+    selectedText: string
+    startLine: number
+    startColumn: number
+    endLine: number
+    endColumn: number
+    prefixContext: string
+    suffixContext: string
+  }): LatexComment {
+    const project = this.getProject(input.projectId)
+    if (!project || project.type !== 'latex') {
+      throw new Error('LaTeX project not found.')
+    }
+    const id = randomUUID()
+    const timestamp = now()
+    this.db
+      .prepare(
+        `INSERT INTO latex_comments
+         (id, project_id, relative_path, body, selected_text, start_line,
+          start_column, end_line, end_column, prefix_context, suffix_context,
+          created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.projectId,
+        input.path,
+        input.body,
+        input.selectedText,
+        input.startLine,
+        input.startColumn,
+        input.endLine,
+        input.endColumn,
+        input.prefixContext,
+        input.suffixContext,
+        timestamp,
+        timestamp
+      )
+    return this.getLatexComment(id)!
+  }
+
+  getLatexComment(id: string): LatexComment | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, project_id, relative_path, body, selected_text,
+                start_line, start_column, end_line, end_column,
+                prefix_context, suffix_context, created_at, updated_at
+         FROM latex_comments WHERE id = ?`
+      )
+      .get(id) as LatexCommentRow | undefined
+    return row ? mapLatexComment(row) : null
+  }
+
+  listLatexComments(projectId: string): LatexComment[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, project_id, relative_path, body, selected_text,
+                start_line, start_column, end_line, end_column,
+                prefix_context, suffix_context, created_at, updated_at
+         FROM latex_comments
+         WHERE project_id = ?
+         ORDER BY relative_path, start_line, start_column, created_at, id`
+      )
+      .all(projectId) as LatexCommentRow[]
+    return rows.map(mapLatexComment)
+  }
+
+  deleteLatexComment(id: string): void {
+    this.db.prepare('DELETE FROM latex_comments WHERE id = ?').run(id)
   }
 
   private outputBySessionForProject(projectId: string): Map<string, string> {

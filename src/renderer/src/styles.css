@@ -4395,6 +4395,14 @@ button.type-switcher {
   grid-template-columns: 204px minmax(0, 1fr);
 }
 
+.latex-manuscript.map-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.latex-manuscript.map-hidden > .latex-outline {
+  display: none;
+}
+
 .latex-outline {
   display: flex;
   min-width: 0;
@@ -4416,12 +4424,15 @@ button.type-switcher {
 }
 
 .latex-outline > header {
-  flex-wrap: wrap;
+  display: grid;
   align-content: center;
+  grid-template-columns: minmax(0, 1fr) 25px 25px;
+  grid-template-rows: auto 25px;
 }
 
 .latex-outline > header .eyebrow {
-  width: calc(100% - 28px);
+  width: auto;
+  grid-column: 1 / -1;
 }
 
 .latex-outline > header strong {
@@ -4434,7 +4445,7 @@ button.type-switcher {
 .latex-outline > header .icon-button {
   width: 25px;
   height: 25px;
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .latex-outline-main,
@@ -4616,6 +4627,69 @@ button.type-switcher {
   font-size: 8px;
 }
 
+.latex-layout-button {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: #7c8593;
+  border-color: #303642;
+  background: #141820;
+}
+
+.latex-layout-button:hover,
+.latex-layout-button:focus-visible,
+.latex-comments-toggle.active,
+.latex-autosave-toggle.active {
+  color: #e3d3b7;
+  border-color: #715a36;
+  outline: none;
+  background: #251e14;
+}
+
+.latex-autosave-toggle.active {
+  color: #9dd7c2;
+  border-color: #376654;
+  background: #14241e;
+}
+
+.latex-save-error {
+  display: flex;
+  min-height: 31px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 12px;
+  color: #e2a1a8;
+  border-bottom: 1px solid #53313a;
+  background: #25151a;
+  font-size: 8px;
+}
+
+.latex-save-error > span {
+  min-width: 0;
+  flex: 1;
+}
+
+.latex-save-error > button {
+  display: grid;
+  width: 21px;
+  height: 21px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  color: #b57982;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.latex-save-error > button:hover,
+.latex-save-error > button:focus-visible {
+  color: #ffe6e9;
+  outline: 1px solid #73434c;
+}
+
 .latex-inline-chat-button {
   display: flex;
   flex: 0 0 auto;
@@ -4715,14 +4789,38 @@ button.type-switcher {
   font-family: inherit;
 }
 
-.latex-editor-shell {
-  position: relative;
+.latex-editor-stage {
+  display: grid;
+  min-width: 0;
   min-height: 0;
   flex: 1;
+  grid-template-columns: minmax(0, 1fr) 252px;
+}
+
+.latex-manuscript.comments-hidden .latex-editor-stage {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.latex-editor-shell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
 }
 
 .latex-editor-shell.loading {
   opacity: 0.55;
+}
+
+.latex-editor-shell .monaco-hover .hover-contents img {
+  display: block;
+  width: auto;
+  max-width: min(360px, 68vw);
+  max-height: 240px;
+  margin: 2px 0 7px;
+  object-fit: contain;
+  border: 1px solid #4d402c;
+  background: #090b0f;
+  box-shadow: 0 8px 24px #0009;
 }
 
 .latex-inline-edit {
@@ -4766,6 +4864,46 @@ button.type-switcher {
   font-size: 8px;
   white-space: nowrap;
   backdrop-filter: blur(8px);
+}
+
+.latex-selection-actions {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid #52609b;
+  border-radius: 5px;
+  background: #171d32ee;
+  box-shadow: 0 5px 18px #0008;
+  backdrop-filter: blur(8px);
+}
+
+.latex-selection-actions .latex-inline-chip {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.latex-comment-chip {
+  display: flex;
+  height: 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  color: #dbc49d;
+  border: 0;
+  border-left: 1px solid #5d5260;
+  background: #221c19;
+  cursor: pointer;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.latex-comment-chip:hover,
+.latex-comment-chip:focus-visible {
+  color: #fff0d0;
+  outline: none;
+  background: #342719;
 }
 
 .latex-inline-chip:hover,
@@ -4897,6 +5035,256 @@ button.type-switcher {
 .latex-inline-submit:disabled {
   cursor: default;
   opacity: 0.45;
+}
+
+.latex-comment-composer::before {
+  background: #c99a52;
+  box-shadow: 0 0 8px #c99a5266;
+}
+
+.latex-comment-composer .latex-inline-card {
+  border-color: #665034;
+}
+
+.latex-comment-composer .latex-inline-card > header {
+  border-bottom-color: #3d3122;
+  background: #1d1813;
+}
+
+.latex-comment-composer .latex-inline-card > header > span {
+  color: #e1c18d;
+}
+
+.latex-comment-composer .latex-inline-card textarea:focus {
+  border-color: #987344;
+  box-shadow: 0 0 0 2px #805f3133;
+}
+
+.latex-comment-submit {
+  display: flex;
+  height: 25px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  color: #fff0d0;
+  border: 1px solid #957044;
+  border-radius: 5px;
+  background: #60451f;
+  cursor: pointer;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.latex-comment-submit:hover:not(:disabled),
+.latex-comment-submit:focus-visible:not(:disabled) {
+  border-color: #c99a52;
+  outline: none;
+  background: #78572a;
+}
+
+.latex-comment-submit:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.latex-comment-selection {
+  border-bottom: 1px solid #d1a158;
+  background: #c99a5226;
+}
+
+.latex-comment-gutter {
+  border-left: 2px solid #c99a52;
+  margin-left: 3px;
+}
+
+.latex-comment-margin {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid #30291f;
+  background:
+    linear-gradient(90deg, #17140f 0, #0d0f14 14px, #0d0f14 100%);
+}
+
+.latex-comment-margin::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 10px;
+  width: 1px;
+  background: #755a3338;
+  content: "";
+}
+
+.latex-comment-margin-label {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #6f5b3c;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 6px;
+  letter-spacing: 0.1em;
+}
+
+.latex-comment-margin-label strong {
+  color: #aa8147;
+  font-size: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.latex-comment-card {
+  position: absolute;
+  right: 8px;
+  z-index: 2;
+  display: grid;
+  width: calc(100% - 24px);
+  min-height: 54px;
+  grid-template-columns: minmax(0, 1fr) 25px;
+  overflow: visible;
+  border: 1px solid #493b28;
+  border-left: 2px solid #c99a52;
+  background: #17140ff2;
+  box-shadow: 0 7px 18px #0007;
+  transform: translateY(-2px);
+}
+
+.latex-comment-card::before {
+  position: absolute;
+  top: 11px;
+  left: -15px;
+  width: 13px;
+  height: 1px;
+  background: #c99a52;
+  content: "";
+}
+
+.latex-comment-card-main {
+  display: grid;
+  min-width: 0;
+  align-items: start;
+  gap: 6px;
+  padding: 7px 4px 7px 7px;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  grid-template-columns: 24px minmax(0, 1fr);
+  text-align: left;
+}
+
+.latex-comment-card-main:hover,
+.latex-comment-card-main:focus-visible {
+  outline: none;
+  background: #241d13;
+}
+
+.latex-comment-number {
+  color: #d4a65f;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.latex-comment-card-main > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.latex-comment-card-main strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #d6d0c5;
+  font-size: 8px;
+  font-weight: 620;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.latex-comment-card-main small {
+  overflow: hidden;
+  color: #796b58;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 7px;
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-comment-delete {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  margin: 4px 3px 0 0;
+  padding: 0;
+  color: #665d51;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.latex-comment-delete:hover,
+.latex-comment-delete:focus-visible {
+  color: #dc8d86;
+  outline: 1px solid #75473f;
+}
+
+.latex-comment-card > em {
+  position: absolute;
+  right: 5px;
+  bottom: -9px;
+  padding: 1px 4px;
+  color: #c48a83;
+  background: #281719;
+  font-size: 6px;
+  font-style: normal;
+}
+
+.latex-comment-card.stale {
+  border-color: #51343a;
+  border-left-color: #a95e65;
+}
+
+.latex-comment-card.stale::before {
+  background: #a95e65;
+}
+
+.latex-comment-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 20px;
+  flex-direction: column;
+  color: #66583f;
+  font-size: 8px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.latex-comment-error {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 18px;
+  z-index: 5;
+  margin: 0;
+  padding: 6px 7px;
+  color: #e1a0a7;
+  border: 1px solid #613740;
+  background: #27161a;
+  font-size: 7px;
+  line-height: 1.4;
 }
 
 .latex-inline-card > p {
@@ -6114,11 +6502,19 @@ button.type-switcher {
 
 @media (max-width: 1190px) {
   .latex-manuscript {
+    grid-template-columns: 176px minmax(0, 1fr);
+  }
+
+  .latex-manuscript.map-hidden {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .latex-outline {
+  .latex-manuscript.map-hidden > .latex-outline {
     display: none;
+  }
+
+  .latex-editor-stage {
+    grid-template-columns: minmax(0, 1fr) 220px;
   }
 
   .actions-panel,

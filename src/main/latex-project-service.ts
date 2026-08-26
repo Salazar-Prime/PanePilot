@@ -11,8 +11,10 @@ import { posix, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import type {
   Connection,
+  CreateLatexCommentInput,
   LatexChangeHighlight,
   LatexChangeSet,
+  LatexComment,
   LatexFileChanges,
   LatexInlineEditHistory,
   LatexPdfDocument,
@@ -61,6 +63,7 @@ const COMPILE_TIMEOUT_MS = 180_000
 const MAX_PROMPT_LENGTH = 50_000
 const MAX_INLINE_INSTRUCTION_LENGTH = 10_000
 const MAX_INLINE_SELECTION_LENGTH = 20_000
+const MAX_COMMENT_LENGTH = 10_000
 const execFileAsync = promisify(execFile)
 const LOCAL_TEX_PATHS = [
   '/Library/TeX/texbin',
@@ -1196,6 +1199,64 @@ export class LatexProjectService {
 
   deleteInlineEdit(editId: string): void {
     this.store.deleteLatexInlineEdit(editId)
+  }
+
+  listComments(projectId: string): LatexComment[] {
+    this.requireProject(projectId)
+    return this.store.listLatexComments(projectId)
+  }
+
+  createComment(input: CreateLatexCommentInput): LatexComment {
+    if (!input?.selection) throw new Error('Select some LaTeX source to comment on.')
+    const body = input.body.trim()
+    if (!body) throw new Error('Write a comment for the selected source.')
+    if (body.length > MAX_COMMENT_LENGTH || /[\u0000\u0003\u0004]/.test(body)) {
+      throw new Error('Comments must be 10,000 characters or fewer and cannot contain control characters.')
+    }
+
+    const path = normalizeProjectRelativePath(
+      input.selection.path,
+      'Selected LaTeX file',
+      { extension: '.tex' }
+    )
+    const selection: LatexSourceSelection = { ...input.selection, path }
+    if (
+      !selection.text ||
+      selection.text.length > MAX_INLINE_SELECTION_LENGTH ||
+      /[\u0000\u0003\u0004]/.test(selection.text)
+    ) {
+      throw new Error('Select between 1 and 20,000 characters for a comment.')
+    }
+
+    const { project, connection } = this.requireProject(input.projectId)
+    const source = this.readFiles(project.folder, connection)[path]
+    if (source == null) throw new Error(`LaTeX source file “${path}” was not found.`)
+    const selectedText = extractLatexSelection(source, selection)
+    if (selectedText !== selection.text.replace(/\r\n?/g, '\n')) {
+      throw new Error(
+        'The selected source changed before the comment was added. Select it again and retry.'
+      )
+    }
+    const offsets = latexSelectionOffsets(source, selection)
+    return this.store.createLatexComment({
+      projectId: project.id,
+      path,
+      body,
+      selectedText,
+      startLine: selection.startLine,
+      startColumn: selection.startColumn,
+      endLine: selection.endLine,
+      endColumn: selection.endColumn,
+      prefixContext: source.slice(Math.max(0, offsets.start - 240), offsets.start),
+      suffixContext: source.slice(offsets.end, offsets.end + 240)
+    })
+  }
+
+  deleteComment(commentId: string): void {
+    const comment = this.store.getLatexComment(commentId)
+    if (!comment) return
+    this.requireProject(comment.projectId)
+    this.store.deleteLatexComment(comment.id)
   }
 
   changes(sessionId: string): LatexChangeSet {

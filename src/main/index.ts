@@ -10,6 +10,7 @@ import {
 } from 'electron'
 import type {
   ConnectGoogleDriveInput,
+  CreateLatexCommentInput,
   CreatePortForwardInput,
   CreateProjectInput,
   CreateProjectActionInput,
@@ -302,6 +303,16 @@ function registerIpc(): void {
   )
   ipcMain.handle('latex:delete-inline-edit', (_event, editId: string) => {
     latex.deleteInlineEdit(editId)
+  })
+  ipcMain.handle('latex:list-comments', (_event, projectId: string) =>
+    latex.listComments(projectId)
+  )
+  ipcMain.handle(
+    'latex:create-comment',
+    (_event, input: CreateLatexCommentInput) => latex.createComment(input)
+  )
+  ipcMain.handle('latex:delete-comment', (_event, commentId: string) => {
+    latex.deleteComment(commentId)
   })
   ipcMain.handle('latex:changes', (_event, sessionId: string) =>
     latex.changes(sessionId)

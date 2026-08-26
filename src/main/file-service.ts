@@ -18,7 +18,8 @@ import {
 import { dirname, extname, relative, resolve, sep } from 'node:path'
 import type { FileEntry, FileOpenResult, FilePreview } from '../shared/types'
 
-const PREVIEW_LIMIT = 1024 * 1024
+const TEXT_PREVIEW_LIMIT = 1024 * 1024
+const IMAGE_PREVIEW_LIMIT = 5 * 1024 * 1024
 const SEARCH_RESULT_LIMIT = 200
 const SEARCH_SCAN_LIMIT = 20_000
 const IMAGE_MIME_TYPES: Record<string, string> = {
@@ -172,7 +173,9 @@ export function previewLocalFile(root: string, requested: string): FilePreview {
   const filePath = boundedPath(root, requested)
   const stat = statSync(filePath)
   if (!stat.isFile()) throw new Error('The requested path is not a file.')
-  const buffer = Buffer.allocUnsafe(Math.min(stat.size, PREVIEW_LIMIT))
+  const imageMimeType = IMAGE_MIME_TYPES[extname(filePath).toLocaleLowerCase()] ?? null
+  const previewLimit = imageMimeType ? IMAGE_PREVIEW_LIMIT : TEXT_PREVIEW_LIMIT
+  const buffer = Buffer.allocUnsafe(Math.min(stat.size, previewLimit))
   const descriptor = openSync(filePath, 'r')
   let bytesRead = 0
   try {
@@ -181,16 +184,15 @@ export function previewLocalFile(root: string, requested: string): FilePreview {
     closeSync(descriptor)
   }
   const bytes = buffer.subarray(0, bytesRead)
-  const imageMimeType = IMAGE_MIME_TYPES[extname(filePath).toLocaleLowerCase()] ?? null
   const imageDataUrl =
-    imageMimeType && stat.size <= PREVIEW_LIMIT
+    imageMimeType && stat.size <= IMAGE_PREVIEW_LIMIT
       ? `data:${imageMimeType};base64,${bytes.toString('base64')}`
       : null
   const binary = Boolean(imageMimeType) || bytes.includes(0)
   return {
     path: requested,
     content: binary ? '' : bytes.toString('utf8'),
-    truncated: stat.size > PREVIEW_LIMIT,
+    truncated: stat.size > previewLimit,
     binary,
     imageMimeType,
     imageDataUrl
@@ -225,7 +227,7 @@ export function openLocalPath(root: string, requested: string): FileOpenResult {
 export function writeLocalFile(root: string, requested: string, content: string): void {
   const filePath = boundedPath(root, requested)
   if (!statSync(filePath).isFile()) throw new Error('The requested path is not a file.')
-  if (Buffer.byteLength(content, 'utf8') > PREVIEW_LIMIT) {
+  if (Buffer.byteLength(content, 'utf8') > TEXT_PREVIEW_LIMIT) {
     throw new Error('PanePilot only edits files up to 1 MB.')
   }
   writeFileSync(filePath, content, 'utf8')

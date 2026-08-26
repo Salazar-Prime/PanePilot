@@ -877,7 +877,7 @@ function FilesPanelInstance({
               {preview.truncated && (
                 <small>
                   {preview.imageMimeType
-                    ? 'Image exceeds 1 MB · preview disabled'
+                    ? 'Image exceeds 5 MB · preview disabled'
                     : 'First 1 MB · editing disabled'}
                 </small>
               )}
@@ -1074,7 +1074,7 @@ function FilesPanelInstance({
               </div>
             ) : preview.imageMimeType ? (
               <div className="preview-empty">
-                This image is larger than the 1 MB preview limit. Download it to
+                This image is larger than the 5 MB preview limit. Download it to
                 view the full file.
               </div>
             ) : preview.binary ? (

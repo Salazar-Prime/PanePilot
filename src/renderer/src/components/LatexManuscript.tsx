@@ -15,16 +15,23 @@ import {
   FileText,
   FolderSearch,
   History,
+  MessageSquarePlus,
+  MessageSquareText,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   RotateCcw,
   Save,
+  SaveAll,
   Send,
   Sparkles,
   Trash2,
   X
 } from 'lucide-react'
 import type {
+  FilePreview,
   LatexChangeSet,
+  LatexComment,
   LatexInlineEditHistory,
   LatexSection,
   LatexSourceSelection,
@@ -33,10 +40,16 @@ import type {
 } from '@shared/types'
 import { latexMonarchLanguage } from '../lib/latexLanguage'
 import {
+  loadLatexManuscriptLayout,
+  saveLatexManuscriptLayout
+} from '../lib/latexManuscriptLayout'
+import { latexGraphicAtColumn } from '../lib/latexGraphics'
+import {
   loadLatexManuscriptView,
   saveLatexManuscriptView
 } from '../lib/latexViewMemory'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
+import type { TerminalFileTarget } from '../lib/terminalFileLinks'
 
 loader.config({ monaco })
 self.MonacoEnvironment = {
@@ -79,6 +92,7 @@ interface Props {
   project: Project
   workspace: LatexWorkspace
   inlineEdits: LatexInlineEditHistory[]
+  comments: LatexComment[]
   inlineRunning: boolean
   selectedSectionId: string | null
   chatCounts: Map<string, number>
@@ -93,6 +107,12 @@ interface Props {
   ): Promise<LatexInlineEditHistory>
   onRollbackInlineEdit(editId: string): Promise<LatexInlineEditHistory>
   onDeleteInlineEdit(editId: string): Promise<void>
+  onCreateComment(
+    selection: LatexSourceSelection,
+    body: string
+  ): Promise<LatexComment>
+  onDeleteComment(commentId: string): Promise<void>
+  onOpenFile(target: TerminalFileTarget): void
 }
 
 interface InlineEditState {
@@ -105,15 +125,82 @@ interface InlineEditState {
   error: string
 }
 
+interface CommentComposerState {
+  selection: LatexSourceSelection
+  top: number
+  left: number
+  above: boolean
+  body: string
+  error: string
+}
+
+interface CommentAnchor {
+  top: number | null
+  range: monaco.Range | null
+  stale: boolean
+}
+
+function locateCommentRange(
+  model: monaco.editor.ITextModel,
+  comment: LatexComment
+): { range: monaco.Range; stale: boolean } {
+  const fixed = model.validateRange(
+    new monaco.Range(
+      comment.startLine,
+      comment.startColumn,
+      comment.endLine,
+      comment.endColumn
+    )
+  )
+  if (model.getValueInRange(fixed) === comment.selectedText) {
+    return { range: fixed, stale: false }
+  }
+
+  const source = model.getValue()
+  const anchored = `${comment.prefixContext}${comment.selectedText}${comment.suffixContext}`
+  const anchoredAt = anchored ? source.indexOf(anchored) : -1
+  if (anchoredAt >= 0 && source.indexOf(anchored, anchoredAt + 1) < 0) {
+    const start = anchoredAt + comment.prefixContext.length
+    return {
+      range: monaco.Range.fromPositions(
+        model.getPositionAt(start),
+        model.getPositionAt(start + comment.selectedText.length)
+      ),
+      stale: false
+    }
+  }
+
+  const first = source.indexOf(comment.selectedText)
+  if (first >= 0 && source.indexOf(comment.selectedText, first + 1) < 0) {
+    return {
+      range: monaco.Range.fromPositions(
+        model.getPositionAt(first),
+        model.getPositionAt(first + comment.selectedText.length)
+      ),
+      stale: false
+    }
+  }
+  return { range: fixed, stale: true }
+}
+
 function inlineEditStatusLabel(status: LatexInlineEditHistory['status']): string {
   if (status === 'rolled-back') return 'Rolled back'
   return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+function latexOutlineSignature(source: string): string {
+  return (
+    source.match(
+      /^\s*\\(?:part|chapter|section|subsection|subsubsection|paragraph|subparagraph|input|include)\b.*$/gm
+    ) ?? []
+  ).join('\n')
 }
 
 export function LatexManuscript({
   project,
   workspace,
   inlineEdits,
+  comments,
   inlineRunning,
   selectedSectionId,
   chatCounts,
@@ -124,7 +211,10 @@ export function LatexManuscript({
   onWorkspaceRefresh,
   onInlineEdit,
   onRollbackInlineEdit,
-  onDeleteInlineEdit
+  onDeleteInlineEdit,
+  onCreateComment,
+  onDeleteComment,
+  onOpenFile
 }: Props) {
   const rememberedViewRef = useRef(loadLatexManuscriptView(project.id))
   const pendingViewRestoreRef = useRef(rememberedViewRef.current)
@@ -143,18 +233,40 @@ export function LatexManuscript({
   const [saving, setSaving] = useState(false)
   const [sendingInlineEdit, setSendingInlineEdit] = useState(false)
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null)
+  const [commentComposer, setCommentComposer] =
+    useState<CommentComposerState | null>(null)
+  const [savingComment, setSavingComment] = useState(false)
+  const [commentError, setCommentError] = useState('')
+  const [commentAnchors, setCommentAnchors] = useState<Record<string, CommentAnchor>>({})
+  const [manuscriptLayout, setManuscriptLayout] = useState(() =>
+    loadLatexManuscriptLayout(project.id)
+  )
   const [showInlineHistory, setShowInlineHistory] = useState(false)
   const [expandedInlineEditId, setExpandedInlineEditId] = useState<string | null>(null)
   const [busyInlineEditId, setBusyInlineEditId] = useState<string | null>(null)
   const [inlineHistoryError, setInlineHistoryError] = useState('')
   const [error, setError] = useState('')
+  const [saveError, setSaveError] = useState('')
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const finderActionRef = useRef<{ dispose(): void } | null>(null)
+  const graphicHoverRef = useRef<{ dispose(): void } | null>(null)
+  const graphicCommandRef = useRef<{ dispose(): void } | null>(null)
+  const graphicPreviewCacheRef = useRef(
+    new Map<string, Promise<FilePreview | null>>()
+  )
+  const graphicResolutionCacheRef = useRef(
+    new Map<string, Promise<{ path: string; preview: FilePreview } | null>>()
+  )
   const activeFinderPathRef = useRef(path)
   const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
+  const commentDecorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null)
   const viewZoneIdsRef = useRef<string[]>([])
   const inlineEditDisposablesRef = useRef<{ dispose(): void }[]>([])
   const inlinePromptRef = useRef<HTMLTextAreaElement | null>(null)
+  const commentPromptRef = useRef<HTMLTextAreaElement | null>(null)
+  const commentsRef = useRef<LatexComment[]>([])
+  const commentFrameRef = useRef(0)
+  const failedAutoSaveRef = useRef('')
   const viewMemoryFrameRef = useRef(0)
   const dirty = draft !== savedContent
   const inlineBusy = sendingInlineEdit || inlineRunning
@@ -181,6 +293,11 @@ export function LatexManuscript({
         ].join('\u0000')
       )
       .join('\u0001') ?? ''
+  const commentsForPath = useMemo(
+    () => comments.filter((comment) => comment.path === path),
+    [comments, path]
+  )
+  commentsRef.current = commentsForPath
 
   function rememberCurrentView(): void {
     const editor = editorRef.current
@@ -207,15 +324,82 @@ export function LatexManuscript({
     })
   }
 
+  function updateManuscriptLayout(
+    update: Partial<typeof manuscriptLayout>
+  ): void {
+    setManuscriptLayout((current) => {
+      const next = { ...current, ...update }
+      saveLatexManuscriptLayout(project.id, next)
+      return next
+    })
+    window.requestAnimationFrame(() => editorRef.current?.layout())
+  }
+
+  function updateCommentAnchors(): void {
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!editor || !model) return
+    const next: Record<string, CommentAnchor> = {}
+    for (const comment of commentsRef.current) {
+      const located = locateCommentRange(model, comment)
+      const visible = editor.getScrolledVisiblePosition(
+        located.range.getStartPosition()
+      )
+      next[comment.id] = {
+        top: visible?.top ?? null,
+        range: located.range,
+        stale: located.stale
+      }
+    }
+    setCommentAnchors(next)
+  }
+
+  function scheduleCommentAnchors(): void {
+    if (commentFrameRef.current) return
+    commentFrameRef.current = window.requestAnimationFrame(() => {
+      commentFrameRef.current = 0
+      updateCommentAnchors()
+    })
+  }
+
+  function applyCommentDecorations(): void {
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!editor || !model) return
+    const decorations = commentsRef.current.flatMap(
+      (comment): monaco.editor.IModelDeltaDecoration[] => {
+        const located = locateCommentRange(model, comment)
+        if (located.stale) return []
+        return [{
+          range: located.range,
+          options: {
+            className: 'latex-comment-selection',
+            linesDecorationsClassName: 'latex-comment-gutter',
+            hoverMessage: { value: `Comment: ${comment.body}` },
+            stickiness:
+              monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges
+          }
+        }]
+      }
+    )
+    commentDecorationsRef.current?.clear()
+    commentDecorationsRef.current =
+      editor.createDecorationsCollection(decorations)
+    scheduleCommentAnchors()
+  }
+
   async function load(nextPath: string, revealSection?: LatexSection | null) {
     setLoading(true)
     setError('')
+    setSaveError('')
     try {
       const preview = await window.projectConsole.files.preview(project.id, nextPath)
       if (preview.binary || preview.truncated) {
         throw new Error('LaTeX source files must be UTF-8 text no larger than 1 MB.')
       }
       setPath(nextPath)
+      graphicPreviewCacheRef.current.clear()
+      graphicResolutionCacheRef.current.clear()
       setSavedContent(preview.content)
       setDraft(preview.content)
       requestAnimationFrame(() => {
@@ -284,8 +468,15 @@ export function LatexManuscript({
         window.cancelAnimationFrame(viewMemoryFrameRef.current)
         viewMemoryFrameRef.current = 0
       }
+      if (commentFrameRef.current) {
+        window.cancelAnimationFrame(commentFrameRef.current)
+        commentFrameRef.current = 0
+      }
       rememberCurrentView()
       finderActionRef.current?.dispose()
+      graphicHoverRef.current?.dispose()
+      graphicCommandRef.current?.dispose()
+      commentDecorationsRef.current?.clear()
       for (const disposable of inlineEditDisposablesRef.current) {
         disposable.dispose()
       }
@@ -296,9 +487,14 @@ export function LatexManuscript({
 
   useEffect(() => {
     setInlineEdit(null)
+    setCommentComposer(null)
+    setCommentError('')
+    setManuscriptLayout(loadLatexManuscriptLayout(project.id))
     setShowInlineHistory(false)
     setExpandedInlineEditId(null)
     setInlineHistoryError('')
+    setSaveError('')
+    failedAutoSaveRef.current = ''
   }, [project.id])
 
   useEffect(() => {
@@ -319,8 +515,44 @@ export function LatexManuscript({
   }, [dirty, saving, inlineBusy, draft, path])
 
   useEffect(() => {
+    if (
+      !manuscriptLayout.autoSave ||
+      !dirty ||
+      loading ||
+      saving ||
+      inlineBusy ||
+      savingComment
+    ) {
+      return
+    }
+    const snapshot = draft
+    const failureKey = `${path}\u0000${snapshot}`
+    if (failedAutoSaveRef.current === failureKey) return
+    const refreshOutline =
+      latexOutlineSignature(snapshot) !== latexOutlineSignature(savedContent)
+    const timer = window.setTimeout(() => {
+      void save(snapshot, refreshOutline, true)
+    }, 700)
+    return () => window.clearTimeout(timer)
+  }, [
+    manuscriptLayout.autoSave,
+    dirty,
+    draft,
+    savedContent,
+    path,
+    loading,
+    saving,
+    inlineBusy,
+    savingComment
+  ])
+
+  useEffect(() => {
     applyDecorations()
   }, [fileChanges, draft])
+
+  useEffect(() => {
+    applyCommentDecorations()
+  }, [commentsForPath, draft, path])
 
   useEffect(() => {
     if (!showInlineHistory) return
@@ -331,17 +563,34 @@ export function LatexManuscript({
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [showInlineHistory])
 
-  async function save(): Promise<boolean> {
-    if (inlineBusy) return false
+  async function save(
+    content = draft,
+    refreshWorkspace = true,
+    automatic = false
+  ): Promise<boolean> {
+    if (inlineBusy || saving) return false
+    const targetPath = path
     setSaving(true)
-    setError('')
+    setSaveError('')
     try {
-      await window.projectConsole.files.save(project.id, path, draft)
-      setSavedContent(draft)
-      await onWorkspaceRefresh()
+      await window.projectConsole.files.save(project.id, targetPath, content)
+      if (activeFinderPathRef.current === targetPath) setSavedContent(content)
+      failedAutoSaveRef.current = ''
+      if (refreshWorkspace) {
+        try {
+          await onWorkspaceRefresh()
+        } catch (caught) {
+          setSaveError(
+            `Saved, but the Document Map could not refresh: ${
+              caught instanceof Error ? caught.message : String(caught)
+            }`
+          )
+        }
+      }
       return true
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught))
+      if (automatic) failedAutoSaveRef.current = `${targetPath}\u0000${content}`
+      setSaveError(caught instanceof Error ? caught.message : String(caught))
       return false
     } finally {
       setSaving(false)
@@ -381,9 +630,66 @@ export function LatexManuscript({
     }
   }
 
+  async function resolveGraphicPreview(
+    candidates: string[],
+    source: string
+  ): Promise<{ path: string; preview: FilePreview } | null> {
+    const resolutionKey = `${project.id}:${activeFinderPathRef.current}:${source}`
+    let resolution = graphicResolutionCacheRef.current.get(resolutionKey)
+    if (!resolution) {
+      resolution = (async () => {
+        let availableCandidates = candidates
+        if (candidates.length > 2) {
+          try {
+            const candidateSet = new Set(candidates)
+            const matches = await window.projectConsole.files.search(
+              project.id,
+              source.split('/').at(-1) ?? source
+            )
+            availableCandidates = matches
+              .filter(
+                (match) =>
+                  match.kind === 'file' && candidateSet.has(match.path)
+              )
+              .map((match) => match.path)
+          } catch {
+            availableCandidates = []
+          }
+        }
+        for (const candidate of availableCandidates) {
+          const cacheKey = `${project.id}:${candidate}`
+          let pending = graphicPreviewCacheRef.current.get(cacheKey)
+          if (!pending) {
+            while (graphicPreviewCacheRef.current.size >= 6) {
+              const oldest = graphicPreviewCacheRef.current.keys().next().value
+              if (typeof oldest !== 'string') break
+              graphicPreviewCacheRef.current.delete(oldest)
+            }
+            pending = window.projectConsole.files
+              .preview(project.id, candidate)
+              .catch(() => null)
+            graphicPreviewCacheRef.current.set(cacheKey, pending)
+          }
+          const preview = await pending
+          if (preview) return { path: candidate, preview }
+        }
+        return null
+      })()
+      while (graphicResolutionCacheRef.current.size >= 12) {
+        const oldest = graphicResolutionCacheRef.current.keys().next().value
+        if (typeof oldest !== 'string') break
+        graphicResolutionCacheRef.current.delete(oldest)
+      }
+      graphicResolutionCacheRef.current.set(resolutionKey, resolution)
+    }
+    return resolution
+  }
+
   const handleMount: OnMount = (editor) => {
     editorRef.current = editor
     finderActionRef.current?.dispose()
+    graphicHoverRef.current?.dispose()
+    graphicCommandRef.current?.dispose()
     for (const disposable of inlineEditDisposablesRef.current) {
       disposable.dispose()
     }
@@ -394,7 +700,62 @@ export function LatexManuscript({
         showActiveFileInFinder
       )
     }
+    const openGraphicCommand = `panepilot.latex.open-graphic.${project.id.replace(
+      /[^a-z0-9_-]/gi,
+      '-'
+    )}`
+    graphicCommandRef.current = monaco.editor.registerCommand(
+      openGraphicCommand,
+      (_accessor, target: unknown) => {
+        if (typeof target !== 'string') return
+        onOpenFile({ path: target, line: null, column: null })
+      }
+    )
+    graphicHoverRef.current = monaco.languages.registerHoverProvider('latex', {
+      provideHover: async (model, position, token) => {
+        if (model !== editor.getModel()) return null
+        const reference = latexGraphicAtColumn(
+          model.getLineContent(position.lineNumber),
+          activeFinderPathRef.current,
+          position.column
+        )
+        if (!reference) return null
+        const resolved = await resolveGraphicPreview(
+          reference.candidates,
+          reference.source
+        )
+        if (!resolved || token.isCancellationRequested) return null
+        const commandUri = `command:${openGraphicCommand}?${encodeURIComponent(
+          JSON.stringify([resolved.path])
+        )}`
+        const safeLabel = resolved.path.replace(/[`\[\]]/g, '\\$&')
+        let value = ''
+        if (resolved.preview.imageDataUrl) {
+          value = `[![Open ${safeLabel} in Files](${resolved.preview.imageDataUrl})](${commandUri})\n\n`
+        } else if (resolved.preview.imageMimeType && resolved.preview.truncated) {
+          value = '**Preview unavailable:** this image exceeds 5 MB.\n\n'
+        } else {
+          value = '**Inline preview unavailable for this graphic format.**\n\n'
+        }
+        value += `[Open \`${safeLabel}\` in Files](${commandUri})`
+        const markdown: monaco.IMarkdownString = {
+          value,
+          isTrusted: { enabledCommands: [openGraphicCommand] },
+          supportHtml: true
+        }
+        return {
+          range: new monaco.Range(
+            position.lineNumber,
+            reference.startColumn,
+            position.lineNumber,
+            reference.endColumn
+          ),
+          contents: [markdown]
+        }
+      }
+    })
     applyDecorations()
+    applyCommentDecorations()
     if (selectedSection && selectedSection.sourceFile === path) {
       editor.revealLineInCenter(selectedSection.startLine)
     }
@@ -420,11 +781,12 @@ export function LatexManuscript({
       }
     }
 
-    function captureSelection(expanded = false) {
+    function captureSelection(expanded = false, forComment = false) {
       const model = editor.getModel()
       const range = editor.getSelection()
       if (!model || !range || range.isEmpty()) {
         setInlineEdit(null)
+        if (!forComment) setCommentComposer(null)
         return
       }
       const selection: LatexSourceSelection = {
@@ -437,6 +799,21 @@ export function LatexManuscript({
       }
       const position = inlinePosition(selection, expanded)
       if (!position) return
+      if (forComment) {
+        setInlineEdit(null)
+        setCommentComposer({
+          selection,
+          ...position,
+          body: '',
+          error:
+            selection.text.length > 20_000
+              ? 'Select no more than 20,000 characters.'
+              : ''
+        })
+        window.requestAnimationFrame(() => commentPromptRef.current?.focus())
+        return
+      }
+      setCommentComposer(null)
       setInlineEdit({
         selection,
         ...position,
@@ -458,6 +835,11 @@ export function LatexManuscript({
         const position = inlinePosition(current.selection, current.expanded)
         return position ? { ...current, ...position } : current
       })
+      setCommentComposer((current) => {
+        if (!current) return null
+        const position = inlinePosition(current.selection, true)
+        return position ? { ...current, ...position } : current
+      })
     }
 
     inlineEditDisposablesRef.current = [
@@ -465,12 +847,19 @@ export function LatexManuscript({
         scheduleViewMemory()
         captureSelection()
       }),
-      editor.onDidChangeModel(() => captureSelection()),
+      editor.onDidChangeModel(() => {
+        captureSelection()
+        scheduleCommentAnchors()
+      }),
       editor.onDidScrollChange(() => {
         scheduleViewMemory()
         repositionInlineEdit()
+        scheduleCommentAnchors()
       }),
-      editor.onDidLayoutChange(repositionInlineEdit),
+      editor.onDidLayoutChange(() => {
+        repositionInlineEdit()
+        scheduleCommentAnchors()
+      }),
       editor.addAction({
         id: 'panepilot.latex.inline-edit',
         label: 'Edit Selection with AI',
@@ -478,6 +867,14 @@ export function LatexManuscript({
         contextMenuGroupId: 'navigation',
         contextMenuOrder: 1.45,
         run: () => captureSelection(true)
+      }),
+      editor.addAction({
+        id: 'panepilot.latex.add-comment',
+        label: 'Add Comment to Selection',
+        precondition: 'editorHasSelection',
+        contextMenuGroupId: 'navigation',
+        contextMenuOrder: 1.46,
+        run: () => captureSelection(true, true)
       })
     ]
   }
@@ -510,6 +907,103 @@ export function LatexManuscript({
   function closeInlineEdit() {
     setInlineEdit(null)
     editorRef.current?.focus()
+  }
+
+  function openCommentComposer() {
+    const editor = editorRef.current
+    if (!editor || !inlineEdit) return
+    const visible = editor.getScrolledVisiblePosition({
+      lineNumber: inlineEdit.selection.endLine,
+      column: inlineEdit.selection.endColumn
+    })
+    if (!visible) return
+    const layout = editor.getLayoutInfo()
+    const panelHeight = 184
+    const below = visible.top + visible.height + 7
+    const above = below + panelHeight > layout.height - 8
+    setCommentComposer({
+      selection: inlineEdit.selection,
+      top: above ? Math.max(8, visible.top - panelHeight - 7) : below,
+      left: Math.max(12, Math.min(visible.left, layout.width - 346)),
+      above,
+      body: '',
+      error: inlineEdit.error
+    })
+    setInlineEdit(null)
+    window.requestAnimationFrame(() => commentPromptRef.current?.focus())
+  }
+
+  function closeCommentComposer() {
+    setCommentComposer(null)
+    editorRef.current?.focus()
+  }
+
+  async function submitComment() {
+    if (
+      !commentComposer ||
+      !commentComposer.body.trim() ||
+      savingComment ||
+      saving
+    ) return
+    const request = commentComposer
+    setCommentComposer((current) => current && { ...current, error: '' })
+    try {
+      const model = editorRef.current?.getModel()
+      if (!model || activeFinderPathRef.current !== request.selection.path) {
+        throw new Error('The selected source file is no longer open.')
+      }
+      const range = model.validateRange(
+        new monaco.Range(
+          request.selection.startLine,
+          request.selection.startColumn,
+          request.selection.endLine,
+          request.selection.endColumn
+        )
+      )
+      if (model.getValueInRange(range) !== request.selection.text) {
+        throw new Error(
+          'The selected text changed before the comment was added. Select it again and retry.'
+        )
+      }
+      setSavingComment(true)
+      if (dirty && !(await save())) return
+      await onCreateComment(request.selection, request.body)
+      setCommentComposer(null)
+      setCommentError('')
+      updateManuscriptLayout({ commentsHidden: false })
+    } catch (caught) {
+      setCommentComposer((current) =>
+        current
+          ? {
+              ...current,
+              error: caught instanceof Error ? caught.message : String(caught)
+            }
+          : current
+      )
+    } finally {
+      setSavingComment(false)
+    }
+  }
+
+  function revealComment(comment: LatexComment) {
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (!editor || !model) return
+    const located = locateCommentRange(model, comment)
+    editor.setSelection(located.range)
+    editor.revealRangeInCenterIfOutsideViewport(located.range)
+    editor.focus()
+    scheduleCommentAnchors()
+  }
+
+  async function deleteComment(comment: LatexComment) {
+    if (!window.confirm('Delete this comment? The manuscript will not change.')) return
+    setCommentError('')
+    try {
+      await onDeleteComment(comment.id)
+    } catch (caught) {
+      setCommentError(caught instanceof Error ? caught.message : String(caught))
+    }
   }
 
   async function submitInlineEdit() {
@@ -737,7 +1231,11 @@ export function LatexManuscript({
   )
 
   return (
-    <div className="latex-manuscript">
+    <div
+      className={`latex-manuscript ${
+        manuscriptLayout.mapHidden ? 'map-hidden' : ''
+      } ${manuscriptLayout.commentsHidden ? 'comments-hidden' : 'comments-visible'}`}
+    >
       <aside className="latex-outline">
         <header>
           <span className="eyebrow">DOCUMENT MAP</span>
@@ -748,6 +1246,14 @@ export function LatexManuscript({
             title="Rescan sections"
           >
             <RefreshCw size={13} />
+          </button>
+          <button
+            className="icon-button"
+            onClick={() => updateManuscriptLayout({ mapHidden: true })}
+            title="Hide document map"
+            aria-label="Hide document map"
+          >
+            <PanelLeftClose size={13} />
           </button>
         </header>
         <button
@@ -822,6 +1328,31 @@ export function LatexManuscript({
               {fileChanges.additions + fileChanges.modifications + fileChanges.deletions} changes
             </small>
           )}
+          {manuscriptLayout.mapHidden && (
+            <button
+              className="secondary-button latex-layout-button"
+              onClick={() => updateManuscriptLayout({ mapHidden: false })}
+              title="Show document map"
+            >
+              <PanelLeftOpen size={12} />
+              Map
+            </button>
+          )}
+          <button
+            className={`secondary-button latex-layout-button latex-comments-toggle ${
+              manuscriptLayout.commentsHidden ? '' : 'active'
+            }`}
+            onClick={() =>
+              updateManuscriptLayout({
+                commentsHidden: !manuscriptLayout.commentsHidden
+              })
+            }
+            aria-expanded={!manuscriptLayout.commentsHidden}
+            title="Show comments beside their manuscript selections"
+          >
+            <MessageSquareText size={12} />
+            Comments{comments.length ? ` ${comments.length}` : ''}
+          </button>
           <button
             className={`secondary-button latex-inline-chat-button ${
               inlineEdits.length ? 'available' : ''
@@ -842,6 +1373,23 @@ export function LatexManuscript({
             Edits{inlineEdits.length ? ` ${inlineEdits.length}` : ''}
           </button>
           <button
+            className={`secondary-button latex-layout-button latex-autosave-toggle ${
+              manuscriptLayout.autoSave ? 'active' : ''
+            }`}
+            onClick={() =>
+              updateManuscriptLayout({ autoSave: !manuscriptLayout.autoSave })
+            }
+            aria-pressed={manuscriptLayout.autoSave}
+            title={
+              manuscriptLayout.autoSave
+                ? 'Auto-save is on; click to turn it off'
+                : 'Auto-save is off; click to turn it on'
+            }
+          >
+            <SaveAll size={12} />
+            Auto {manuscriptLayout.autoSave ? 'on' : 'off'}
+          </button>
+          <button
             className="primary-button"
             onClick={() => void save()}
             disabled={!dirty || saving || inlineBusy}
@@ -855,6 +1403,19 @@ export function LatexManuscript({
             {saving ? 'Saving…' : 'Save'}
           </button>
         </header>
+
+        {saveError && (
+          <div className="latex-save-error" role="alert">
+            <span>{saveError}</span>
+            <button
+              type="button"
+              onClick={() => setSaveError('')}
+              aria-label="Dismiss save error"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
 
         {totalChanges > 0 && (
           <div className="latex-change-ribbon">
@@ -887,7 +1448,8 @@ export function LatexManuscript({
             <p>{error}</p>
           </div>
         ) : (
-          <div className={`latex-editor-shell ${loading ? 'loading' : ''}`}>
+          <div className="latex-editor-stage">
+            <div className={`latex-editor-shell ${loading ? 'loading' : ''}`}>
             <Editor
               path={`${project.id}/${path}`}
               language="latex"
@@ -993,15 +1555,93 @@ export function LatexManuscript({
                     )}
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    className="latex-inline-chip"
-                    onClick={expandInlineEdit}
-                    title="Ask a writing agent to edit this selection"
-                  >
-                    <Sparkles size={11} /> Edit selection
-                  </button>
+                  <div className="latex-selection-actions">
+                    <button
+                      type="button"
+                      className="latex-inline-chip"
+                      onClick={expandInlineEdit}
+                      title="Ask a writing agent to edit this selection"
+                    >
+                      <Sparkles size={11} /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="latex-comment-chip"
+                      onClick={openCommentComposer}
+                      title="Add a margin comment to this selection"
+                    >
+                      <MessageSquarePlus size={11} /> Comment
+                    </button>
+                  </div>
                 )}
+              </div>
+            )}
+            {commentComposer && (
+              <div
+                className={`latex-inline-edit latex-comment-composer ${
+                  commentComposer.above ? 'above' : 'below'
+                }`}
+                style={{ top: commentComposer.top, left: commentComposer.left }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <div className="latex-inline-card">
+                  <header>
+                    <span>
+                      <MessageSquarePlus size={12} /> Margin comment
+                    </span>
+                    <small>
+                      {commentComposer.selection.path} · L
+                      {commentComposer.selection.startLine}
+                    </small>
+                    <button
+                      type="button"
+                      onClick={closeCommentComposer}
+                      aria-label="Close comment composer"
+                    >
+                      ×
+                    </button>
+                  </header>
+                  <textarea
+                    ref={commentPromptRef}
+                    aria-label="Comment"
+                    value={commentComposer.body}
+                    onChange={(event) =>
+                      setCommentComposer((current) =>
+                        current ? { ...current, body: event.target.value } : current
+                      )
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        closeCommentComposer()
+                      } else if (
+                        event.key === 'Enter' &&
+                        (event.metaKey || event.ctrlKey)
+                      ) {
+                        event.preventDefault()
+                        void submitComment()
+                      }
+                    }}
+                    placeholder="Leave an editorial note on this selection…"
+                    rows={3}
+                  />
+                  <footer>
+                    <span>The note stays attached to the selected source</span>
+                    <button
+                      type="button"
+                      className="latex-comment-submit"
+                      onClick={() => void submitComment()}
+                      disabled={saving || savingComment || !commentComposer.body.trim()}
+                    >
+                      <MessageSquarePlus size={11} />
+                      {savingComment ? 'Adding…' : 'Add comment'}
+                    </button>
+                  </footer>
+                  {commentComposer.error && (
+                    <p role="alert">{commentComposer.error}</p>
+                  )}
+                </div>
               </div>
             )}
             {showInlineHistory && (
@@ -1125,6 +1765,62 @@ export function LatexManuscript({
                     </p>
                   </div>
                 )}
+              </aside>
+            )}
+            </div>
+            {!manuscriptLayout.commentsHidden && (
+              <aside className="latex-comment-margin" aria-label="Manuscript comments">
+                <div className="latex-comment-margin-label">
+                  <span>PROOF NOTES</span>
+                  <strong>{commentsForPath.length}</strong>
+                </div>
+                {commentError && (
+                  <p className="latex-comment-error" role="alert">{commentError}</p>
+                )}
+                {!commentsForPath.length && (
+                  <div className="latex-comment-empty">
+                    <MessageSquareText size={17} />
+                    <span>Select text, then choose Comment.</span>
+                  </div>
+                )}
+                {commentsForPath.map((comment, index) => {
+                  const anchor = commentAnchors[comment.id]
+                  if (!anchor || anchor.top == null) return null
+                  return (
+                    <article
+                      key={comment.id}
+                      className={`latex-comment-card ${anchor.stale ? 'stale' : ''}`}
+                      style={{ top: anchor.top }}
+                    >
+                      <button
+                        type="button"
+                        className="latex-comment-card-main"
+                        onClick={() => revealComment(comment)}
+                        title="Reveal commented text"
+                      >
+                        <span className="latex-comment-number">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                        <span>
+                          <strong>{comment.body}</strong>
+                          <small>
+                            L{comment.startLine} · “{comment.selectedText.replace(/\s+/g, ' ').trim()}”
+                          </small>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="latex-comment-delete"
+                        onClick={() => void deleteComment(comment)}
+                        aria-label={`Delete comment ${index + 1}`}
+                        title="Delete comment"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                      {anchor.stale && <em>Text moved</em>}
+                    </article>
+                  )
+                })}
               </aside>
             )}
           </div>

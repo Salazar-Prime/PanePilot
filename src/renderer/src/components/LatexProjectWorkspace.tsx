@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import type {
   LatexChangeSet,
+  LatexComment,
   LatexInlineEditHistory,
   LatexSourceSelection,
   LatexWorkspace,
@@ -109,6 +110,7 @@ export function LatexProjectWorkspace({
     useState<ProjectFileOpenRequest | null>(null)
   const [changes, setChanges] = useState<LatexChangeSet | null>(null)
   const [inlineEdits, setInlineEdits] = useState<LatexInlineEditHistory[]>([])
+  const [comments, setComments] = useState<LatexComment[]>([])
   const [loading, setLoading] = useState(
     () => !latexWorkspaceCache.has(project.id)
   )
@@ -169,6 +171,15 @@ export function LatexProjectWorkspace({
       )
     } catch {
       // Editorial history is supplemental to the source editor.
+    }
+  }, [project.id])
+
+  const refreshComments = useCallback(async () => {
+    if (typeof window.projectConsole.latex.listComments !== 'function') return
+    try {
+      setComments(await window.projectConsole.latex.listComments(project.id))
+    } catch {
+      // Comments are supplemental to the source editor.
     }
   }, [project.id])
 
@@ -288,6 +299,7 @@ export function LatexProjectWorkspace({
     setRefreshError('')
     setChanges(null)
     setInlineEdits([])
+    setComments([])
     setSelectedSectionId(null)
     setOpenFileRequest(null)
     setChatLayout(loadLatexChatLayout(project.id))
@@ -295,10 +307,11 @@ export function LatexProjectWorkspace({
     setResizingChat(false)
     void loadWorkspace()
     void refreshInlineEdits()
+    void refreshComments()
     return () => {
       workspaceRequestRef.current += 1
     }
-  }, [project.id, loadWorkspace, refreshInlineEdits])
+  }, [project.id, loadWorkspace, refreshInlineEdits, refreshComments])
 
   useEffect(() => {
     if (!resizingChat) return
@@ -436,6 +449,26 @@ export function LatexProjectWorkspace({
   async function deleteInlineEdit(editId: string) {
     await window.projectConsole.latex.deleteInlineEdit(editId)
     await refreshInlineEdits()
+  }
+
+  async function createComment(selection: LatexSourceSelection, body: string) {
+    if (typeof window.projectConsole.latex.createComment !== 'function') {
+      throw new Error(
+        'The comments interface is newer than PanePilot’s backend. Restart PanePilot once, then add the comment again.'
+      )
+    }
+    const comment = await window.projectConsole.latex.createComment({
+      projectId: project.id,
+      selection,
+      body
+    })
+    await refreshComments()
+    return comment
+  }
+
+  async function deleteComment(commentId: string) {
+    await window.projectConsole.latex.deleteComment(commentId)
+    await refreshComments()
   }
 
   async function selectShortcutSession(id: string) {
@@ -642,6 +675,7 @@ export function LatexProjectWorkspace({
                 project={project}
                 workspace={workspace}
                 inlineEdits={inlineEdits}
+                comments={comments}
                 inlineRunning={inlineSession?.state === 'running'}
                 selectedSectionId={selectedSectionId}
                 chatCounts={chatCounts}
@@ -653,6 +687,9 @@ export function LatexProjectWorkspace({
                 onInlineEdit={sendInlineEdit}
                 onRollbackInlineEdit={rollbackInlineEdit}
                 onDeleteInlineEdit={deleteInlineEdit}
+                onCreateComment={createComment}
+                onDeleteComment={deleteComment}
+                onOpenFile={openFile}
               />
             )}
             {pdfOpened && (

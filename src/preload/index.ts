@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webFrame } from 'electron'
 import type {
   ConnectGoogleDriveInput,
+  CreateLatexCommentInput,
   CreatePortForwardInput,
   CreateProjectInput,
   CreateProjectActionInput,
@@ -228,6 +229,12 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('latex:rollback-inline-edit', editId),
     deleteInlineEdit: (editId: string) =>
       ipcRenderer.invoke('latex:delete-inline-edit', editId),
+    listComments: (projectId: string) =>
+      ipcRenderer.invoke('latex:list-comments', projectId),
+    createComment: (input: CreateLatexCommentInput) =>
+      ipcRenderer.invoke('latex:create-comment', input),
+    deleteComment: (commentId: string) =>
+      ipcRenderer.invoke('latex:delete-comment', commentId),
     changes: (sessionId: string) => ipcRenderer.invoke('latex:changes', sessionId),
     clearChanges: (sessionId: string) =>
       ipcRenderer.invoke('latex:clear-changes', sessionId)
