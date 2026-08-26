@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.8.0 — 2026-08-26
+
+This release adds:
+
+- Guarded inline Codex edits for selected LaTeX source. PanePilot saves and verifies
+  the selection, accepts only an exact-range change, and keeps persistent editorial
+  history with safe rollback when the replacement can still be located.
+- A clearer LaTeX workflow with simplified writing-chat controls, explicit scope
+  hierarchy, correct escaped-percent highlighting, and one native macOS print job
+  for the complete PDF snapshot currently displayed.
+- A persisted, keyboard-accessible project-sidebar width and local discovery of
+  tagged tmux sessions created by another PanePilot client, matching the existing
+  cross-client SSH behavior.
+
+Inline edits require the Codex CLI to be installed and authenticated on the local or
+SSH project machine.
+
+The v0.8.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.7.2 — 2026-08-24
 
 This patch release improves long-running LaTeX and terminal workflows:
