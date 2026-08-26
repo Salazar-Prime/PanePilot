@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.2 — 2026-08-26
+
+This release improves LaTeX editing and proofing:
+
+- Inline Codex revisions no longer block the Monaco editor or continuously rescan
+  the manuscript. PanePilot tracks the requested range, preserves unrelated typing,
+  and restores each project’s source, selection, scroll position, PDF page, and zoom
+  during the current renderer lifetime.
+- LaTeX source now auto-saves by default after a short typing pause, with a per-project
+  client-local toggle. Durable proof comments attach to verified source selections,
+  stay in PanePilot’s local project database, and never invoke an agent; the Document
+  Map and proofing margin can be shown independently.
+- Hovering a bounded project-relative path inside `\includegraphics{...}` previews
+  the referenced local or SSH image and can open the exact file in Files. Supported
+  image previews now allow up to 5 MB while text previews remain capped at 1 MB.
+
+The v0.8.2 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.8.0 — 2026-08-26
 
 This release adds:
