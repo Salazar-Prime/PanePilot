@@ -287,7 +287,7 @@ function registerIpc(): void {
     }
   )
   ipcMain.handle('latex:send-prompt', (_event, sessionId: string, prompt: string) => {
-    latex.sendPrompt(sessionId, prompt)
+    return latex.sendPrompt(sessionId, prompt)
   })
   ipcMain.handle(
     'latex:send-inline-edit',
@@ -311,9 +311,11 @@ function registerIpc(): void {
     'latex:create-comment',
     (_event, input: CreateLatexCommentInput) => latex.createComment(input)
   )
-  ipcMain.handle('latex:delete-comment', (_event, commentId: string) => {
-    latex.deleteComment(commentId)
-  })
+  ipcMain.handle(
+    'latex:delete-comment',
+    (_event, projectId: string, commentId: string) =>
+      latex.deleteComment(projectId, commentId)
+  )
   ipcMain.handle('latex:changes', (_event, sessionId: string) =>
     latex.changes(sessionId)
   )
@@ -690,7 +692,7 @@ if (!ownsSingleInstanceLock) {
           `Restored ${restoredLocalSessions} local tmux session${restoredLocalSessions === 1 ? '' : 's'} after reboot.`
         )
       }
-      latex = new LatexProjectService(store, terminals)
+      latex = new LatexProjectService(store, terminals, metadata)
       speech = new SpeechService(store)
       googleDrive = new GoogleDriveService(store)
       gitService = new GitService(store)

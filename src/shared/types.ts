@@ -678,7 +678,7 @@ export interface ProjectConsoleApi {
     deleteInlineEdit(editId: string): Promise<void>
     listComments(projectId: string): Promise<LatexComment[]>
     createComment(input: CreateLatexCommentInput): Promise<LatexComment>
-    deleteComment(commentId: string): Promise<void>
+    deleteComment(projectId: string, commentId: string): Promise<void>
     changes(sessionId: string): Promise<LatexChangeSet>
     clearChanges(sessionId: string): Promise<void>
   }

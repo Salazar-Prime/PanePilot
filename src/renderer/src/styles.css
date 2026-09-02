@@ -1359,7 +1359,8 @@ select:focus-visible {
 }
 
 .workspace-panel-cache > .latex-pdf-preview,
-.workspace-panel-cache > .latex-pdf-state {
+.workspace-panel-cache > .latex-pdf-state,
+.workspace-panel-cache > .latex-manuscript {
   width: 100%;
 }
 

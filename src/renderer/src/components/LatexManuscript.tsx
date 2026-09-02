@@ -88,6 +88,56 @@ monaco.editor.defineTheme('panepilot-latex', {
   }
 })
 
+interface LatexSourceSnapshot {
+  savedContent: string
+  draft: string
+}
+
+const MAX_CACHED_LATEX_SOURCES = 32
+const latexSourceSnapshots = new Map<string, LatexSourceSnapshot>()
+
+function sourceSnapshotKey(projectId: string, path: string): string {
+  return `${projectId}\u0000${path}`
+}
+
+function rememberSourceSnapshot(
+  projectId: string,
+  path: string,
+  snapshot: LatexSourceSnapshot
+): void {
+  const key = sourceSnapshotKey(projectId, path)
+  latexSourceSnapshots.delete(key)
+  latexSourceSnapshots.set(key, snapshot)
+  while (latexSourceSnapshots.size > MAX_CACHED_LATEX_SOURCES) {
+    const oldest = latexSourceSnapshots.keys().next().value
+    if (typeof oldest !== 'string') break
+    latexSourceSnapshots.delete(oldest)
+  }
+}
+
+function mergeInlineEditIntoCachedDraft(
+  snapshot: LatexSourceSnapshot,
+  edit: LatexInlineEditHistory
+): string | null {
+  if (edit.replacementText == null) return null
+  if (snapshot.draft === snapshot.savedContent) return null
+  const anchored = `${edit.prefixContext}${edit.originalText}${edit.suffixContext}`
+  const anchorIndex = snapshot.draft.indexOf(anchored)
+  if (
+    !anchored ||
+    anchorIndex < 0 ||
+    snapshot.draft.indexOf(anchored, anchorIndex + 1) >= 0
+  ) {
+    return null
+  }
+  const selectionStart = anchorIndex + edit.prefixContext.length
+  return (
+    snapshot.draft.slice(0, selectionStart) +
+    edit.replacementText +
+    snapshot.draft.slice(selectionStart + edit.originalText.length)
+  )
+}
+
 interface Props {
   project: Project
   workspace: LatexWorkspace
@@ -218,18 +268,24 @@ export function LatexManuscript({
 }: Props) {
   const rememberedViewRef = useRef(loadLatexManuscriptView(project.id))
   const pendingViewRestoreRef = useRef(rememberedViewRef.current)
+  const pendingReloadViewRef =
+    useRef<ReturnType<typeof loadLatexManuscriptView>>(null)
   const rememberedPath = rememberedViewRef.current?.path
+  const initialPath = rememberedPath ?? workspace.details.mainFile
+  const initialSourceRef = useRef(
+    latexSourceSnapshots.get(sourceSnapshotKey(project.id, initialPath)) ?? null
+  )
   const [reviewPath, setReviewPath] = useState<string | null>(
     rememberedPath && rememberedPath !== workspace.details.mainFile
       ? rememberedPath
       : null
   )
-  const [path, setPath] = useState(
-    rememberedPath ?? workspace.details.mainFile
+  const [path, setPath] = useState(initialPath)
+  const [savedContent, setSavedContent] = useState(
+    initialSourceRef.current?.savedContent ?? ''
   )
-  const [savedContent, setSavedContent] = useState('')
-  const [draft, setDraft] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [draft, setDraft] = useState(initialSourceRef.current?.draft ?? '')
+  const [loading, setLoading] = useState(initialSourceRef.current == null)
   const [saving, setSaving] = useState(false)
   const [sendingInlineEdit, setSendingInlineEdit] = useState(false)
   const [inlineEdit, setInlineEdit] = useState<InlineEditState | null>(null)
@@ -267,6 +323,8 @@ export function LatexManuscript({
   const commentsRef = useRef<LatexComment[]>([])
   const commentFrameRef = useRef(0)
   const failedAutoSaveRef = useRef('')
+  const inlineEditReloadGuardRef = useRef(false)
+  const inlineEditAppliedPathRef = useRef<string | null>(null)
   const viewMemoryFrameRef = useRef(0)
   const dirty = draft !== savedContent
   const inlineBusy = sendingInlineEdit || inlineRunning
@@ -389,6 +447,25 @@ export function LatexManuscript({
   }
 
   async function load(nextPath: string, revealSection?: LatexSection | null) {
+    if (nextPath === activeFinderPathRef.current && !revealSection) {
+      const editor = editorRef.current
+      const selection = editor?.getSelection()
+      if (editor && selection) {
+        pendingReloadViewRef.current = {
+          path: nextPath,
+          selection: {
+            startLineNumber: selection.startLineNumber,
+            startColumn: selection.startColumn,
+            endLineNumber: selection.endLineNumber,
+            endColumn: selection.endColumn
+          },
+          scrollTop: editor.getScrollTop(),
+          scrollLeft: editor.getScrollLeft()
+        }
+      }
+    } else {
+      pendingReloadViewRef.current = null
+    }
     setLoading(true)
     setError('')
     setSaveError('')
@@ -424,7 +501,7 @@ export function LatexManuscript({
   }
 
   useEffect(() => {
-    if (desiredPath === path && savedContent) {
+    if (desiredPath === path && !loading) {
       if (selectedSection) {
         editorRef.current?.revealLineInCenter(selectedSection.startLine)
       }
@@ -460,6 +537,30 @@ export function LatexManuscript({
       scrollLeft: remembered.scrollLeft
     })
     pendingViewRestoreRef.current = null
+  }, [loading, path, savedContent])
+
+  useLayoutEffect(() => {
+    const remembered = pendingReloadViewRef.current
+    const editor = editorRef.current
+    const model = editor?.getModel()
+    if (loading || !remembered || remembered.path !== path || !editor || !model) {
+      return
+    }
+    editor.setSelection(
+      model.validateRange(
+        new monaco.Range(
+          remembered.selection.startLineNumber,
+          remembered.selection.startColumn,
+          remembered.selection.endLineNumber,
+          remembered.selection.endColumn
+        )
+      )
+    )
+    editor.setScrollPosition({
+      scrollTop: remembered.scrollTop,
+      scrollLeft: remembered.scrollLeft
+    })
+    pendingReloadViewRef.current = null
   }, [loading, path, savedContent])
 
   useEffect(
@@ -498,9 +599,18 @@ export function LatexManuscript({
   }, [project.id])
 
   useEffect(() => {
+    if (loading || error) return
+    rememberSourceSnapshot(project.id, path, { savedContent, draft })
+  }, [project.id, path, savedContent, draft, loading, error])
+
+  useEffect(() => {
     const changed = changes?.files.some((file) => file.path === path)
-    if (!changed || dirty) return
-    void load(path, selectedSection)
+    if (!changed || dirty || inlineEditReloadGuardRef.current) return
+    if (inlineEditAppliedPathRef.current === path) {
+      inlineEditAppliedPathRef.current = null
+      return
+    }
+    void load(path)
   }, [changes?.capturedAt, changeSignature])
 
   useEffect(() => {
@@ -577,15 +687,13 @@ export function LatexManuscript({
       if (activeFinderPathRef.current === targetPath) setSavedContent(content)
       failedAutoSaveRef.current = ''
       if (refreshWorkspace) {
-        try {
-          await onWorkspaceRefresh()
-        } catch (caught) {
+        void onWorkspaceRefresh().catch((caught) => {
           setSaveError(
             `Saved, but the Document Map could not refresh: ${
               caught instanceof Error ? caught.message : String(caught)
             }`
           )
-        }
+        })
       }
       return true
     } catch (caught) {
@@ -1056,9 +1164,34 @@ export function LatexManuscript({
       }
 
       dispatched = true
+      inlineEditReloadGuardRef.current = true
       setSendingInlineEdit(true)
       setInlineEdit(null)
       const edit = await onInlineEdit(request.selection, request.instruction)
+      const preview = await window.projectConsole.files.preview(
+        project.id,
+        edit.path
+      )
+      if (preview.binary || preview.truncated) {
+        throw new Error(
+          'The inline edit was applied, but PanePilot could not reload the LaTeX source.'
+        )
+      }
+      const cached = latexSourceSnapshots.get(
+        sourceSnapshotKey(project.id, edit.path)
+      )
+      const mergedCachedDraft = cached
+        ? mergeInlineEditIntoCachedDraft(cached, edit)
+        : null
+      rememberSourceSnapshot(project.id, edit.path, {
+        savedContent: preview.content,
+        draft:
+          mergedCachedDraft ??
+          (cached && cached.draft !== cached.savedContent
+            ? cached.draft
+            : preview.content)
+      })
+      inlineEditAppliedPathRef.current = edit.path
       const activeModel = editorRef.current?.getModel()
       if (
         trackedModel &&
@@ -1066,38 +1199,36 @@ export function LatexManuscript({
         activeModel === trackedModel &&
         activeFinderPathRef.current === edit.path
       ) {
-        const preview = await window.projectConsole.files.preview(
-          project.id,
-          edit.path
-        )
-        if (!preview.binary && !preview.truncated) {
-          const range = trackedDecorationId
-            ? trackedModel.getDecorationRange(trackedDecorationId)
-            : null
-          if (
-            range &&
-            edit.replacementText != null &&
-            trackedModel.getValueInRange(range) === edit.originalText
-          ) {
-            trackedModel.pushEditOperations(
-              [],
-              [
-                {
-                  range,
-                  text: edit.replacementText,
-                  forceMoveMarkers: true
-                }
-              ],
-              () => null
-            )
-          } else if (trackedModel.getValue() !== preview.content) {
-            setInlineHistoryError(
-              'The inline edit finished, but you changed its selected text while it was running. PanePilot kept your local draft; the applied revision remains in the editorial trail.'
-            )
-          }
-          setSavedContent(preview.content)
-          setDraft(trackedModel.getValue())
+        const range = trackedDecorationId
+          ? trackedModel.getDecorationRange(trackedDecorationId)
+          : null
+        if (
+          range &&
+          edit.replacementText != null &&
+          trackedModel.getValueInRange(range) === edit.originalText
+        ) {
+          trackedModel.pushEditOperations(
+            [],
+            [
+              {
+                range,
+                text: edit.replacementText,
+                forceMoveMarkers: true
+              }
+            ],
+            () => null
+          )
+        } else if (trackedModel.getValue() !== preview.content) {
+          setInlineHistoryError(
+            'The inline edit finished, but you changed its selected text while it was running. PanePilot kept your local draft; the applied revision remains in the editorial trail.'
+          )
         }
+        setSavedContent(preview.content)
+        setDraft(trackedModel.getValue())
+        rememberSourceSnapshot(project.id, edit.path, {
+          savedContent: preview.content,
+          draft: trackedModel.getValue()
+        })
       }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught)
@@ -1118,6 +1249,9 @@ export function LatexManuscript({
         trackedModel.deltaDecorations([trackedDecorationId], [])
       }
       setSendingInlineEdit(false)
+      window.setTimeout(() => {
+        inlineEditReloadGuardRef.current = false
+      }, 250)
     }
   }
 
@@ -1452,6 +1586,7 @@ export function LatexManuscript({
             <div className={`latex-editor-shell ${loading ? 'loading' : ''}`}>
             <Editor
               path={`${project.id}/${path}`}
+              keepCurrentModel
               language="latex"
               theme="panepilot-latex"
               value={draft}

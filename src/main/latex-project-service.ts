@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  promises as fs,
   lstatSync,
   readFileSync,
   readdirSync,
-  realpathSync,
-  statSync
+  realpathSync
 } from 'node:fs'
 import { posix, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
@@ -36,6 +36,7 @@ import {
   normalizeOptionalWebUrl,
   normalizeProjectRelativePath
 } from './latex-paths'
+import { ProjectMetadataService } from './project-metadata-service'
 import {
   createLocalFile,
   deleteLocalFileIfUnchanged,
@@ -44,11 +45,11 @@ import {
 import {
   createRemoteFile,
   deleteRemoteFileIfUnchanged,
-  previewRemoteFile,
+  previewRemoteFileAsync,
   readRemoteBinaryFile,
   readRemoteSourceRevision,
-  readRemoteTextFiles,
-  remoteDirectoryExists,
+  readRemoteTextFilesAsync,
+  remoteDirectoryExistsAsync,
   writeRemoteFileAsync
 } from './remote-file-service'
 import type { ParsedLatexSection, Store } from './store'
@@ -450,45 +451,88 @@ export function parseLatexOutline(
   return sections.map((section, ordinal) => ({ ...section, ordinal }))
 }
 
-function localLatexFiles(root: string): Record<string, string> {
-  const realRoot = realpathSync(root)
+async function localLatexFilesAsync(root: string): Promise<Record<string, string>> {
+  const realRoot = await fs.realpath(root)
   const files: Record<string, string> = {}
+  let fileCount = 0
+  let scannedEntries = 0
   let totalBytes = 0
 
-  function visit(directory: string): void {
-    if (Object.keys(files).length >= MAX_LATEX_FILES) return
-    for (const name of readdirSync(directory).sort()) {
-      if (name === '.git' || name === 'node_modules' || name.startsWith('.')) continue
+  async function visit(directory: string): Promise<void> {
+    if (
+      fileCount >= MAX_LATEX_FILES ||
+      scannedEntries >= MAX_LATEX_SCAN_ENTRIES
+    ) {
+      return
+    }
+    let names: string[]
+    try {
+      names = (await fs.readdir(directory)).sort()
+    } catch {
+      return
+    }
+    for (const name of names) {
+      scannedEntries += 1
+      if (
+        scannedEntries > MAX_LATEX_SCAN_ENTRIES ||
+        fileCount >= MAX_LATEX_FILES
+      ) {
+        return
+      }
+      if (name === '.git' || name === 'node_modules' || name.startsWith('.')) {
+        continue
+      }
       let target: string
       try {
-        target = realpathSync(resolve(directory, name))
+        target = await fs.realpath(resolve(directory, name))
       } catch {
         continue
       }
       if (target !== realRoot && !target.startsWith(`${realRoot}${sep}`)) continue
       let stat
       try {
-        stat = lstatSync(target)
+        stat = await fs.lstat(target)
       } catch {
         continue
       }
       if (stat.isDirectory()) {
-        visit(target)
+        await visit(target)
         continue
       }
       if (!stat.isFile() || !name.toLocaleLowerCase().endsWith('.tex')) continue
       if (stat.size > 1024 * 1024 || totalBytes + stat.size > MAX_LATEX_BYTES) continue
-      const content = readFileSync(target)
+      let content: Buffer
+      try {
+        content = await fs.readFile(target)
+      } catch {
+        continue
+      }
       if (content.includes(0)) continue
       const path = relative(realRoot, target).split(sep).join('/')
       files[path] = content.toString('utf8')
       totalBytes += stat.size
-      if (Object.keys(files).length >= MAX_LATEX_FILES) return
+      fileCount += 1
     }
   }
 
-  visit(realRoot)
+  await visit(realRoot)
   return files
+}
+
+async function localDirectoryExistsAsync(
+  root: string,
+  requested: string
+): Promise<boolean> {
+  try {
+    const realRoot = await fs.realpath(root)
+    const target = await fs.realpath(resolve(realRoot, requested))
+    return (
+      (target === realRoot || target.startsWith(`${realRoot}${sep}`)) &&
+      (await fs.stat(target)).isDirectory()
+    )
+  } catch {
+    return false
+  }
 }
 
 export function localLatexSourceRevision(root: string): string {
@@ -540,17 +584,59 @@ export function localLatexSourceRevision(root: string): string {
   return createHash('sha256').update(entries.sort().join('\0')).digest('hex')
 }
 
-function localDirectoryExists(root: string, requested: string): boolean {
-  try {
-    const realRoot = realpathSync(root)
-    const target = realpathSync(resolve(realRoot, requested))
-    return (
-      (target === realRoot || target.startsWith(`${realRoot}${sep}`)) &&
-      statSync(target).isDirectory()
-    )
-  } catch {
-    return false
+async function localLatexSourceRevisionAsync(root: string): Promise<string> {
+  const realRoot = await fs.realpath(root)
+  const entries: string[] = []
+  const visitedDirectories = new Set<string>()
+  let scannedEntries = 0
+
+  async function visit(directory: string): Promise<void> {
+    if (
+      entries.length >= MAX_LATEX_FILES ||
+      scannedEntries >= MAX_LATEX_SCAN_ENTRIES ||
+      visitedDirectories.has(directory)
+    ) {
+      return
+    }
+    visitedDirectories.add(directory)
+    let names: string[]
+    try {
+      names = (await fs.readdir(directory)).sort()
+    } catch {
+      return
+    }
+    for (const name of names) {
+      scannedEntries += 1
+      if (scannedEntries > MAX_LATEX_SCAN_ENTRIES) return
+      if (name === '.git' || name === 'node_modules' || name.startsWith('.')) {
+        continue
+      }
+      let target: string
+      try {
+        target = await fs.realpath(resolve(directory, name))
+      } catch {
+        continue
+      }
+      if (target !== realRoot && !target.startsWith(`${realRoot}${sep}`)) continue
+      let stat
+      try {
+        stat = await fs.lstat(target, { bigint: true })
+      } catch {
+        continue
+      }
+      if (stat.isDirectory()) {
+        await visit(target)
+        continue
+      }
+      if (!stat.isFile() || !name.toLocaleLowerCase().endsWith('.tex')) continue
+      const path = relative(realRoot, target).split(sep).join('/')
+      entries.push(`${path}\0${stat.size}\0${stat.mtimeNs}`)
+      if (entries.length >= MAX_LATEX_FILES) return
+    }
   }
+
+  await visit(realRoot)
+  return createHash('sha256').update(entries.sort().join('\0')).digest('hex')
 }
 
 export function latexPdfPath(mainFile: string): string {
@@ -608,24 +694,27 @@ function compilationError(caught: unknown): Error {
   return new Error(tail ? `${reason}\n\n${tail}` : reason)
 }
 
-function readLocalPdf(root: string, requested: string): LatexPdfDocument {
+async function readLocalPdf(
+  root: string,
+  requested: string
+): Promise<LatexPdfDocument> {
   let realRoot: string
   let target: string
   try {
-    realRoot = realpathSync(root)
-    target = realpathSync(resolve(realRoot, requested))
+    realRoot = await fs.realpath(root)
+    target = await fs.realpath(resolve(realRoot, requested))
   } catch {
     throw new Error(`Compiled PDF “${requested}” was not found.`)
   }
   if (target !== realRoot && !target.startsWith(`${realRoot}${sep}`)) {
     throw new Error('The requested PDF is outside the project folder.')
   }
-  const stat = statSync(target)
+  const stat = await fs.stat(target)
   if (!stat.isFile()) throw new Error(`Compiled PDF “${requested}” was not found.`)
   if (stat.size > MAX_PDF_BYTES) {
     throw new Error('PanePilot previews compiled PDFs up to 32 MB.')
   }
-  const content = readFileSync(target)
+  const content = await fs.readFile(target)
   if (!content.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
     throw new Error(`“${requested}” is not a valid PDF file.`)
   }
@@ -811,14 +900,28 @@ export function diffLatexFile(
 }
 
 export class LatexProjectService {
+  private readonly metadata: ProjectMetadataService
+
   constructor(
     private readonly store: Store,
-    private readonly terminals: TerminalManager
-  ) {}
+    private readonly terminals: TerminalManager,
+    metadata?: ProjectMetadataService
+  ) {
+    this.metadata = metadata ?? new ProjectMetadataService(store)
+  }
 
-  getWorkspace(projectId: string): LatexWorkspace {
+  async getWorkspace(projectId: string): Promise<LatexWorkspace> {
     const { project, connection, details } = this.requireProject(projectId)
-    const files = this.readFiles(project.folder, connection)
+    const [files, contextAvailable] = await Promise.all([
+      this.readFilesAsync(project.folder, connection),
+      connection.kind === 'local'
+        ? localDirectoryExistsAsync(project.folder, details.contextFolder)
+        : remoteDirectoryExistsAsync(
+            connection.sshAlias ?? connection.name,
+            project.folder,
+            details.contextFolder
+          )
+    ])
     if (files[details.mainFile] == null) {
       throw new Error(`Main LaTeX file “${details.mainFile}” was not found.`)
     }
@@ -827,21 +930,14 @@ export class LatexProjectService {
     return {
       details,
       sections,
-      contextAvailable:
-        connection.kind === 'local'
-          ? localDirectoryExists(project.folder, details.contextFolder)
-          : remoteDirectoryExists(
-              connection.sshAlias ?? connection.name,
-              project.folder,
-              details.contextFolder
-            )
+      contextAvailable
     }
   }
 
   async sourceRevision(projectId: string): Promise<string> {
     const { project, connection } = this.requireProject(projectId)
     if (connection.kind === 'local') {
-      return localLatexSourceRevision(project.folder)
+      return localLatexSourceRevisionAsync(project.folder)
     }
     return readRemoteSourceRevision(
       connection.sshAlias ?? connection.name,
@@ -873,7 +969,7 @@ export class LatexProjectService {
   async compile(projectId: string): Promise<LatexPdfDocument> {
     // Reuse the workspace read to verify the configured source still exists
     // inside the canonical local/remote project before starting a compiler.
-    this.getWorkspace(projectId)
+    await this.getWorkspace(projectId)
     const { project, connection, details } = this.requireProject(projectId)
     const mainFile = normalizeProjectRelativePath(
       details.mainFile,
@@ -923,7 +1019,7 @@ export class LatexProjectService {
     return this.getPdf(projectId)
   }
 
-  update(input: UpdateLatexProjectInput): LatexWorkspace {
+  async update(input: UpdateLatexProjectInput): Promise<LatexWorkspace> {
     const { project, connection } = this.requireProject(input.projectId)
     const mainFile = normalizeProjectRelativePath(input.mainFile, 'Main LaTeX file', {
       extension: '.tex'
@@ -934,10 +1030,10 @@ export class LatexProjectService {
     )
     const overleafUrl = normalizeOptionalWebUrl(input.overleafUrl, 'Overleaf URL')
     if (connection.kind === 'local') {
-      const files = localLatexFiles(project.folder)
+      const files = await localLatexFilesAsync(project.folder)
       if (files[mainFile] == null) throw new Error(`Main LaTeX file “${mainFile}” was not found.`)
     } else {
-      const preview = previewRemoteFile(
+      const preview = await previewRemoteFileAsync(
         connection.sshAlias ?? connection.name,
         project.folder,
         mainFile
@@ -954,8 +1050,8 @@ export class LatexProjectService {
     return this.getWorkspace(input.projectId)
   }
 
-  startChat(input: StartLatexChatInput): TerminalSession {
-    const workspace = this.getWorkspace(input.projectId)
+  async startChat(input: StartLatexChatInput): Promise<TerminalSession> {
+    const workspace = await this.getWorkspace(input.projectId)
     if (!['codex', 'claude'].includes(input.provider)) {
       throw new Error('Choose Codex or Claude for a LaTeX chat.')
     }
@@ -985,7 +1081,7 @@ export class LatexProjectService {
     void this.terminals.syncSessionMetadata(sessionId)
   }
 
-  private preparedPrompt(sessionId: string, rawPrompt: string): string {
+  private async preparedPrompt(sessionId: string, rawPrompt: string): Promise<string> {
     const session = this.store.getSession(sessionId)
     const chat = this.store.getLatexChat(sessionId)
     if (!session || !chat) throw new Error('LaTeX chat not found.')
@@ -997,14 +1093,14 @@ export class LatexProjectService {
     }
     let section: LatexSection | null = null
     if (chat.scope === 'section') {
-      this.getWorkspace(chat.projectId)
+      await this.getWorkspace(chat.projectId)
       section = chat.sectionId ? this.store.getLatexSection(chat.sectionId) : null
       if (!section) throw new Error('The section attached to this chat no longer exists.')
     }
     if (chat.mode === 'edit' && this.store.getLatexSnapshots(sessionId).length === 0) {
       this.store.replaceLatexSnapshots(
         sessionId,
-        this.readFiles(project.folder, connection)
+        await this.readFilesAsync(project.folder, connection)
       )
     }
     const scope =
@@ -1024,10 +1120,10 @@ export class LatexProjectService {
     return `[PanePilot LaTeX] ${instruction} ${context}\n\nUser request: ${prompt}`
   }
 
-  sendPrompt(sessionId: string, rawPrompt: string): void {
+  async sendPrompt(sessionId: string, rawPrompt: string): Promise<void> {
     this.terminals.sendPrompt(
       sessionId,
-      this.preparedPrompt(sessionId, rawPrompt)
+      await this.preparedPrompt(sessionId, rawPrompt)
     )
   }
 
@@ -1059,7 +1155,7 @@ export class LatexProjectService {
     }
 
     const { project, connection } = this.requireProject(input.projectId)
-    const files = this.readFiles(project.folder, connection)
+    const files = await this.readFilesAsync(project.folder, connection)
     const source = files[path]
     if (source == null) throw new Error(`LaTeX source file “${path}” was not found.`)
     const savedSelection = extractLatexSelection(source, selection)
@@ -1095,7 +1191,7 @@ export class LatexProjectService {
     if (!chat || chat.purpose !== 'inline-edit') {
       throw new Error('Persistent inline Codex chat not found.')
     }
-    const prompt = this.preparedPrompt(
+    const prompt = await this.preparedPrompt(
       session.id,
       'Inline edit request. Modify the saved file at the exact selected range described below. ' +
         'The selected paragraph and one neighboring paragraph on each side are context only. ' +
@@ -1129,7 +1225,7 @@ export class LatexProjectService {
         throw new Error(`Codex exited with code ${result.exitCode}.`)
       }
 
-      const updatedFiles = this.readFiles(project.folder, connection)
+      const updatedFiles = await this.readFilesAsync(project.folder, connection)
       const unexpectedPaths = [...new Set([
         ...Object.keys(files),
         ...Object.keys(updatedFiles)
@@ -1180,7 +1276,7 @@ export class LatexProjectService {
       throw new Error('Only an applied inline edit can be rolled back.')
     }
     const { project, connection } = this.requireProject(edit.projectId)
-    const files = this.readFiles(project.folder, connection)
+    const files = await this.readFilesAsync(project.folder, connection)
     const source = files[edit.path]
     if (source == null) throw new Error(`LaTeX source file “${edit.path}” was not found.`)
     const offset = this.locateInlineReplacement(source, edit)
@@ -1201,12 +1297,15 @@ export class LatexProjectService {
     this.store.deleteLatexInlineEdit(editId)
   }
 
-  listComments(projectId: string): LatexComment[] {
+  async listComments(projectId: string): Promise<LatexComment[]> {
     this.requireProject(projectId)
-    return this.store.listLatexComments(projectId)
+    return this.metadata.listLatexComments(
+      projectId,
+      this.store.listLatexComments(projectId)
+    )
   }
 
-  createComment(input: CreateLatexCommentInput): LatexComment {
+  async createComment(input: CreateLatexCommentInput): Promise<LatexComment> {
     if (!input?.selection) throw new Error('Select some LaTeX source to comment on.')
     const body = input.body.trim()
     if (!body) throw new Error('Write a comment for the selected source.')
@@ -1229,7 +1328,7 @@ export class LatexProjectService {
     }
 
     const { project, connection } = this.requireProject(input.projectId)
-    const source = this.readFiles(project.folder, connection)[path]
+    const source = (await this.readFilesAsync(project.folder, connection))[path]
     if (source == null) throw new Error(`LaTeX source file “${path}” was not found.`)
     const selectedText = extractLatexSelection(source, selection)
     if (selectedText !== selection.text.replace(/\r\n?/g, '\n')) {
@@ -1238,8 +1337,7 @@ export class LatexProjectService {
       )
     }
     const offsets = latexSelectionOffsets(source, selection)
-    return this.store.createLatexComment({
-      projectId: project.id,
+    return this.metadata.createLatexComment(project.id, {
       path,
       body,
       selectedText,
@@ -1249,23 +1347,25 @@ export class LatexProjectService {
       endColumn: selection.endColumn,
       prefixContext: source.slice(Math.max(0, offsets.start - 240), offsets.start),
       suffixContext: source.slice(offsets.end, offsets.end + 240)
-    })
+    }, this.store.listLatexComments(project.id))
   }
 
-  deleteComment(commentId: string): void {
-    const comment = this.store.getLatexComment(commentId)
-    if (!comment) return
-    this.requireProject(comment.projectId)
-    this.store.deleteLatexComment(comment.id)
+  async deleteComment(projectId: string, commentId: string): Promise<void> {
+    this.requireProject(projectId)
+    await this.metadata.deleteLatexComment(
+      projectId,
+      commentId,
+      this.store.listLatexComments(projectId)
+    )
   }
 
-  changes(sessionId: string): LatexChangeSet {
+  async changes(sessionId: string): Promise<LatexChangeSet> {
     const chat = this.store.getLatexChat(sessionId)
     if (!chat) throw new Error('LaTeX chat not found.')
     const snapshots = this.store.getLatexSnapshots(sessionId)
     if (!snapshots.length) return { sessionId, capturedAt: null, files: [] }
     const { project, connection } = this.requireProject(chat.projectId)
-    const current = this.readFiles(project.folder, connection)
+    const current = await this.readFilesAsync(project.folder, connection)
     const before = Object.fromEntries(
       snapshots.map((snapshot) => [snapshot.relativePath, snapshot.content])
     )
@@ -1379,10 +1479,13 @@ export class LatexProjectService {
     )
   }
 
-  private readFiles(folder: string, connection: Connection): Record<string, string> {
+  private async readFilesAsync(
+    folder: string,
+    connection: Connection
+  ): Promise<Record<string, string>> {
     return connection.kind === 'local'
-      ? localLatexFiles(folder)
-      : readRemoteTextFiles(
+      ? localLatexFilesAsync(folder)
+      : readRemoteTextFilesAsync(
           connection.sshAlias ?? connection.name,
           folder,
           '.tex',

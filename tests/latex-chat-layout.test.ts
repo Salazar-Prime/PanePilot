@@ -64,9 +64,10 @@ describe('LaTeX writing chat layout', () => {
     )
 
     expect(source.match(/<LatexAgentPane/g)).toHaveLength(1)
-    expect(source).toContain(
-      "tab === 'manuscript' || tab === 'pdf' || pdfOpened"
-    )
+    expect(source).toContain("tab === 'manuscript' ? 'active' : ''")
+    expect(source).toContain("tab === 'pdf' ? 'active' : ''")
+    expect(source).toContain('{pdfOpened && (')
+    expect(source).not.toContain("{tab === 'manuscript' && (")
     expect(source).toContain('className="latex-agent-resizer"')
     expect(source).toContain('onHide={() =>')
   })

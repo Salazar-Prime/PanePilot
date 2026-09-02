@@ -233,8 +233,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('latex:list-comments', projectId),
     createComment: (input: CreateLatexCommentInput) =>
       ipcRenderer.invoke('latex:create-comment', input),
-    deleteComment: (commentId: string) =>
-      ipcRenderer.invoke('latex:delete-comment', commentId),
+    deleteComment: (projectId: string, commentId: string) =>
+      ipcRenderer.invoke('latex:delete-comment', projectId, commentId),
     changes: (sessionId: string) => ipcRenderer.invoke('latex:changes', sessionId),
     clearChanges: (sessionId: string) =>
       ipcRenderer.invoke('latex:clear-changes', sessionId)

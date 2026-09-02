@@ -294,7 +294,7 @@ export function LatexProjectWorkspace({
     setPdfOpened(openedPdfProjects.has(project.id) || rememberedTab === 'pdf')
     setWorkspace(cached)
     setLoading(cached == null)
-    setRefreshingWorkspace(cached != null)
+    setRefreshingWorkspace(false)
     setError('')
     setRefreshError('')
     setChanges(null)
@@ -305,7 +305,7 @@ export function LatexProjectWorkspace({
     setChatLayout(loadLatexChatLayout(project.id))
     chatResizeRef.current = null
     setResizingChat(false)
-    void loadWorkspace()
+    if (!cached) void loadWorkspace()
     void refreshInlineEdits()
     void refreshComments()
     return () => {
@@ -426,13 +426,21 @@ export function LatexProjectWorkspace({
         selection,
         instruction
       })
-      await Promise.all([onChanged(), refreshInlineEdits(), loadWorkspace()])
-      if (changeSession) {
-        setChanges(await window.projectConsole.latex.changes(changeSession.id))
-      }
+      void Promise.all([onChanged(), refreshInlineEdits(), loadWorkspace()])
+        .then(async () => {
+          if (changeSession) {
+            setChanges(
+              await window.projectConsole.latex.changes(changeSession.id)
+            )
+          }
+        })
+        .catch(() => {
+          // Source application already succeeded. Supplemental project state
+          // can catch up on its normal refresh without delaying the editor.
+        })
       return edit
     } catch (error) {
-      await Promise.all([onChanged(), refreshInlineEdits()])
+      void Promise.all([onChanged(), refreshInlineEdits()])
       throw error
     }
   }
@@ -467,7 +475,7 @@ export function LatexProjectWorkspace({
   }
 
   async function deleteComment(commentId: string) {
-    await window.projectConsole.latex.deleteComment(commentId)
+    await window.projectConsole.latex.deleteComment(project.id, commentId)
     await refreshComments()
   }
 
@@ -653,107 +661,110 @@ export function LatexProjectWorkspace({
         activeSessionId={activeSession?.id ?? null}
       />
 
-      {(tab === 'manuscript' || tab === 'pdf' || pdfOpened) && (
-        <div
-          ref={workbenchRef}
-          className={`latex-workbench ${
-            chatLayout.hidden ? 'chat-hidden' : 'chat-visible'
-          } ${resizingChat ? 'resizing' : ''} ${
-            tab === 'manuscript' || tab === 'pdf' ? '' : 'cached'
-          }`}
-          style={
-            {
-              '--latex-chat-width': `${chatLayout.width}px`
-            } as CSSProperties
-          }
-          aria-hidden={tab !== 'manuscript' && tab !== 'pdf'}
-        >
-          <div className="latex-workbench-main">
-            {tab === 'manuscript' && (
-              <LatexManuscript
-                key={project.id}
-                project={project}
-                workspace={workspace}
-                inlineEdits={inlineEdits}
-                comments={comments}
-                inlineRunning={inlineSession?.state === 'running'}
-                selectedSectionId={selectedSectionId}
-                chatCounts={chatCounts}
-                changes={changes}
-                onSelectSection={setSelectedSectionId}
-                onOpenContext={openContext}
-                onClearChanges={clearChanges}
-                onWorkspaceRefresh={loadWorkspace}
-                onInlineEdit={sendInlineEdit}
-                onRollbackInlineEdit={rollbackInlineEdit}
-                onDeleteInlineEdit={deleteInlineEdit}
-                onCreateComment={createComment}
-                onDeleteComment={deleteComment}
-                onOpenFile={openFile}
-              />
-            )}
-            {pdfOpened && (
-              <div
-                className={`workspace-panel-cache ${
-                  tab === 'pdf' ? 'active' : ''
-                }`}
-                aria-hidden={tab !== 'pdf'}
-              >
-                <Suspense
-                  fallback={
-                    <div className="latex-pdf-state" role="status">
-                      <LoaderCircle className="spin" size={28} />
-                      <strong>Preparing the PDF viewer</strong>
-                    </div>
-                  }
-                >
-                  <LatexPdfPreview
-                    key={project.id}
-                    projectId={project.id}
-                    mainFile={workspace.details.mainFile}
-                    local={project.connectionId === 'local'}
-                  />
-                </Suspense>
-              </div>
-            )}
-          </div>
+      <div
+        ref={workbenchRef}
+        className={`latex-workbench ${
+          chatLayout.hidden ? 'chat-hidden' : 'chat-visible'
+        } ${resizingChat ? 'resizing' : ''} ${
+          tab === 'manuscript' || tab === 'pdf' ? '' : 'cached'
+        }`}
+        style={
+          {
+            '--latex-chat-width': `${chatLayout.width}px`
+          } as CSSProperties
+        }
+        aria-hidden={tab !== 'manuscript' && tab !== 'pdf'}
+      >
+        <div className="latex-workbench-main">
           <div
-            className="latex-agent-resizer"
-            role="separator"
-            aria-label="Resize writing chat"
-            aria-orientation="vertical"
-            aria-valuemin={MIN_LATEX_CHAT_WIDTH}
-            aria-valuemax={MAX_LATEX_CHAT_WIDTH}
-            aria-valuenow={chatLayout.width}
-            aria-valuetext={`${chatLayout.width} pixels wide`}
-            tabIndex={chatLayout.hidden ? -1 : 0}
-            onPointerDown={beginChatResize}
-            onKeyDown={handleChatResizeKey}
-          />
-          <LatexAgentPane
-            key={project.id}
-            sessions={sessions}
-            archivedSessions={archivedSessions}
-            sections={workspace.sections}
-            projectFolder={project.folder}
-            activeSessionId={activeSession?.id ?? null}
-            onSelectSession={(id) => {
-              onSessionSelected(id)
-              onSelectSession(id)
-              void window.projectConsole.terminals.acknowledge(id).then(onChanged)
-            }}
-            onNewChat={() => setShowLauncher(true)}
-            onChanged={onChanged}
-            onPromptSent={() => {
-              window.setTimeout(() => void refreshChanges(), 700)
-            }}
-            onOpenFile={openFile}
-            onHide={() =>
-              updateChatLayout({ ...chatLayout, hidden: true })
-            }
-          />
+            className={`workspace-panel-cache ${
+              tab === 'manuscript' ? 'active' : ''
+            }`}
+            aria-hidden={tab !== 'manuscript'}
+          >
+            <LatexManuscript
+              key={project.id}
+              project={project}
+              workspace={workspace}
+              inlineEdits={inlineEdits}
+              comments={comments}
+              inlineRunning={inlineSession?.state === 'running'}
+              selectedSectionId={selectedSectionId}
+              chatCounts={chatCounts}
+              changes={changes}
+              onSelectSection={setSelectedSectionId}
+              onOpenContext={openContext}
+              onClearChanges={clearChanges}
+              onWorkspaceRefresh={loadWorkspace}
+              onInlineEdit={sendInlineEdit}
+              onRollbackInlineEdit={rollbackInlineEdit}
+              onDeleteInlineEdit={deleteInlineEdit}
+              onCreateComment={createComment}
+              onDeleteComment={deleteComment}
+              onOpenFile={openFile}
+            />
+          </div>
+          {pdfOpened && (
+            <div
+              className={`workspace-panel-cache ${
+                tab === 'pdf' ? 'active' : ''
+              }`}
+              aria-hidden={tab !== 'pdf'}
+            >
+              <Suspense
+                fallback={
+                  <div className="latex-pdf-state" role="status">
+                    <LoaderCircle className="spin" size={28} />
+                    <strong>Preparing the PDF viewer</strong>
+                  </div>
+                }
+              >
+                <LatexPdfPreview
+                  key={project.id}
+                  projectId={project.id}
+                  mainFile={workspace.details.mainFile}
+                  local={project.connectionId === 'local'}
+                />
+              </Suspense>
+            </div>
+          )}
         </div>
-      )}
+        <div
+          className="latex-agent-resizer"
+          role="separator"
+          aria-label="Resize writing chat"
+          aria-orientation="vertical"
+          aria-valuemin={MIN_LATEX_CHAT_WIDTH}
+          aria-valuemax={MAX_LATEX_CHAT_WIDTH}
+          aria-valuenow={chatLayout.width}
+          aria-valuetext={`${chatLayout.width} pixels wide`}
+          tabIndex={chatLayout.hidden ? -1 : 0}
+          onPointerDown={beginChatResize}
+          onKeyDown={handleChatResizeKey}
+        />
+        <LatexAgentPane
+          key={project.id}
+          sessions={sessions}
+          archivedSessions={archivedSessions}
+          sections={workspace.sections}
+          projectFolder={project.folder}
+          activeSessionId={activeSession?.id ?? null}
+          onSelectSession={(id) => {
+            onSessionSelected(id)
+            onSelectSession(id)
+            void window.projectConsole.terminals.acknowledge(id).then(onChanged)
+          }}
+          onNewChat={() => setShowLauncher(true)}
+          onChanged={onChanged}
+          onPromptSent={() => {
+            window.setTimeout(() => void refreshChanges(), 700)
+          }}
+          onOpenFile={openFile}
+          onHide={() =>
+            updateChatLayout({ ...chatLayout, hidden: true })
+          }
+        />
+      </div>
       <div
         className={`workspace-panel-cache ${tab === 'notes' ? 'active' : ''}`}
         aria-hidden={tab !== 'notes'}

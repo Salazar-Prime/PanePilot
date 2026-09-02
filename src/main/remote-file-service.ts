@@ -862,6 +862,28 @@ export function readRemoteTextFiles(
   )
 }
 
+export async function readRemoteTextFilesAsync(
+  sshAlias: string,
+  root: string,
+  extension: string,
+  maxFiles = 256,
+  maxTotalBytes = 8 * 1024 * 1024
+): Promise<Record<string, string>> {
+  const encoded = await runRemotePythonAsync<Record<string, string>>(
+    sshAlias,
+    READ_TEXT_FILES_SCRIPT,
+    { root, extension, maxFiles, maxTotalBytes },
+    16 * 1024 * 1024,
+    30_000
+  )
+  return Object.fromEntries(
+    Object.entries(encoded).map(([path, content]) => [
+      path,
+      Buffer.from(content, 'base64').toString('utf8')
+    ])
+  )
+}
+
 export async function readRemoteSourceRevision(
   sshAlias: string,
   root: string,
@@ -888,5 +910,19 @@ export function remoteDirectoryExists(
     sshAlias,
     DIRECTORY_EXISTS_SCRIPT,
     { root, relativePath }
+  ).exists
+}
+
+export async function remoteDirectoryExistsAsync(
+  sshAlias: string,
+  root: string,
+  relativePath: string
+): Promise<boolean> {
+  return (
+    await runRemotePythonAsync<{ exists: boolean }>(
+      sshAlias,
+      DIRECTORY_EXISTS_SCRIPT,
+      { root, relativePath }
+    )
   ).exists
 }

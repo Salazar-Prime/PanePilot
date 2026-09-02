@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -52,10 +58,15 @@ describe('LaTeX manuscript layout', () => {
 
 describe('LaTeX selection comments', () => {
   let appDataPath: string | null = null
+  let secondClientDataPath: string | null = null
 
   afterEach(() => {
     if (appDataPath) rmSync(appDataPath, { recursive: true, force: true })
+    if (secondClientDataPath) {
+      rmSync(secondClientDataPath, { recursive: true, force: true })
+    }
     appDataPath = null
+    secondClientDataPath = null
   })
 
   function createProject() {
@@ -86,10 +97,10 @@ describe('LaTeX selection comments', () => {
     return { store, project, service }
   }
 
-  it('persists exact source anchors and deletes only the comment', () => {
+  it('persists exact source anchors in the project for another client', async () => {
     const { store, project, service } = createProject()
     try {
-      const comment = service.createComment({
+      const comment = await service.createComment({
         projectId: project.id,
         selection: {
           path: 'main.tex',
@@ -102,7 +113,7 @@ describe('LaTeX selection comments', () => {
         body: 'Consider a more specific verb.'
       })
 
-      expect(service.listComments(project.id)).toEqual([comment])
+      expect(await service.listComments(project.id)).toEqual([comment])
       expect(comment).toMatchObject({
         path: 'main.tex',
         selectedText: 'Comment',
@@ -113,17 +124,56 @@ describe('LaTeX selection comments', () => {
       expect(comment.prefixContext).toContain('Opening paragraph.')
       expect(comment.suffixContext).toContain(' this phrase.')
 
-      service.deleteComment(comment.id)
-      expect(service.listComments(project.id)).toEqual([])
+      const shared = JSON.parse(
+        readFileSync(
+          join(appDataPath!, '.panepilot', 'latex-comments.json'),
+          'utf8'
+        )
+      ) as { version: number; comments: Array<Record<string, unknown>> }
+      expect(shared.version).toBe(1)
+      expect(shared.comments).toHaveLength(1)
+      expect(shared.comments[0]).not.toHaveProperty('projectId')
+
+      secondClientDataPath = mkdtempSync(
+        join(tmpdir(), 'panepilot-latex-comment-client-')
+      )
+      const secondStore = new Store(secondClientDataPath)
+      try {
+        secondStore.syncConnections([])
+        const secondProject = secondStore.createProject({
+          type: 'latex',
+          name: 'Paper on another client',
+          connectionId: 'local',
+          folder: appDataPath!,
+          repositoryUrl: null,
+          latex: {
+            mainFile: 'main.tex',
+            overleafUrl: null,
+            contextFolder: 'context'
+          }
+        })
+        const secondService = new LatexProjectService(
+          secondStore,
+          {} as TerminalManager
+        )
+        expect(await secondService.listComments(secondProject.id)).toEqual([
+          { ...comment, projectId: secondProject.id }
+        ])
+      } finally {
+        secondStore.close()
+      }
+
+      await service.deleteComment(project.id, comment.id)
+      expect(await service.listComments(project.id)).toEqual([])
     } finally {
       store.close()
     }
   })
 
-  it('refuses to attach a comment to stale source coordinates', () => {
+  it('refuses to attach a comment to stale source coordinates', async () => {
     const { store, project, service } = createProject()
     try {
-      expect(() =>
+      await expect(
         service.createComment({
           projectId: project.id,
           selection: {
@@ -136,8 +186,37 @@ describe('LaTeX selection comments', () => {
           },
           body: 'This should not be saved.'
         })
-      ).toThrow('selected source changed')
-      expect(service.listComments(project.id)).toEqual([])
+      ).rejects.toThrow('selected source changed')
+      expect(await service.listComments(project.id)).toEqual([])
+    } finally {
+      store.close()
+    }
+  })
+
+  it('migrates legacy client-local comments when the shared file is absent', async () => {
+    const { store, project, service } = createProject()
+    try {
+      const legacy = store.createLatexComment({
+        projectId: project.id,
+        path: 'main.tex',
+        body: 'Legacy note',
+        selectedText: 'Comment',
+        startLine: 2,
+        startColumn: 1,
+        endLine: 2,
+        endColumn: 8,
+        prefixContext: 'Opening paragraph.\n',
+        suffixContext: ' this phrase.\nClosing paragraph.\n'
+      })
+
+      expect(await service.listComments(project.id)).toEqual([legacy])
+      const shared = JSON.parse(
+        readFileSync(
+          join(appDataPath!, '.panepilot', 'latex-comments.json'),
+          'utf8'
+        )
+      ) as { comments: Array<{ id: string }> }
+      expect(shared.comments.map((comment) => comment.id)).toEqual([legacy.id])
     } finally {
       store.close()
     }

@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import {
   existsSync,
@@ -17,6 +17,7 @@ import { TextDecoder } from 'node:util'
 import type {
   Connection,
   CreateProjectActionInput,
+  LatexComment,
   Project,
   ProjectAction,
   ProjectNote,
@@ -33,9 +34,11 @@ import {
 const PANEPILOT_DIRECTORY = '.panepilot'
 const NOTES_DIRECTORY = 'notes'
 const ACTIONS_FILE = 'actions.json'
+const LATEX_COMMENTS_FILE = 'latex-comments.json'
 const LEGACY_NOTES_FILE = '.notes-panepilot'
 const MAX_METADATA_BYTES = 1024 * 1024
 const MAX_SHARED_ACTIONS = 100
+const MAX_SHARED_LATEX_COMMENTS = 1_000
 
 interface SharedActionDefinition {
   id: string
@@ -48,11 +51,19 @@ interface SharedActionsFile {
   actions: SharedActionDefinition[]
 }
 
+type SharedLatexComment = Omit<LatexComment, 'projectId'>
+
+interface SharedLatexCommentsFile {
+  version: 1
+  comments: SharedLatexComment[]
+}
+
 interface LocalMetadataPaths {
   root: string
   metadata: string
   notes: string
   actions: string
+  latexComments: string
 }
 
 function quote(value: string): string {
@@ -112,7 +123,8 @@ function ensureLocalMetadata(root: string): LocalMetadataPaths {
     root: realRoot,
     metadata,
     notes,
-    actions: resolve(metadata, ACTIONS_FILE)
+    actions: resolve(metadata, ACTIONS_FILE),
+    latexComments: resolve(metadata, LATEX_COMMENTS_FILE)
   }
 }
 
@@ -325,6 +337,136 @@ function writeLocalActions(root: string, file: SharedActionsFile): void {
   atomicWrite(actions, content)
 }
 
+function parseSharedLatexComments(
+  value: unknown,
+  projectId: string
+): LatexComment[] {
+  const label = `${PANEPILOT_DIRECTORY}/${LATEX_COMMENTS_FILE}`
+  if (!value || typeof value !== 'object') {
+    throw new Error(`${label} is invalid.`)
+  }
+  const file = value as { version?: unknown; comments?: unknown }
+  if (
+    file.version !== 1 ||
+    !Array.isArray(file.comments) ||
+    file.comments.length > MAX_SHARED_LATEX_COMMENTS
+  ) {
+    throw new Error(`${label} is invalid.`)
+  }
+  const ids = new Set<string>()
+  return file.comments.map((value): LatexComment => {
+    if (!value || typeof value !== 'object') throw new Error(`${label} is invalid.`)
+    const comment = value as Record<string, unknown>
+    const coordinates = [
+      comment.startLine,
+      comment.startColumn,
+      comment.endLine,
+      comment.endColumn
+    ]
+    if (
+      typeof comment.id !== 'string' ||
+      !/^[a-zA-Z0-9_-]{1,128}$/.test(comment.id) ||
+      ids.has(comment.id) ||
+      typeof comment.path !== 'string' ||
+      !comment.path.toLowerCase().endsWith('.tex') ||
+      comment.path.startsWith('/') ||
+      comment.path.split('/').some((part) => !part || part === '.' || part === '..') ||
+      /[\\\u0000-\u001f\u007f]/.test(comment.path) ||
+      typeof comment.body !== 'string' ||
+      !comment.body.trim() ||
+      comment.body.length > 10_000 ||
+      typeof comment.selectedText !== 'string' ||
+      !comment.selectedText ||
+      comment.selectedText.length > 20_000 ||
+      typeof comment.prefixContext !== 'string' ||
+      comment.prefixContext.length > 240 ||
+      typeof comment.suffixContext !== 'string' ||
+      comment.suffixContext.length > 240 ||
+      coordinates.some(
+        (coordinate) =>
+          typeof coordinate !== 'number' ||
+          !Number.isSafeInteger(coordinate) ||
+          coordinate < 1
+      ) ||
+      (comment.endLine as number) < (comment.startLine as number) ||
+      typeof comment.createdAt !== 'string' ||
+      typeof comment.updatedAt !== 'string'
+    ) {
+      throw new Error(`${label} contains an invalid comment.`)
+    }
+    ids.add(comment.id)
+    return {
+      id: comment.id,
+      projectId,
+      path: comment.path,
+      body: comment.body,
+      selectedText: comment.selectedText,
+      startLine: comment.startLine as number,
+      startColumn: comment.startColumn as number,
+      endLine: comment.endLine as number,
+      endColumn: comment.endColumn as number,
+      prefixContext: comment.prefixContext,
+      suffixContext: comment.suffixContext,
+      createdAt: comment.createdAt,
+      updatedAt: comment.updatedAt
+    }
+  })
+}
+
+function sharedLatexCommentsFile(
+  projectId: string,
+  comments: LatexComment[]
+): SharedLatexCommentsFile {
+  const parsed = parseSharedLatexComments({
+    version: 1,
+    comments: comments.map(({ projectId: _projectId, ...comment }) => comment)
+  }, projectId)
+  return {
+    version: 1,
+    comments: parsed.map(({ projectId: _projectId, ...comment }) => comment)
+  }
+}
+
+function readLocalLatexComments(root: string): unknown | null {
+  const { latexComments } = ensureLocalMetadata(root)
+  const stat = lstatSync(latexComments, { throwIfNoEntry: false })
+  if (!stat) return null
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new Error(
+      `${PANEPILOT_DIRECTORY}/${LATEX_COMMENTS_FILE} must be a regular file.`
+    )
+  }
+  if (stat.size > MAX_METADATA_BYTES) {
+    throw new Error(
+      `${PANEPILOT_DIRECTORY}/${LATEX_COMMENTS_FILE} must be 1 MB or smaller.`
+    )
+  }
+  try {
+    return JSON.parse(decodeUtf8(readFileSync(latexComments), 'LaTeX comments'))
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(
+        `${PANEPILOT_DIRECTORY}/${LATEX_COMMENTS_FILE} is not valid UTF-8 JSON.`
+      )
+    }
+    throw error
+  }
+}
+
+function writeLocalLatexComments(
+  root: string,
+  file: SharedLatexCommentsFile
+): void {
+  const { latexComments } = ensureLocalMetadata(root)
+  const content = `${JSON.stringify(file, null, 2)}\n`
+  if (Buffer.byteLength(content, 'utf8') > MAX_METADATA_BYTES) {
+    throw new Error(
+      `${PANEPILOT_DIRECTORY}/${LATEX_COMMENTS_FILE} must be 1 MB or smaller.`
+    )
+  }
+  atomicWrite(latexComments, content)
+}
+
 const REMOTE_METADATA_SCRIPT = String.raw`
 import datetime, json, os, re, sys, tempfile
 
@@ -344,6 +486,7 @@ def checked_directory(path, label):
 metadata = os.path.join(root, ".panepilot")
 notes = os.path.join(metadata, "notes")
 actions_path = os.path.join(metadata, "actions.json")
+latex_comments_path = os.path.join(metadata, "latex-comments.json")
 checked_directory(metadata, ".panepilot")
 checked_directory(notes, ".panepilot/notes")
 
@@ -512,6 +655,29 @@ elif operation == "actions-write":
         raise RuntimeError(".panepilot/actions.json must be 1 MB or smaller.")
     atomic_write(actions_path, encoded)
     print("{}")
+elif operation == "latex-comments-read":
+    if not os.path.lexists(latex_comments_path):
+        print("null")
+    else:
+        if os.path.islink(latex_comments_path) or not os.path.isfile(latex_comments_path):
+            raise RuntimeError(".panepilot/latex-comments.json must be a regular file.")
+        if os.path.getsize(latex_comments_path) > 1024 * 1024:
+            raise RuntimeError(".panepilot/latex-comments.json must be 1 MB or smaller.")
+        with open(latex_comments_path, "rb") as handle:
+            raw = handle.read()
+        try:
+            decoded = raw.decode("utf-8")
+            json.loads(decoded)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise RuntimeError(".panepilot/latex-comments.json is not valid UTF-8 JSON.")
+        print(decoded)
+elif operation == "latex-comments-write":
+    content = json.dumps(payload["file"], indent=2, ensure_ascii=False) + "\n"
+    encoded = content.encode("utf-8")
+    if len(encoded) > 1024 * 1024:
+        raise RuntimeError(".panepilot/latex-comments.json must be 1 MB or smaller.")
+    atomic_write(latex_comments_path, encoded)
+    print("{}")
 else:
     raise RuntimeError("Unsupported PanePilot metadata operation.")
 `
@@ -560,6 +726,86 @@ function runRemoteMetadata<T>(
   } catch {
     throw new Error(`The metadata response from ${sshAlias} was not valid JSON.`)
   }
+}
+
+function runRemoteMetadataAsync<T>(
+  sshAlias: string,
+  root: string,
+  operation: string,
+  payload: Record<string, unknown> = {}
+): Promise<T> {
+  const encodedScript = Buffer.from(REMOTE_METADATA_SCRIPT, 'utf8').toString('base64')
+  const loader = `import base64;exec(base64.b64decode('${encodedScript}'))`
+  return new Promise<T>((resolve, reject) => {
+    const child = spawn(
+      'ssh',
+      [
+        '-T',
+        '-o',
+        'BatchMode=yes',
+        '-o',
+        'ConnectTimeout=10',
+        sshAlias,
+        `python3 -c ${quote(loader)}`
+      ],
+      { stdio: ['pipe', 'pipe', 'pipe'] }
+    )
+    const stdout: Buffer[] = []
+    let stdoutLength = 0
+    let stderr = ''
+    let settled = false
+    const timer = setTimeout(() => {
+      child.kill()
+      finish(new Error(`Timed out connecting to ${sshAlias}.`))
+    }, 15_000)
+
+    function finish(error?: Error, value?: T): void {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (error) reject(error)
+      else resolve(value as T)
+    }
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdoutLength += chunk.length
+      if (stdoutLength > 4 * 1024 * 1024) {
+        child.kill()
+        finish(new Error(`The metadata response from ${sshAlias} was too large.`))
+        return
+      }
+      stdout.push(chunk)
+    })
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => {
+      stderr = `${stderr}${chunk}`.slice(-64 * 1024)
+    })
+    child.once('error', (error) => finish(error))
+    child.once('close', (code) => {
+      if (settled) return
+      if (code !== 0) {
+        const detail = stderr.trim().split(/\r?\n/).at(-1)
+        finish(
+          new Error(
+            detail || `Could not update project metadata on ${sshAlias}.`
+          )
+        )
+        return
+      }
+      try {
+        finish(
+          undefined,
+          JSON.parse(Buffer.concat(stdout).toString('utf8') || 'null') as T
+        )
+      } catch {
+        finish(new Error(`The metadata response from ${sshAlias} was not valid JSON.`))
+      }
+    })
+    child.stdin.on('error', () => {
+      // The SSH process close handler reports the actionable failure.
+    })
+    child.stdin.end(JSON.stringify({ ...payload, root, operation }))
+  })
 }
 
 function definitions(actions: ProjectAction[]): SharedActionDefinition[] {
@@ -651,6 +897,99 @@ export class ProjectMetadataService {
         { path }
       )
     }
+  }
+
+  private async readLatexComments(
+    project: Project,
+    connection: Connection
+  ): Promise<unknown | null> {
+    return connection.kind === 'local'
+      ? readLocalLatexComments(project.folder)
+      : runRemoteMetadataAsync<unknown>(
+          connection.sshAlias!,
+          project.folder,
+          'latex-comments-read'
+        )
+  }
+
+  private async writeLatexComments(
+    project: Project,
+    connection: Connection,
+    comments: LatexComment[]
+  ): Promise<void> {
+    const file = sharedLatexCommentsFile(project.id, comments)
+    if (connection.kind === 'local') {
+      writeLocalLatexComments(project.folder, file)
+      return
+    }
+    await runRemoteMetadataAsync<Record<string, never>>(
+      connection.sshAlias!,
+      project.folder,
+      'latex-comments-write',
+      { file }
+    )
+  }
+
+  async listLatexComments(
+    projectId: string,
+    legacyComments: LatexComment[] = []
+  ): Promise<LatexComment[]> {
+    const { project, connection } = this.target(projectId)
+    if (project.type !== 'latex') throw new Error('LaTeX project not found.')
+    const raw = await this.readLatexComments(project, connection)
+    if (raw == null) {
+      const migrated = parseSharedLatexComments(
+        sharedLatexCommentsFile(project.id, legacyComments),
+        project.id
+      )
+      await this.writeLatexComments(project, connection, migrated)
+      return migrated
+    }
+    return parseSharedLatexComments(raw, project.id).sort(
+      (left, right) =>
+        left.path.localeCompare(right.path) ||
+        left.startLine - right.startLine ||
+        left.startColumn - right.startColumn ||
+        left.createdAt.localeCompare(right.createdAt) ||
+        left.id.localeCompare(right.id)
+    )
+  }
+
+  async createLatexComment(
+    projectId: string,
+    input: Omit<LatexComment, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>,
+    legacyComments: LatexComment[] = []
+  ): Promise<LatexComment> {
+    const current = await this.listLatexComments(projectId, legacyComments)
+    if (current.length >= MAX_SHARED_LATEX_COMMENTS) {
+      throw new Error('This project already has the maximum of 1,000 LaTeX comments.')
+    }
+    const timestamp = new Date().toISOString()
+    const comment: LatexComment = {
+      ...input,
+      id: randomUUID(),
+      projectId,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+    const { project, connection } = this.target(projectId)
+    await this.writeLatexComments(project, connection, [...current, comment])
+    return comment
+  }
+
+  async deleteLatexComment(
+    projectId: string,
+    commentId: string,
+    legacyComments: LatexComment[] = []
+  ): Promise<void> {
+    const current = await this.listLatexComments(projectId, legacyComments)
+    if (!current.some((comment) => comment.id === commentId)) return
+    const { project, connection } = this.target(projectId)
+    await this.writeLatexComments(
+      project,
+      connection,
+      current.filter((comment) => comment.id !== commentId)
+    )
   }
 
   private readActions(project: Project, connection: Connection): SharedActionsFile | null {
