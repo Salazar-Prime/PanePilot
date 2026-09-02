@@ -1499,7 +1499,7 @@ export class LatexProjectService {
     connection: Connection
     details: LatexProjectDetails
   } {
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectForRuntime(projectId)
     if (!project || project.type !== 'latex' || !project.latex) {
       throw new Error('LaTeX project not found.')
     }

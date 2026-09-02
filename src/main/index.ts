@@ -135,7 +135,10 @@ function registerIpc(): void {
     }
     return testSshConnection(connection.sshAlias)
   })
-  ipcMain.handle('projects:list', () => store.listProjects())
+  ipcMain.handle('projects:list', () => store.listProjectsForRenderer())
+  ipcMain.handle('projects:get', (_event, projectId: string) =>
+    store.getProjectForRenderer(projectId)
+  )
   ipcMain.handle('projects:choose-folder', async (_event, rawPurpose?: unknown) => {
     const purpose: ProjectFolderSelectionPurpose =
       rawPurpose === 'parent' ? 'parent' : 'project'
@@ -372,7 +375,7 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('files:list', async (_event, projectId: string, relativePath = '.') => {
-    const project = store.getProject(projectId)
+    const project = store.getProjectForRuntime(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
@@ -382,7 +385,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('files:search', async (_event, projectId: string, query: string) => {
-    const project = store.getProject(projectId)
+    const project = store.getProjectForRuntime(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
@@ -394,7 +397,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'files:create-file',
     async (_event, projectId: string, parentPath: string, name: string) => {
-      const project = store.getProject(projectId)
+      const project = store.getProjectForRuntime(projectId)
       if (!project) throw new Error('Project not found.')
       const connection = store.getConnection(project.connectionId)
       if (!connection) throw new Error('Project connection not found.')
@@ -411,7 +414,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'files:create-directory',
     async (_event, projectId: string, parentPath: string, name: string) => {
-      const project = store.getProject(projectId)
+      const project = store.getProjectForRuntime(projectId)
       if (!project) throw new Error('Project not found.')
       const connection = store.getConnection(project.connectionId)
       if (!connection) throw new Error('Project connection not found.')
@@ -428,7 +431,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'files:rename',
     async (_event, projectId: string, relativePath: string, name: string) => {
-      const project = store.getProject(projectId)
+      const project = store.getProjectForRuntime(projectId)
       if (!project) throw new Error('Project not found.')
       const connection = store.getConnection(project.connectionId)
       if (!connection) throw new Error('Project connection not found.')
@@ -466,7 +469,7 @@ function registerIpc(): void {
     metadata.deleteNote(projectId, path)
   })
   ipcMain.handle('files:preview', async (_event, projectId: string, relativePath: string) => {
-    const project = store.getProject(projectId)
+    const project = store.getProjectForRuntime(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
@@ -475,7 +478,7 @@ function registerIpc(): void {
       : previewRemoteFileAsync(connection.sshAlias!, project.folder, relativePath)
   })
   ipcMain.handle('files:open', async (_event, projectId: string, relativePath: string) => {
-    const project = store.getProject(projectId)
+    const project = store.getProjectForRuntime(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
@@ -486,7 +489,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'files:save',
     async (_event, projectId: string, relativePath: string, content: string) => {
-      const project = store.getProject(projectId)
+      const project = store.getProjectForRuntime(projectId)
       if (!project) throw new Error('Project not found.')
       const connection = store.getConnection(project.connectionId)
       if (!connection) throw new Error('Project connection not found.')
@@ -505,7 +508,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'files:download',
     async (_event, projectId: string, relativePath: string) => {
-      const project = store.getProject(projectId)
+      const project = store.getProjectForRuntime(projectId)
       if (!project) throw new Error('Project not found.')
       const connection = store.getConnection(project.connectionId)
       if (!connection) throw new Error('Project connection not found.')
@@ -530,7 +533,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'files:show-in-folder',
     (_event, projectId: string, relativePath: string) => {
-      const project = store.getProject(projectId)
+      const project = store.getProjectForRuntime(projectId)
       if (!project) throw new Error('Project not found.')
       const connection = store.getConnection(project.connectionId)
       if (connection?.kind !== 'local') {
@@ -605,7 +608,7 @@ function registerIpc(): void {
   })
   ipcMain.handle('system:read-text', () => clipboard.readText())
   ipcMain.handle('system:open-project-folder', async (_event, projectId: string) => {
-    const project = store.getProject(projectId)
+    const project = store.getProjectForRuntime(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
     if (connection?.kind !== 'local') {
@@ -630,7 +633,7 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('conversations:list', async (_event, projectId: string, query = '') => {
-    const project = store.getProject(projectId)
+    const project = store.getProjectForRuntime(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
@@ -645,7 +648,7 @@ function registerIpc(): void {
   ipcMain.handle(
     'conversations:get',
     async (_event, projectId: string, conversationId: string, query = '') => {
-      const project = store.getProject(projectId)
+      const project = store.getProjectForRuntime(projectId)
       if (!project) throw new Error('Project not found.')
       const connection = store.getConnection(project.connectionId)
       if (!connection) throw new Error('Project connection not found.')

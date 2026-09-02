@@ -4,7 +4,8 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState
+  useState,
+  useTransition
 } from 'react'
 import {
   Archive,
@@ -53,11 +54,13 @@ import {
 import type {
   Connection,
   CreateProjectInput,
+  AgentState,
   GitHubRepositoryVisibilityStatus,
   GitRepositoryStatus,
   Project,
   ProjectType,
   TerminalSession,
+  TerminalStateEvent,
   TerminalTransportState
 } from '@shared/types'
 import { isAttentionState } from '../lib/status'
@@ -106,6 +109,7 @@ import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 import { GoogleDriveControl } from './GoogleDriveControl'
 import { GitPane } from './GitPane'
 import { NewProjectDialog } from './NewProjectDialog'
+import { PaneWorkspaceStack } from './PaneWorkspaceStack'
 import { PortForwardDialog } from './PortForwardDialog'
 import { ProjectIconMenu } from './ProjectIconMenu'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
@@ -132,6 +136,56 @@ type RenameTarget =
   | { kind: 'project'; project: Project }
   | { kind: 'session'; session: TerminalSession }
 
+const RENDERER_STATE_PRIORITY: AgentState[] = [
+  'needs-input',
+  'needs-attention',
+  'running',
+  'response-ready',
+  'idle',
+  'error',
+  'completed'
+]
+const gitStatusCache = new Map<string, GitRepositoryStatus>()
+const repositoryVisibilityCache =
+  new Map<string, GitHubRepositoryVisibilityStatus>()
+const PROJECT_READ_CACHE_LIMIT = 64
+
+function cacheProjectRead<T>(cache: Map<string, T>, projectId: string, value: T) {
+  cache.delete(projectId)
+  cache.set(projectId, value)
+  if (cache.size <= PROJECT_READ_CACHE_LIMIT) return
+  const oldestProjectId = cache.keys().next().value
+  if (oldestProjectId) cache.delete(oldestProjectId)
+}
+
+function projectStateForSessions(sessions: TerminalSession[]): AgentState {
+  const visible = sessions.filter(
+    (session) => !session.archived && session.kind !== 'action'
+  )
+  return (
+    RENDERER_STATE_PRIORITY.find((state) =>
+      visible.some((session) => session.state === state)
+    ) ?? 'idle'
+  )
+}
+
+function withTerminalState(
+  project: Project,
+  event: TerminalStateEvent
+): Project {
+  if (project.id !== event.projectId) return project
+  let changed = false
+  const sessions = project.sessions.map((session) => {
+    if (session.id !== event.sessionId || session.state === event.state) {
+      return session
+    }
+    changed = true
+    return { ...session, state: event.state }
+  })
+  if (!changed) return project
+  return { ...project, sessions, state: projectStateForSessions(sessions) }
+}
+
 function isSidebarSession(session: TerminalSession): boolean {
   return (
     session.kind === 'terminal' ||
@@ -141,6 +195,7 @@ function isSidebarSession(session: TerminalSession): boolean {
 }
 
 export function App() {
+  const [, startBackgroundTransition] = useTransition()
   const [appearanceScale, setAppearanceScale] = useAppearanceScale()
   const [connections, setConnections] = useState<Connection[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -229,6 +284,11 @@ export function App() {
   const [loading, setLoading] = useState(true)
   const [refreshingConnections, setRefreshingConnections] = useState(false)
   const [error, setError] = useState('')
+  const refreshInFlightRef = useRef<Promise<void> | null>(null)
+  const refreshQueuedRef = useRef(false)
+  const projectRefreshesRef = useRef(new Map<string, Promise<void>>())
+  const projectRefreshQueuedRef = useRef(new Set<string>())
+  const metadataRefreshTimersRef = useRef(new Map<string, number>())
 
   useEffect(() => {
     if (!resizingSidebar) return
@@ -293,8 +353,98 @@ export function App() {
   }
 
   const refresh = useCallback(async () => {
-    const nextProjects = await window.projectConsole.projects.list()
-    setProjects(nextProjects)
+    if (refreshInFlightRef.current) {
+      refreshQueuedRef.current = true
+      await refreshInFlightRef.current
+      return
+    }
+    do {
+      refreshQueuedRef.current = false
+      const startedAt = performance.now()
+      const request = window.projectConsole.projects.list().then((nextProjects) => {
+        startBackgroundTransition(() => setProjects(nextProjects))
+        if (import.meta.env.DEV) {
+          console.debug('[PanePilot performance] projects.list', {
+            durationMs: Math.round(performance.now() - startedAt),
+            payloadBytes: new Blob([JSON.stringify(nextProjects)]).size,
+            projectCount: nextProjects.length
+          })
+        }
+      })
+      refreshInFlightRef.current = request
+      try {
+        await request
+      } finally {
+        refreshInFlightRef.current = null
+      }
+    } while (refreshQueuedRef.current)
+  }, [startBackgroundTransition])
+
+  const refreshProject = useCallback(
+    async (projectId: string) => {
+      const active = projectRefreshesRef.current.get(projectId)
+      if (active) {
+        projectRefreshQueuedRef.current.add(projectId)
+        return active
+      }
+      const request = (async () => {
+        do {
+          projectRefreshQueuedRef.current.delete(projectId)
+          const nextProject = await window.projectConsole.projects.get(projectId)
+          startBackgroundTransition(() => {
+            setProjects((current) => {
+              if (!nextProject) {
+                return current.filter((project) => project.id !== projectId)
+              }
+              const index = current.findIndex((project) => project.id === projectId)
+              if (index < 0) return [...current, nextProject]
+              const next = [...current]
+              next[index] = nextProject
+              return next
+            })
+          })
+        } while (projectRefreshQueuedRef.current.delete(projectId))
+      })().finally(() => {
+        projectRefreshesRef.current.delete(projectId)
+      })
+      projectRefreshesRef.current.set(projectId, request)
+      return request
+    },
+    [startBackgroundTransition]
+  )
+
+  const scheduleProjectRefresh = useCallback(
+    (projectId: string) => {
+      const existing = metadataRefreshTimersRef.current.get(projectId)
+      if (existing != null) window.clearTimeout(existing)
+      const timer = window.setTimeout(() => {
+        metadataRefreshTimersRef.current.delete(projectId)
+        void refreshProject(projectId)
+      }, 80)
+      metadataRefreshTimersRef.current.set(projectId, timer)
+    },
+    [refreshProject]
+  )
+
+  const acknowledgeSession = useCallback(async (sessionId: string) => {
+    setProjects((current) =>
+      current.map((project) => {
+        const session = project.sessions.find((item) => item.id === sessionId)
+        if (
+          !session ||
+          (session.state !== 'needs-attention' &&
+            session.state !== 'response-ready')
+        ) {
+          return project
+        }
+        return withTerminalState(project, {
+          sessionId,
+          projectId: project.id,
+          state: 'idle'
+        })
+      })
+    )
+    await window.projectConsole.terminals.acknowledge(sessionId)
   }, [])
 
   const handleLaunchTerminalRequest = useCallback((requestId: number) => {
@@ -343,11 +493,15 @@ export function App() {
       })
       .catch((caught) => setError(messageFor(caught)))
       .finally(() => setLoading(false))
-    const removeStateListener = window.projectConsole.terminals.onState(() => {
-      void refresh()
+    const removeStateListener = window.projectConsole.terminals.onState((event) => {
+      startBackgroundTransition(() => {
+        setProjects((current) =>
+          current.map((project) => withTerminalState(project, event))
+        )
+      })
     })
-    const removeMetadataListener = window.projectConsole.terminals.onMetadata(() => {
-      void refresh()
+    const removeMetadataListener = window.projectConsole.terminals.onMetadata((event) => {
+      scheduleProjectRefresh(event.projectId)
     })
     const removeTransportListener = window.projectConsole.terminals.onTransport(
       (event) => {
@@ -362,8 +516,12 @@ export function App() {
       removeStateListener()
       removeMetadataListener()
       removeTransportListener()
+      for (const timer of metadataRefreshTimersRef.current.values()) {
+        window.clearTimeout(timer)
+      }
+      metadataRefreshTimersRef.current.clear()
     }
-  }, [refresh])
+  }, [scheduleProjectRefresh, startBackgroundTransition])
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -429,6 +587,49 @@ export function App() {
     () => projects.filter((project) => project.archived),
     [projects]
   )
+  const sidebarConnectionGroups = useMemo(
+    () =>
+      connections.flatMap((connection) => {
+        const sort = projectSortFor(projectSorts, connection.id)
+        const connectionProjects = sortProjects(
+          activeProjects.filter(
+            (candidate) => candidate.connectionId === connection.id
+          ),
+          sort,
+          selectionRecency.projects,
+          projectAttentionOrder
+        )
+        if (connection.kind === 'ssh' && connectionProjects.length === 0) {
+          return []
+        }
+        return [
+          {
+            connection,
+            sort,
+            projects: connectionProjects.map((project) => ({
+              project,
+              sessions: sortSessions(
+                project.sessions.filter(
+                  (session) =>
+                    !session.archived && isSidebarSession(session)
+                ),
+                sessionSort,
+                selectionRecency.sessions
+              )
+            }))
+          }
+        ]
+      }),
+    [
+      activeProjects,
+      connections,
+      projectAttentionOrder,
+      projectSorts,
+      selectionRecency.projects,
+      selectionRecency.sessions,
+      sessionSort
+    ]
+  )
   const temporaryChatProject = temporaryChatPanel
     ? activeProjects.find(
         (candidate) => candidate.id === temporaryChatPanel.projectId
@@ -485,6 +686,7 @@ export function App() {
     try {
       const nextStatus = await window.projectConsole.git.status(projectId)
       if (request !== gitStatusRequest.current) return
+      cacheProjectRead(gitStatusCache, projectId, nextStatus)
       setGitStatus(nextStatus)
       setGitStatusError('')
     } catch (caught) {
@@ -497,7 +699,7 @@ export function App() {
 
   useEffect(() => {
     gitStatusRequest.current += 1
-    setGitStatus(null)
+    setGitStatus(project ? gitStatusCache.get(project.id) ?? null : null)
     setGitStatusError('')
     if (!project || showArchivedProjects || !projectSupportsGit) return
     void refreshGitStatus()
@@ -514,8 +716,13 @@ export function App() {
     const projectId = project?.id
     const repositoryUrl = project?.repositoryUrl
     githubVisibilityRequest.current += 1
-    setGithubVisibility(null)
-    setGithubVisibilityLoading(false)
+    const cached = projectId
+      ? repositoryVisibilityCache.get(projectId) ?? null
+      : null
+    setGithubVisibility(cached)
+    setGithubVisibilityLoading(
+      Boolean(projectId && repositoryUrl && !showArchivedProjects && !cached)
+    )
     if (!projectId || !repositoryUrl || showArchivedProjects) return
     const request = githubVisibilityRequest.current
     const refreshVisibility = () => {
@@ -524,12 +731,15 @@ export function App() {
         .repositoryVisibility(projectId)
         .then((status) => {
           if (request === githubVisibilityRequest.current) {
+            cacheProjectRead(repositoryVisibilityCache, projectId, status)
             setGithubVisibility(status)
           }
         })
         .catch(() => {
           if (request === githubVisibilityRequest.current) {
-            setGithubVisibility(null)
+            setGithubVisibility(
+              repositoryVisibilityCache.get(projectId) ?? null
+            )
           }
         })
         .finally(() => {
@@ -552,45 +762,52 @@ export function App() {
     []
   )
 
-  useEffect(() => {
-    if (!paneAConnection) return
-    let active = true
-    const discover = async () => {
-      try {
-        await window.projectConsole.terminals.discover(paneAConnection.id)
-        if (active) await refresh()
-      } catch {
-        // Discovery is supplemental. An unavailable tmux server or SSH host
-        // must not block the locally cached project and terminal workspace.
-      }
-    }
-    void discover()
-    const timer = window.setInterval(() => void discover(), 15_000)
-    return () => {
-      active = false
-      window.clearInterval(timer)
-    }
-  }, [paneAConnection?.id, paneAConnection?.kind, refresh])
+  const visibleConnectionIds = useMemo(
+    () =>
+      [...new Set(
+        [paneAConnection?.id, paneBConnection?.id].filter(
+          (id): id is string => Boolean(id)
+        )
+      )].sort(),
+    [paneAConnection?.id, paneBConnection?.id]
+  )
+  const visibleConnectionKey = visibleConnectionIds.join('\u0000')
 
   useEffect(() => {
-    if (!paneBConnection) return
+    if (!visibleConnectionIds.length) return
     let active = true
-    const discover = async () => {
+    const timers: number[] = []
+    const discover = async (connectionId: string) => {
+      const startedAt = performance.now()
       try {
-        await window.projectConsole.terminals.discover(paneBConnection.id)
-        if (active) await refresh()
+        const changes = await window.projectConsole.terminals.discover(connectionId)
+        if (!active) return
+        if (import.meta.env.DEV) {
+          console.debug('[PanePilot performance] tmux discovery', {
+            connectionId,
+            durationMs: Math.round(performance.now() - startedAt),
+            changes
+          })
+        }
+        // Changed sessions emit targeted metadata/state events. A zero-change
+        // scan intentionally does no renderer reconciliation at all.
       } catch {
         // Discovery is supplemental. An unavailable tmux server or SSH host
         // must not block the locally cached project and terminal workspace.
       }
     }
-    void discover()
-    const timer = window.setInterval(() => void discover(), 15_000)
+    for (const connectionId of visibleConnectionIds) {
+      void discover(connectionId)
+      timers.push(
+        window.setInterval(() => void discover(connectionId), 15_000)
+      )
+    }
     return () => {
       active = false
-      window.clearInterval(timer)
+      for (const timer of timers) window.clearInterval(timer)
     }
-  }, [paneBConnection?.id, paneBConnection?.kind, refresh])
+    // The stable key prevents a second scan when both panes share one machine.
+  }, [visibleConnectionKey])
 
   useEffect(() => {
     if (showArchivedProjects) return
@@ -645,6 +862,14 @@ export function App() {
     projectId: string | null,
     sessionId: string | null
   ) {
+    if (import.meta.env.DEV && projectId) {
+      performance.clearMarks(`panepilot:project-select:${pane}:${projectId}`)
+      performance.mark(`panepilot:project-select:${pane}:${projectId}`)
+      if (sessionId) {
+        performance.clearMarks(`panepilot:terminal-select:${sessionId}`)
+        performance.mark(`panepilot:terminal-select:${sessionId}`)
+      }
+    }
     if (pane === 'b') {
       setPaneBProjectId(projectId)
       setPaneBSessionId(sessionId)
@@ -653,6 +878,29 @@ export function App() {
       setSelectedSessionId(sessionId)
     }
   }
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const selections: Array<['a' | 'b', string | null]> = [
+      ['a', selectedProjectId],
+      ['b', splitOpen ? paneBProjectId : null]
+    ]
+    const frame = window.requestAnimationFrame(() => {
+      for (const [pane, projectId] of selections) {
+        if (!projectId) continue
+        const name = `panepilot:project-select:${pane}:${projectId}`
+        const mark = performance.getEntriesByName(name, 'mark').at(-1)
+        if (!mark) continue
+        console.debug('[PanePilot performance] project painted', {
+          pane,
+          projectId,
+          durationMs: Math.round(performance.now() - mark.startTime)
+        })
+        performance.clearMarks(name)
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [paneBProjectId, selectedProjectId, splitOpen])
 
   function focusPaneSelection(projectId: string | null, sessionId: string | null) {
     applyPaneSelection(
@@ -684,7 +932,10 @@ export function App() {
       activeProjects.find((item) => item.id === id)
     )
     applyPaneSelection(pane, id, defaultSessionId)
-    if (defaultSessionId) openSession(defaultSessionId)
+    if (defaultSessionId) {
+      openSession(defaultSessionId)
+      void acknowledgeSession(defaultSessionId)
+    }
   }
 
   function swapPanes() {
@@ -711,8 +962,7 @@ export function App() {
     applyPaneSelection(pane, projectId, sessionId)
     openSession(sessionId)
     setOpenSessionRequest(nextWorkspaceRequest(projectId, pane))
-    await window.projectConsole.terminals.acknowledge(sessionId)
-    await refresh()
+    await acknowledgeSession(sessionId)
   }
 
   async function createProject(input: CreateProjectInput) {
@@ -737,13 +987,13 @@ export function App() {
 
   async function updateProjectIcon(projectId: string, icon: string | null) {
     await window.projectConsole.projects.setIcon(projectId, icon)
-    await refresh()
+    await refreshProject(projectId)
   }
 
   async function renameCurrentProject(name: string) {
     if (!project) return
     await window.projectConsole.projects.rename(project.id, name)
-    await refresh()
+    await refreshProject(project.id)
   }
 
   async function promptRenameProject(target: Project) {
@@ -759,9 +1009,13 @@ export function App() {
   async function transferSessionToProject(targetProjectId: string) {
     if (!transferTarget) return
     const sessionId = transferTarget.session.id
+    const sourceProjectId = transferTarget.project.id
     await window.projectConsole.terminals.transfer(sessionId, targetProjectId)
     setTransferTarget(null)
-    await refresh()
+    await Promise.all([
+      refreshProject(sourceProjectId),
+      refreshProject(targetProjectId)
+    ])
     await selectSession(targetProjectId, sessionId)
   }
 
@@ -777,7 +1031,11 @@ export function App() {
     } else {
       await window.projectConsole.terminals.rename(renameTarget.session.id, name)
     }
-    await refresh()
+    await refreshProject(
+      renameTarget.kind === 'project'
+        ? renameTarget.project.id
+        : renameTarget.session.projectId
+    )
   }
 
   async function archiveProject(target: Project) {
@@ -831,7 +1089,10 @@ export function App() {
       activeProjects.find((item) => item.id === id)
     )
     focusPaneSelection(id, defaultSessionId)
-    if (defaultSessionId) openSession(defaultSessionId)
+    if (defaultSessionId) {
+      openSession(defaultSessionId)
+      void acknowledgeSession(defaultSessionId)
+    }
   }
 
   async function selectSession(projectId: string, sessionId: string) {
@@ -842,8 +1103,7 @@ export function App() {
     focusPaneSelection(projectId, sessionId)
     openSession(sessionId)
     setOpenSessionRequest(nextWorkspaceRequest(projectId, pane))
-    await window.projectConsole.terminals.acknowledge(sessionId)
-    await refresh()
+    await acknowledgeSession(sessionId)
   }
 
   async function reconnectSession(projectId: string, session: TerminalSession) {
@@ -853,7 +1113,7 @@ export function App() {
 
   async function togglePin(session: TerminalSession) {
     await window.projectConsole.terminals.setPinned(session.id, !session.pinned)
-    await refresh()
+    await refreshProject(session.projectId)
   }
 
   async function toggleFlag(session: TerminalSession) {
@@ -861,7 +1121,7 @@ export function App() {
       session.id,
       !session.flagged
     )
-    await refresh()
+    await refreshProject(session.projectId)
   }
 
   async function stopSession(session: TerminalSession) {
@@ -875,12 +1135,12 @@ export function App() {
     )
       return
     await window.projectConsole.terminals.stop(session.id)
-    await refresh()
+    await refreshProject(session.projectId)
   }
 
   async function archiveSession(session: TerminalSession) {
     await window.projectConsole.terminals.archive(session.id)
-    await refresh()
+    await refreshProject(session.projectId)
   }
 
   async function resumeAgentSession(owner: Project, session: TerminalSession) {
@@ -904,7 +1164,7 @@ export function App() {
     )
       return
     await window.projectConsole.terminals.delete(session.id)
-    await refresh()
+    await refreshProject(session.projectId)
   }
 
   function openNewProject(connectionId?: string, type: ProjectType = 'terminal') {
@@ -949,14 +1209,6 @@ export function App() {
   const typeDefinition = project
     ? projectTypeRegistry[project.type]
     : projectTypeRegistry.terminal
-  const Workspace = typeDefinition.Workspace
-  const PaneAWorkspace = (
-    paneAProject ? projectTypeRegistry[paneAProject.type] : projectTypeRegistry.terminal
-  ).Workspace
-  const PaneBWorkspace = (
-    paneBProject ? projectTypeRegistry[paneBProject.type] : projectTypeRegistry.terminal
-  ).Workspace
-
   const commandPaletteCommands: CommandPaletteCommand[] = [
     {
       id: 'action:new-project',
@@ -1706,19 +1958,14 @@ export function App() {
           </div>
         </div>
         <div className="sidebar-scroll">
-          {connections.map((item) => {
-            const connectionSort = projectSortFor(projectSorts, item.id)
-            const connectionProjects = sortProjects(
-              activeProjects.filter(
-                (candidate) => candidate.connectionId === item.id
-              ),
-              connectionSort,
-              selectionRecency.projects,
-              projectAttentionOrder
-            )
-            if (item.kind === 'ssh' && connectionProjects.length === 0) return null
-            return (
-              <section className="connection-group" key={item.id}>
+          {sidebarConnectionGroups.map(
+            ({
+              connection: item,
+              sort: connectionSort,
+              projects: connectionProjects
+            }) => {
+              return (
+                <section className="connection-group" key={item.id}>
                 <div
                   className="connection-heading"
                   onContextMenu={(event) => {
@@ -1763,20 +2010,13 @@ export function App() {
                     <ArrowUpDown size={12} />
                   </button>
                 </div>
-                {connectionProjects.map((candidate) => {
-                  const visibleSessions = sortSessions(
-                    candidate.sessions.filter(
-                      (session) =>
-                        !session.archived && isSidebarSession(session)
-                    ),
-                    sessionSort,
-                    selectionRecency.sessions
-                  )
-                  const hasSessions = visibleSessions.length > 0
-                  const isCollapsed = collapsedProjectIds.has(candidate.id)
-                  const showSessions = hasSessions && !isCollapsed
-                  return (
-                    <div className="project-tree" key={candidate.id}>
+                {connectionProjects.map(
+                  ({ project: candidate, sessions: visibleSessions }) => {
+                    const hasSessions = visibleSessions.length > 0
+                    const isCollapsed = collapsedProjectIds.has(candidate.id)
+                    const showSessions = hasSessions && !isCollapsed
+                    return (
+                      <div className="project-tree" key={candidate.id}>
                       <div
                         className={`project-row ${
                           candidate.id === project?.id && !showArchivedProjects
@@ -1975,9 +2215,10 @@ export function App() {
                           ))}
                         </div>
                       )}
-                    </div>
-                  )
-                })}
+                      </div>
+                    )
+                  }
+                )}
                 {item.kind === 'local' && connectionProjects.length === 0 && (
                   <button
                     className="sidebar-add"
@@ -1986,9 +2227,10 @@ export function App() {
                     <Plus size={14} /> Add your first project
                   </button>
                 )}
-              </section>
-            )
-          })}
+                </section>
+              )
+            }
+          )}
         </div>
         <div className="sidebar-footer-actions">
           <button
@@ -2065,9 +2307,10 @@ export function App() {
               onMouseDownCapture={() => setFocusedPane('a')}
             >
               {paneAProject ? (
-                <PaneAWorkspace
-                  project={paneAProject}
-                  connection={paneAConnection}
+                <PaneWorkspaceStack
+                  activeProject={paneAProject}
+                  projects={activeProjects}
+                  connections={connections}
                   selectedSessionId={selectedSessionId}
                   launchTerminalRequest={workspaceRequestIdFor(
                     launchTerminalRequest,
@@ -2091,14 +2334,15 @@ export function App() {
                       ? swapPanes
                       : undefined
                   }
-                  onTransferSession={(session) =>
-                    promptTransferSession(paneAProject, session)
+                  onTransferSession={(owner, session) =>
+                    promptTransferSession(owner, session)
                   }
                   onSelectSession={(id) => {
                     setSelectedSessionId(id)
                     openSession(id)
+                    void acknowledgeSession(id)
                   }}
-                  onChanged={refresh}
+                  onChanged={refreshProject}
                 />
               ) : (
                 <div className="welcome">
@@ -2132,9 +2376,10 @@ export function App() {
                 onMouseDownCapture={() => setFocusedPane('b')}
               >
                 {paneBProject ? (
-                  <PaneBWorkspace
-                    project={paneBProject}
-                    connection={paneBConnection}
+                  <PaneWorkspaceStack
+                    activeProject={paneBProject}
+                    projects={activeProjects}
+                    connections={connections}
                     selectedSessionId={paneBSessionId}
                     launchTerminalRequest={workspaceRequestIdFor(
                       launchTerminalRequest,
@@ -2154,14 +2399,15 @@ export function App() {
                     onLaunchTerminalRequestHandled={handleLaunchTerminalRequest}
                     onOpenSessionRequestHandled={handleOpenSessionRequest}
                     onSwapPanes={paneAProject ? swapPanes : undefined}
-                    onTransferSession={(session) =>
-                      promptTransferSession(paneBProject, session)
+                    onTransferSession={(owner, session) =>
+                      promptTransferSession(owner, session)
                     }
                     onSelectSession={(id) => {
                       setPaneBSessionId(id)
                       openSession(id)
+                      void acknowledgeSession(id)
                     }}
-                    onChanged={refresh}
+                    onChanged={refreshProject}
                   />
                 ) : (
                   <div className="welcome pane-empty-picker">
@@ -2242,7 +2488,7 @@ export function App() {
           connection={connection}
           onClose={() => setShowProjectSettings(false)}
           onRename={renameCurrentProject}
-          onChanged={refresh}
+          onChanged={() => refreshProject(project.id)}
         />
       )}
       {renameTarget && (
@@ -2286,7 +2532,7 @@ export function App() {
           key={temporaryChatProject.id}
           project={temporaryChatProject}
           createRequest={temporaryChatPanel.createRequest}
-          onChanged={refresh}
+          onChanged={() => refreshProject(temporaryChatProject.id)}
           onClose={() => setTemporaryChatPanel(null)}
         />
       )}

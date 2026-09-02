@@ -691,6 +691,24 @@ select:focus-visible {
   overflow: hidden;
 }
 
+.pane-workspace-stack,
+.pane-workspace-entry {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.pane-workspace-entry {
+  display: none;
+}
+
+.pane-workspace-entry.active {
+  display: flex;
+}
+
 .workspace-split.split .workspace-pane + .workspace-pane {
   border-left: 1px solid #242832;
 }

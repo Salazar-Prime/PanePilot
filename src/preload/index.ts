@@ -30,6 +30,7 @@ const api: ProjectConsoleApi = {
   },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),
+    get: (projectId: string) => ipcRenderer.invoke('projects:get', projectId),
     create: (input: CreateProjectInput) => ipcRenderer.invoke('projects:create', input),
     rename: (projectId: string, name: string) =>
       ipcRenderer.invoke('projects:rename', projectId, name),

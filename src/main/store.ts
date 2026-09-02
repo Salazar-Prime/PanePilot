@@ -1152,11 +1152,11 @@ export class Store {
       }
     })
     this.addActivity(id, null, 'project-created', `Created project in ${input.folder}`)
-    return this.getProject(id)!
+    return this.getProjectForRuntime(id)!
   }
 
   updateProjectRepository(id: string, repositoryUrl: string | null): void {
-    const project = this.getProject(id)
+    const project = this.getProjectForRuntime(id)
     if (!project) throw new Error('Project not found.')
     if (project.repositoryUrl === repositoryUrl) return
     this.db
@@ -1172,7 +1172,7 @@ export class Store {
 
   renameProject(id: string, name: string): void {
     const cleaned = name.trim()
-    const project = this.getProject(id)
+    const project = this.getProjectForRuntime(id)
     if (!project) throw new Error('Project not found.')
     if (!cleaned) throw new Error('Project name cannot be empty.')
     if (cleaned === project.name) return
@@ -1183,7 +1183,7 @@ export class Store {
   }
 
   setProjectIcon(id: string, value: string | null): void {
-    const project = this.getProject(id)
+    const project = this.getProjectForRuntime(id)
     if (!project) throw new Error('Project not found.')
     const icon = normalizeProjectIcon(value)
     if (icon === project.icon) return
@@ -1199,7 +1199,7 @@ export class Store {
   }
 
   archiveProject(id: string, archived: boolean): void {
-    const project = this.getProject(id)
+    const project = this.getProjectForRuntime(id)
     if (!project) throw new Error('Project not found.')
     if (project.archived === archived) return
     if (
@@ -1220,7 +1220,7 @@ export class Store {
   }
 
   deleteProject(id: string): void {
-    const project = this.getProject(id)
+    const project = this.getProjectForRuntime(id)
     if (!project) throw new Error('Project not found.')
     if (!project.archived) {
       throw new Error('Archive the project before deleting it.')
@@ -1247,6 +1247,34 @@ export class Store {
     return this.hydrateProject(row)
   }
 
+  getProjectForRenderer(id: string): Project | null {
+    return this.getProjectWithoutOutput(id)
+  }
+
+  getProjectWithoutOutput(id: string): Project | null {
+    return this.getProjectSnapshot(id, true)
+  }
+
+  getProjectForRuntime(id: string): Project | null {
+    return this.getProjectSnapshot(id, false)
+  }
+
+  private getProjectSnapshot(
+    id: string,
+    includeWorkspaceCollections: boolean
+  ): Project | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, type, name, icon, connection_id, folder, repository_url, state, archived,
+                created_at, updated_at
+         FROM projects WHERE id = ?`
+      )
+      .get(id) as ProjectRow | undefined
+    return row
+      ? this.hydrateProject(row, false, includeWorkspaceCollections)
+      : null
+  }
+
   listProjects(): Project[] {
     const rows = this.db
       .prepare(
@@ -1256,6 +1284,31 @@ export class Store {
       )
       .all() as ProjectRow[]
     return rows.map((row) => this.hydrateProject(row))
+  }
+
+  listProjectsForRenderer(): Project[] {
+    return this.listProjectsWithoutOutput()
+  }
+
+  listProjectsWithoutOutput(): Project[] {
+    return this.listProjectSnapshots(true)
+  }
+
+  listProjectsForRuntime(): Project[] {
+    return this.listProjectSnapshots(false)
+  }
+
+  private listProjectSnapshots(includeWorkspaceCollections: boolean): Project[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, type, name, icon, connection_id, folder, repository_url, state, archived,
+                created_at, updated_at
+         FROM projects ORDER BY updated_at DESC`
+      )
+      .all() as ProjectRow[]
+    return rows.map((row) =>
+      this.hydrateProject(row, false, includeWorkspaceCollections)
+    )
   }
 
   getLatexProject(projectId: string): LatexProjectDetails | null {
@@ -1276,7 +1329,7 @@ export class Store {
       contextFolder: string
     }
   ): void {
-    const project = this.getProject(projectId)
+    const project = this.getProjectForRuntime(projectId)
     if (!project || project.type !== 'latex' || !project.latex) {
       throw new Error('LaTeX project not found.')
     }
@@ -1392,8 +1445,8 @@ export class Store {
       mode: LatexChatMode
     }
   ): LatexChatAttachment {
-    const session = this.getSession(terminalSessionId)
-    const project = this.getProject(input.projectId)
+    const session = this.getSessionWithoutOutput(terminalSessionId)
+    const project = this.getProjectForRuntime(input.projectId)
     if (!session || session.projectId !== input.projectId) {
       throw new Error('The terminal does not belong to this LaTeX project.')
     }
@@ -1465,7 +1518,7 @@ export class Store {
          LIMIT 1`
       )
       .get(projectId) as { id: string } | undefined
-    return row ? this.getSession(row.id) : null
+    return row ? this.getSessionWithoutOutput(row.id) : null
   }
 
   setLatexChatMode(terminalSessionId: string, mode: LatexChatMode): void {
@@ -1542,8 +1595,8 @@ export class Store {
     prefixContext: string
     suffixContext: string
   }): LatexInlineEditHistory {
-    const project = this.getProject(input.projectId)
-    const session = this.getSession(input.terminalSessionId)
+    const project = this.getProjectForRuntime(input.projectId)
+    const session = this.getSessionWithoutOutput(input.terminalSessionId)
     if (
       !project ||
       project.type !== 'latex' ||
@@ -1691,7 +1744,7 @@ export class Store {
     prefixContext: string
     suffixContext: string
   }): LatexComment {
-    const project = this.getProject(input.projectId)
+    const project = this.getProjectForRuntime(input.projectId)
     if (!project || project.type !== 'latex') {
       throw new Error('LaTeX project not found.')
     }
@@ -1864,7 +1917,11 @@ export class Store {
       .run(id, id, OUTPUT_LIMIT)
   }
 
-  private hydrateProject(row: ProjectRow): Project {
+  private hydrateProject(
+    row: ProjectRow,
+    includeOutput = true,
+    includeWorkspaceCollections = true
+  ): Project {
     const latexChatRows = this.db
       .prepare(
         `SELECT terminal_session_id, project_id, purpose, scope, section_id, mode, created_at
@@ -1874,41 +1931,49 @@ export class Store {
     const latexChats = new Map(
       latexChatRows.map((chat) => [chat.terminal_session_id, mapLatexChat(chat)])
     )
-    const sessionRows = (
-      this.db
-        .prepare(
-          `SELECT id, project_id, session_kind, name, profile,
-                  provider_session_id, provider_session_name,
-                  custom_command, backend, tmux_name, state,
-                  dangerous_mode, archived, pinned, flagged, output, created_at, updated_at
-           FROM terminal_sessions WHERE project_id = ? ORDER BY created_at`
-        )
-        .all(row.id) as SessionRow[]
-    )
-    const outputBySession = this.outputBySessionForProject(row.id)
+    const sessionRows = this.db
+      .prepare(
+        `SELECT id, project_id, session_kind, name, profile,
+                provider_session_id, provider_session_name,
+                custom_command, backend, tmux_name, state,
+                dangerous_mode, archived, pinned, flagged,
+                ${includeOutput ? 'output' : "'' AS output"},
+                created_at, updated_at
+         FROM terminal_sessions WHERE project_id = ? ORDER BY created_at`
+      )
+      .all(row.id) as SessionRow[]
+    const outputBySession = includeOutput
+      ? this.outputBySessionForProject(row.id)
+      : new Map<string, string>()
     const sessions = sessionRows.map((session) =>
       mapSession(
         session,
         latexChats.get(session.id) ?? null,
-        outputBySession.get(session.id) ?? session.output
+        includeOutput
+          ? outputBySession.get(session.id) ?? session.output
+          : ''
       )
     )
-    const actions = (
-      this.db
-        .prepare(
-          `SELECT id, project_id, name, command, last_session_id, created_at, updated_at
-           FROM project_actions WHERE project_id = ? ORDER BY created_at`
-        )
-        .all(row.id) as ProjectActionRow[]
-    ).map(mapProjectAction)
-    const activities = (
-      this.db
-        .prepare(
-          `SELECT id, project_id, session_id, kind, message, created_at
-           FROM activities WHERE project_id = ? ORDER BY created_at DESC LIMIT 100`
-        )
-        .all(row.id) as ActivityRow[]
-    ).map(mapActivity)
+    const actions = includeWorkspaceCollections
+      ? (
+          this.db
+            .prepare(
+              `SELECT id, project_id, name, command, last_session_id, created_at, updated_at
+               FROM project_actions WHERE project_id = ? ORDER BY created_at`
+            )
+            .all(row.id) as ProjectActionRow[]
+        ).map(mapProjectAction)
+      : []
+    const activities = includeWorkspaceCollections
+      ? (
+          this.db
+            .prepare(
+              `SELECT id, project_id, session_id, kind, message, created_at
+               FROM activities WHERE project_id = ? ORDER BY created_at DESC LIMIT 100`
+            )
+            .all(row.id) as ActivityRow[]
+        ).map(mapActivity)
+      : []
 
     return {
       id: row.id,
@@ -1955,7 +2020,7 @@ export class Store {
     name: string
     command: string
   }): ProjectAction {
-    const project = this.getProject(input.projectId)
+    const project = this.getProjectForRuntime(input.projectId)
     if (!project || project.archived) throw new Error('Choose an active project.')
     const id = input.id ? validatedActionId(input.id) : randomUUID()
     const collision = this.getProjectAction(id)
@@ -1983,7 +2048,7 @@ export class Store {
     projectId: string,
     input: { id: string; name: string; command: string }
   ): boolean {
-    const project = this.getProject(projectId)
+    const project = this.getProjectForRuntime(projectId)
     if (!project || project.archived) throw new Error('Choose an active project.')
     const id = validatedActionId(input.id)
     const name = validatedActionName(input.name)
@@ -2043,7 +2108,7 @@ export class Store {
     const action = this.getProjectAction(actionId)
     if (!action) throw new Error('Action not found.')
     if (sessionId) {
-      const session = this.getSession(sessionId)
+      const session = this.getSessionWithoutOutput(sessionId)
       if (
         !session ||
         session.projectId !== action.projectId ||
@@ -2065,7 +2130,7 @@ export class Store {
     sessionId: string,
     input: { id: string; name: string; command: string }
   ): boolean {
-    const session = this.getSession(sessionId)
+    const session = this.getSessionWithoutOutput(sessionId)
     if (
       !session ||
       session.projectId !== projectId ||
@@ -2112,7 +2177,7 @@ export class Store {
     const action = this.getProjectAction(id)
     if (!action) throw new Error('Action not found.')
     const session = action.lastSessionId
-      ? this.getSession(action.lastSessionId)
+      ? this.getSessionWithoutOutput(action.lastSessionId)
       : null
     if (session && !['completed', 'error'].includes(session.state)) {
       throw new Error('Stop the current action run before deleting it.')
@@ -2135,7 +2200,7 @@ export class Store {
          LIMIT 1`
       )
       .get(projectId) as { id: string } | undefined
-    return row ? this.getSession(row.id) : null
+    return row ? this.getSessionWithoutOutput(row.id) : null
   }
 
   createSession(input: {
@@ -2212,7 +2277,7 @@ export class Store {
       'terminal-created',
       `${input.name} started with the ${input.profile} profile${input.dangerousMode ? ' (permission checks disabled)' : ''}`
     )
-    return this.getSession(id)!
+    return this.getSessionWithoutOutput(id)!
   }
 
   upsertDiscoveredTmuxSession(
@@ -2220,7 +2285,7 @@ export class Store {
     name: string,
     metadata: PanePilotTmuxMetadata
   ): DiscoveredTmuxSessionUpsert | null {
-    const project = this.getProject(projectId)
+    const project = this.getProjectForRuntime(projectId)
     if (
       !project ||
       !name.trim() ||
@@ -2229,7 +2294,7 @@ export class Store {
     ) {
       return null
     }
-    const existing = this.getSession(metadata.terminalId)
+    const existing = this.getSessionWithoutOutput(metadata.terminalId)
     if (existing && existing.projectId !== projectId) return null
     // A v0.7 LaTeX chat could briefly publish its initial ordinary-terminal
     // metadata before the attachment was written. Never let that stale remote
@@ -2350,7 +2415,10 @@ export class Store {
         )
       }
       this.updateProjectState(projectId)
-      return { session: this.getSession(existing.id)!, changed: true }
+      return {
+        session: this.getSessionWithoutOutput(existing.id)!,
+        changed: true
+      }
     }
 
     if (this.tableColumns('terminal_sessions').has('label')) {
@@ -2413,7 +2481,10 @@ export class Store {
       `Discovered running tmux session ${name}`
     )
     this.updateProjectState(projectId)
-    return { session: this.getSession(metadata.terminalId)!, changed: true }
+    return {
+      session: this.getSessionWithoutOutput(metadata.terminalId)!,
+      changed: true
+    }
   }
 
   upsertDiscoveredLatexChat(
@@ -2421,8 +2492,8 @@ export class Store {
     projectId: string,
     metadata: PanePilotTmuxLatexMetadata
   ): boolean {
-    const project = this.getProject(projectId)
-    const session = this.getSession(terminalSessionId)
+    const project = this.getProjectForRuntime(projectId)
+    const session = this.getSessionWithoutOutput(terminalSessionId)
     if (
       !project ||
       project.type !== 'latex' ||
@@ -2595,7 +2666,7 @@ export class Store {
   }
 
   markMissingTmuxSession(id: string): boolean {
-    const session = this.getSession(id)
+    const session = this.getSessionWithoutOutput(id)
     if (
       !session ||
       session.backend !== 'tmux' ||
@@ -2612,12 +2683,25 @@ export class Store {
   }
 
   getSession(id: string): TerminalSession | null {
+    return this.getSessionSnapshot(id, true)
+  }
+
+  getSessionWithoutOutput(id: string): TerminalSession | null {
+    return this.getSessionSnapshot(id, false)
+  }
+
+  private getSessionSnapshot(
+    id: string,
+    includeOutput: boolean
+  ): TerminalSession | null {
     const row = this.db
       .prepare(
         `SELECT id, project_id, session_kind, name, profile,
                 provider_session_id, provider_session_name,
                 custom_command, backend, tmux_name, state,
-                dangerous_mode, archived, pinned, flagged, output, created_at, updated_at
+                dangerous_mode, archived, pinned, flagged,
+                ${includeOutput ? 'output' : "'' AS output"},
+                created_at, updated_at
          FROM terminal_sessions WHERE id = ?`
       )
       .get(id) as SessionRow | undefined
@@ -2625,7 +2709,7 @@ export class Store {
       ? mapSession(
           row,
           this.getLatexChat(id),
-          this.outputForSession(id, row.output)
+          includeOutput ? this.outputForSession(id, row.output) : ''
         )
       : null
   }
@@ -2662,7 +2746,7 @@ export class Store {
   }
 
   setSessionState(id: string, state: AgentState, message?: string): boolean {
-    const session = this.getSession(id)
+    const session = this.getSessionWithoutOutput(id)
     if (!session || session.state === state) return false
     const timestamp = now()
     this.db
@@ -2774,8 +2858,8 @@ export class Store {
     if (session.kind !== 'terminal') {
       throw new Error('Only ordinary terminal sessions can be transferred.')
     }
-    const sourceProject = this.getProject(session.projectId)
-    const targetProject = this.getProject(targetProjectId)
+    const sourceProject = this.getProjectForRuntime(session.projectId)
+    const targetProject = this.getProjectForRuntime(targetProjectId)
     if (!sourceProject || !targetProject || targetProject.archived) {
       throw new Error('Choose an active destination project.')
     }
@@ -2941,7 +3025,7 @@ export class Store {
     folderPath: string
     folderId: string | null
   }): StoredGoogleDriveConnection {
-    const project = this.getProject(input.projectId)
+    const project = this.getProjectForRuntime(input.projectId)
     if (!project) throw new Error('Project not found.')
     const timestamp = now()
     const existing = this.getGoogleDriveConnection(input.projectId)
@@ -3156,7 +3240,7 @@ export class Store {
   }
 
   private requireSession(id: string): TerminalSession {
-    const session = this.getSession(id)
+    const session = this.getSessionWithoutOutput(id)
     if (!session) throw new Error('Terminal session not found.')
     return session
   }

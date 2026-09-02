@@ -457,7 +457,7 @@ export class TerminalManager {
 
   async startLatexInlineChat(projectId: string): Promise<TerminalSession> {
     const existing = this.store.getLatexInlineEditSession(projectId)
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectForRuntime(projectId)
     if (!project || project.archived || project.type !== 'latex') {
       throw new Error('Choose an active LaTeX project.')
     }
@@ -510,7 +510,7 @@ export class TerminalManager {
     if (session.state === 'running') {
       throw new Error('Wait for the current inline edit to finish before sending another.')
     }
-    const project = this.store.getProject(session.projectId)
+    const project = this.store.getProjectForRuntime(session.projectId)
     const connection = project
       ? this.store.getConnection(project.connectionId)
       : null
@@ -548,7 +548,7 @@ export class TerminalManager {
           // The persisted error still lets the next ask replace this exact
           // runner after a host reconnect.
         }
-        const latest = this.store.getSession(session.id)
+        const latest = this.store.getSessionWithoutOutput(session.id)
         if (latest) {
           this.changeState(
             latest,
@@ -580,7 +580,7 @@ export class TerminalManager {
         session.id,
         normalized
       )
-      const latest = this.store.getSession(session.id)
+      const latest = this.store.getSessionWithoutOutput(session.id)
       if (latest) this.changeState(latest, 'error', `${latest.name} could not start.`)
       return result
     }
@@ -593,7 +593,7 @@ export class TerminalManager {
     if (!this.tmuxPath || this.shuttingDown) return 0
     let restored = 0
 
-    for (const project of this.store.listProjects()) {
+    for (const project of this.store.listProjectsForRuntime()) {
       if (project.archived) continue
       const connection = this.store.getConnection(project.connectionId)
       if (!connection || connection.kind !== 'local') continue
@@ -678,7 +678,7 @@ export class TerminalManager {
           )
           restored += 1
         } catch (error) {
-          const latest = this.store.getSession(session.id)
+          const latest = this.store.getSessionWithoutOutput(session.id)
           if (latest && !['completed', 'error'].includes(latest.state)) {
             this.changeState(
               latest,
@@ -714,7 +714,7 @@ export class TerminalManager {
     if (!action) throw new Error('Action not found.')
     this.requireProjectTmux(action.projectId, 'Actions')
     const previous = action.lastSessionId
-      ? this.store.getSession(action.lastSessionId)
+      ? this.store.getSessionWithoutOutput(action.lastSessionId)
       : null
     if (previous && !['completed', 'error'].includes(previous.state)) {
       throw new Error('This action is already running.')
@@ -740,7 +740,7 @@ export class TerminalManager {
   stopAction(actionId: string): void {
     const action = this.store.getProjectAction(actionId)
     if (!action?.lastSessionId) throw new Error('This action has no run to stop.')
-    const session = this.store.getSession(action.lastSessionId)
+    const session = this.store.getSessionWithoutOutput(action.lastSessionId)
     if (!session || ['completed', 'error'].includes(session.state)) return
     this.stop(session.id)
   }
@@ -749,7 +749,7 @@ export class TerminalManager {
     const action = this.store.getProjectAction(actionId)
     if (!action) throw new Error('Action not found.')
     const session = action.lastSessionId
-      ? this.store.getSession(action.lastSessionId)
+      ? this.store.getSessionWithoutOutput(action.lastSessionId)
       : null
     if (session && !['completed', 'error'].includes(session.state)) {
       this.stop(session.id)
@@ -759,7 +759,7 @@ export class TerminalManager {
 
   async startProjectQna(projectId: string): Promise<TerminalSession> {
     let existing = this.store.getProjectQnaSession(projectId)
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectForRuntime(projectId)
     if (!project || project.archived) throw new Error('Choose an active project.')
     const connection = this.store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
@@ -774,7 +774,7 @@ export class TerminalManager {
           // A failed first launch has no provider thread to resume. The fresh
           // Q&A session below replaces that unusable local record.
         }
-        existing = this.store.getSession(existing.id)
+        existing = this.store.getSessionWithoutOutput(existing.id)
       }
       if (existing?.providerSessionId) {
         this.resumeAgent(existing.id)
@@ -825,7 +825,7 @@ export class TerminalManager {
   }
 
   resetProjectQna(projectId: string): void {
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectForRuntime(projectId)
     if (!project || project.archived) throw new Error('Choose an active project.')
     const existing = this.store.getProjectQnaSession(projectId)
     if (!existing) return
@@ -833,7 +833,7 @@ export class TerminalManager {
   }
 
   startTemporaryCodexChat(projectId: string): TerminalSession {
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectForRuntime(projectId)
     if (!project || project.archived) throw new Error('Choose an active project.')
     this.requireProjectTmux(projectId, 'Temporary Codex chats')
     const chatNumber =
@@ -874,7 +874,7 @@ export class TerminalManager {
     onPersist?: (session: TerminalSession) => void,
     tmuxAlreadyConfirmed = false
   ): TerminalSession {
-    const project = this.store.getProject(input.projectId)
+    const project = this.store.getProjectForRuntime(input.projectId)
     if (!project) throw new Error('Project not found.')
     const connection = this.store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
@@ -989,7 +989,7 @@ export class TerminalManager {
       )
       throw error
     }
-    return this.store.getSession(session.id)!
+    return this.store.getSessionWithoutOutput(session.id)!
   }
 
   private connectionHasTmux(connection: Connection): boolean {
@@ -1006,7 +1006,7 @@ export class TerminalManager {
   }
 
   private requireProjectTmux(projectId: string, capability: string): void {
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectForRuntime(projectId)
     const connection = project
       ? this.store.getConnection(project.connectionId)
       : null
@@ -1018,7 +1018,7 @@ export class TerminalManager {
 
   async discoverSavedProviderSessions(): Promise<void> {
     if (this.shuttingDown) return
-    for (const project of this.store.listProjects()) {
+    for (const project of this.store.listProjectsForRuntime()) {
       if (this.shuttingDown) return
       const connection = this.store.getConnection(project.connectionId)
       if (!connection) continue
@@ -1038,7 +1038,7 @@ export class TerminalManager {
   async reconcileSessions(connectionId?: string): Promise<number> {
     if (this.shuttingDown) return 0
     const projects = this.store
-      .listProjects()
+      .listProjectsForRuntime()
       .filter((project) => !project.archived)
     const connections = this.store
       .listConnections()
@@ -1091,8 +1091,10 @@ export class TerminalManager {
 
   private async syncSessionMetadataOnce(sessionId: string): Promise<boolean> {
     if (this.shuttingDown) return false
-    const session = this.store.getSession(sessionId)
-    const project = session ? this.store.getProject(session.projectId) : null
+    const session = this.store.getSessionWithoutOutput(sessionId)
+    const project = session
+      ? this.store.getProjectForRuntime(session.projectId)
+      : null
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (
       !session ||
@@ -1177,7 +1179,7 @@ export class TerminalManager {
       !this.runtimes.has(sessionId) &&
       !['completed', 'error'].includes(session.state)
     ) {
-      const project = this.store.getProject(session.projectId)
+      const project = this.store.getProjectForRuntime(session.projectId)
       const connection = project ? this.store.getConnection(project.connectionId) : null
       if (!project || !connection) throw new Error('The terminal project is unavailable.')
       if (session.backend === 'pty') {
@@ -1208,7 +1210,7 @@ export class TerminalManager {
 
   async retryAttach(sessionId: string, cols: number, rows: number): Promise<void> {
     let session = this.requireSession(sessionId)
-    const project = this.store.getProject(session.projectId)
+    const project = this.store.getProjectForRuntime(session.projectId)
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (!project || !connection) throw new Error('The terminal project is unavailable.')
 
@@ -1326,7 +1328,7 @@ export class TerminalManager {
     if (session.backend !== 'tmux' || !session.tmuxName) {
       throw new Error('Full-buffer copy requires a tmux-backed terminal.')
     }
-    const project = this.store.getProject(session.projectId)
+    const project = this.store.getProjectForRuntime(session.projectId)
     const connection = project
       ? this.store.getConnection(project.connectionId)
       : null
@@ -1385,7 +1387,7 @@ export class TerminalManager {
     const cleaned = prompt.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim()
     if (!cleaned) throw new Error('Enter a message for the agent.')
     this.write(sessionId, `\x1b[200~${cleaned}\x1b[201~\r`)
-    const latest = this.store.getSession(sessionId)
+    const latest = this.store.getSessionWithoutOutput(sessionId)
     if (latest && AGENT_PROFILES.has(latest.profile)) {
       this.changeState(latest, 'running', `${latest.name} is working.`)
     }
@@ -1430,7 +1432,7 @@ export class TerminalManager {
     if (session.archived) {
       throw new Error('Restore the archived terminal before resuming its agent chat.')
     }
-    const project = this.store.getProject(session.projectId)
+    const project = this.store.getProjectForRuntime(session.projectId)
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (!project || !connection) throw new Error('The terminal project is unavailable.')
 
@@ -1474,7 +1476,7 @@ export class TerminalManager {
       throw new Error('Restore the archived chat before force reloading it.')
     }
 
-    const project = this.store.getProject(session.projectId)
+    const project = this.store.getProjectForRuntime(session.projectId)
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (!project || !connection) throw new Error('The terminal project is unavailable.')
 
@@ -1518,7 +1520,7 @@ export class TerminalManager {
         Boolean(providerSessionReference)
       )
     } catch (error) {
-      const latest = this.store.getSession(sessionId)
+      const latest = this.store.getSessionWithoutOutput(sessionId)
       if (latest) {
         this.changeState(latest, 'error', `Could not force reload ${session.name}.`)
       }
@@ -1532,7 +1534,7 @@ export class TerminalManager {
     let tmuxName = session.tmuxName
     if (session.backend === 'tmux' && session.tmuxName) {
       if (cleaned === session.name && cleaned === session.tmuxName) return
-      const project = this.store.getProject(session.projectId)
+      const project = this.store.getProjectForRuntime(session.projectId)
       const connection = project ? this.store.getConnection(project.connectionId) : null
       if (!connection) throw new Error('Project connection not found.')
       const connectionTmuxPath = this.tmuxPathForConnection(connection)
@@ -1583,7 +1585,7 @@ export class TerminalManager {
     if (cleaned === session.name && tmuxName === session.tmuxName) return
     this.store.renameSession(sessionId, cleaned, tmuxName)
     const runtime = this.runtimes.get(sessionId)
-    const latest = this.store.getSession(sessionId)
+    const latest = this.store.getSessionWithoutOutput(sessionId)
     if (runtime && latest) runtime.session = latest
   }
 
@@ -1595,8 +1597,8 @@ export class TerminalManager {
     if (session.kind !== 'terminal' || session.archived) {
       throw new Error('Only active ordinary terminal sessions can be transferred.')
     }
-    const sourceProject = this.store.getProject(session.projectId)
-    const targetProject = this.store.getProject(targetProjectId)
+    const sourceProject = this.store.getProjectForRuntime(session.projectId)
+    const targetProject = this.store.getProjectForRuntime(targetProjectId)
     if (!sourceProject || !targetProject || targetProject.archived) {
       throw new Error('Choose an active destination project.')
     }
@@ -1649,7 +1651,7 @@ export class TerminalManager {
   }
 
   archiveProject(projectId: string): void {
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectForRuntime(projectId)
     if (!project) throw new Error('Project not found.')
     if (project.archived) return
 
@@ -1700,7 +1702,7 @@ export class TerminalManager {
       )
     }
     if (session.backend === 'tmux' && session.tmuxName) {
-      const project = this.store.getProject(session.projectId)
+      const project = this.store.getProjectForRuntime(session.projectId)
       const connection = project ? this.store.getConnection(project.connectionId) : null
       if (!connection) throw new Error('Project connection not found.')
       this.killTmuxSession(connection, session.tmuxName)
@@ -1724,7 +1726,7 @@ export class TerminalManager {
     const outputWasClosed = runtime?.outputClosed ?? false
     if (runtime) runtime.outputClosed = true
     try {
-      const project = this.store.getProject(session.projectId)
+      const project = this.store.getProjectForRuntime(session.projectId)
       const connection = project
         ? this.store.getConnection(project.connectionId)
         : null
@@ -1846,7 +1848,7 @@ export class TerminalManager {
       }
       if (runtime.closingTransport) return
       this.flushOutput(session.id)
-      const latest = this.store.getSession(session.id)
+      const latest = this.store.getSessionWithoutOutput(session.id)
       if (!latest) return
       if (runtime.intentionalStop || latest.state === 'completed') return
       if (isLatexInlineEditSession(latest)) {
@@ -1922,7 +1924,7 @@ export class TerminalManager {
       void this.discoverProviderSession(runtime.session, folder, connection)
         .then((linked) => {
           if (this.shuttingDown) return
-          const latest = this.store.getSession(runtime.session.id)
+          const latest = this.store.getSessionWithoutOutput(runtime.session.id)
           if (!latest) return
           runtime.session = latest
           if (!linked && this.runtimes.has(runtime.session.id)) {
@@ -1945,7 +1947,7 @@ export class TerminalManager {
     paneTitle?: string
   ): Promise<boolean> {
     if (this.shuttingDown) return false
-    const latest = this.store.getSession(session.id)
+    const latest = this.store.getSessionWithoutOutput(session.id)
     if (!latest || !AGENT_PROFILES.has(latest.profile)) return false
     if (latest.providerSessionId) {
       await this.syncSessionMetadata(latest.id)
@@ -2044,7 +2046,7 @@ export class TerminalManager {
           throw new Error(`Tmux is unavailable on ${connection.name}.`)
         }
         if (create) {
-          const project = this.store.getProject(session.projectId)
+          const project = this.store.getProjectForRuntime(session.projectId)
           if (project) {
             const metadataCommand = tmuxMetadataShellCommand(
               this.metadataForSession(project, session),
@@ -2095,7 +2097,7 @@ export class TerminalManager {
     }
 
     if (session.backend === 'tmux' && session.tmuxName && this.tmuxPath) {
-      const project = this.store.getProject(session.projectId)
+      const project = this.store.getProjectForRuntime(session.projectId)
       const persistentCommand =
         create && project
           ? `(${tmuxMetadataShellCommand(
@@ -2148,7 +2150,7 @@ export class TerminalManager {
       }
       const nextState = runtime.detector?.inspect(lines.join('\n'))
       if (nextState) {
-        const latest = this.store.getSession(runtime.session.id)
+        const latest = this.store.getSessionWithoutOutput(runtime.session.id)
         if (!latest) return
         const message =
           nextState === 'running'
@@ -2349,7 +2351,7 @@ export class TerminalManager {
         chunks: output ? [output] : [],
         byteLength: Buffer.byteLength(output, 'utf8')
       })
-      const latest = this.store.getSession(runtime.session.id)
+      const latest = this.store.getSessionWithoutOutput(runtime.session.id)
       if (!latest) {
         this.rejectLatexInlineExec(
           runtime.session.id,
@@ -2393,7 +2395,7 @@ export class TerminalManager {
     }
 
     runtime.pty.kill()
-    const latest = this.store.getSession(runtime.session.id)
+    const latest = this.store.getSessionWithoutOutput(runtime.session.id)
     if (!latest) return
     const state = snapshot.exitCode === 0 ? 'completed' : 'error'
     const message =
@@ -2620,8 +2622,10 @@ export class TerminalManager {
     reconnect: ReconnectRuntime
   ): Promise<void> {
     if (this.shuttingDown) return
-    const session = this.store.getSession(reconnect.sessionId)
-    const project = session ? this.store.getProject(session.projectId) : null
+    const session = this.store.getSessionWithoutOutput(reconnect.sessionId)
+    const project = session
+      ? this.store.getProjectForRuntime(session.projectId)
+      : null
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (
       !session ||
@@ -2780,7 +2784,7 @@ export class TerminalManager {
       let metadata = listedSession.metadata
       let repairMetadata = false
       if (metadata && metadata.sessionKind == null) {
-        const known = this.store.getSession(metadata.terminalId)
+        const known = this.store.getSessionWithoutOutput(metadata.terminalId)
         if (known?.projectId) {
           const action =
             known.kind === 'action'
@@ -2802,7 +2806,7 @@ export class TerminalManager {
       }
       const project = this.projectForDiscoveredSession(projects, listedSession)
       if (!metadata || !project) continue
-      const known = this.store.getSession(metadata.terminalId)
+      const known = this.store.getSessionWithoutOutput(metadata.terminalId)
       if (
         known?.latexChat &&
         (metadata.sessionKind !== 'latex-chat' || metadata.latex == null)
@@ -3004,7 +3008,7 @@ export class TerminalManager {
   }
 
   private requireSession(id: string): TerminalSession {
-    const session = this.store.getSession(id)
+    const session = this.store.getSessionWithoutOutput(id)
     if (!session) throw new Error('Terminal session not found.')
     return session
   }

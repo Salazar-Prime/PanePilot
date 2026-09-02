@@ -358,7 +358,6 @@ export function LatexProjectWorkspace({
     ) {
       setSelectedSectionId(activeSession.latexChat.sectionId)
     }
-    void window.projectConsole.terminals.acknowledge(activeSession.id).then(onChanged)
   }, [activeSession?.id])
 
   useEffect(() => {
@@ -483,8 +482,6 @@ export function LatexProjectWorkspace({
     selectWorkspaceTab('manuscript')
     onSessionSelected(id)
     onSelectSession(id)
-    await window.projectConsole.terminals.acknowledge(id)
-    await onChanged()
   }
 
   async function clearChanges() {
@@ -752,7 +749,6 @@ export function LatexProjectWorkspace({
           onSelectSession={(id) => {
             onSessionSelected(id)
             onSelectSession(id)
-            void window.projectConsole.terminals.acknowledge(id).then(onChanged)
           }}
           onNewChat={() => setShowLauncher(true)}
           onChanged={onChanged}

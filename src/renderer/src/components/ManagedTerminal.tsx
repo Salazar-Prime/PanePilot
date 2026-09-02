@@ -34,6 +34,8 @@ interface Props {
   onOpenFile?(target: TerminalFileTarget): void
 }
 
+const terminalAttachCounts = new Map<string, number>()
+
 export function ManagedTerminal({
   session,
   active = true,
@@ -47,18 +49,21 @@ export function ManagedTerminal({
   const activeRef = useRef(active)
   activeRef.current = active
   const writableRef = useRef(false)
+  const replayingRef = useRef(true)
   const dimensionsRef = useRef({ cols: 100, rows: 30 })
   const onOpenFileRef = useRef(onOpenFile)
   onOpenFileRef.current = onOpenFile
   const terminalEnded = ['completed', 'error'].includes(session.state)
-  const retainedOutput =
-    retainOutputOnExit && terminalEnded ? session.output : null
+  const terminalEndedRef = useRef(terminalEnded)
+  terminalEndedRef.current = terminalEnded
   const [transport, setTransport] = useState<TerminalTransportEvent>({
     sessionId: session.id,
     state: 'attached',
     attempt: 0,
     message: null
   })
+  const transportRef = useRef(transport)
+  transportRef.current = transport
   const [inputReady, setInputReady] = useState(false)
   const [contextMenu, setContextMenu] = useState<{
     top: number
@@ -124,14 +129,17 @@ export function ManagedTerminal({
     const host = hostRef.current
     if (!host) return
     writableRef.current = false
+    replayingRef.current = true
     setInputReady(false)
     setContextMenu(null)
-    setTransport({
+    const initialTransport: TerminalTransportEvent = {
       sessionId: session.id,
       state: 'attached',
       attempt: 0,
       message: null
-    })
+    }
+    transportRef.current = initialTransport
+    setTransport(initialTransport)
 
     const openUrl = (url: string): void => {
       void window.projectConsole.system.openExternal(url).catch((error) => {
@@ -214,7 +222,7 @@ export function ManagedTerminal({
       terminalWebLinkProvider(terminal, openUrl)
     )
     let replaying = true
-    let writable = !terminalEnded
+    let writable = !terminalEndedRef.current
     const osc52Disposable = terminal.parser.registerOscHandler(52, (data) => {
       const clipboardText = decodeOsc52Clipboard(data)
       if (clipboardText !== null && activeRef.current) {
@@ -248,30 +256,13 @@ export function ManagedTerminal({
       return false
     })
 
-    if (retainedOutput !== null) {
-      if (retainedOutput) {
-        terminal.write(retainedOutput, () => terminal.scrollToBottom())
-      }
-      const resizeObserver = new ResizeObserver(() => {
-        fit.fit()
-        dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
-      })
-      resizeObserver.observe(host)
-      return () => {
-        unregisterSpeechContent()
-        resizeObserver.disconnect()
-        linkDisposable?.dispose()
-        webLinkDisposable.dispose()
-        osc52Disposable.dispose()
-        writableRef.current = false
-        if (terminalRef.current === terminal) terminalRef.current = null
-        if (fitRef.current === fit) fitRef.current = null
-        terminal.dispose()
-      }
-    }
-
     const dataDisposable = terminal.onData((data) => {
-      if (!replaying && writable) {
+      if (
+        activeRef.current &&
+        !terminalEndedRef.current &&
+        !replaying &&
+        writable
+      ) {
         void window.projectConsole.terminals.write(session.id, data).catch(
           (error) => console.error('Could not write terminal input.', error)
         )
@@ -283,24 +274,52 @@ export function ManagedTerminal({
     const removeTransportListener =
       window.projectConsole.terminals.onTransport((event) => {
         if (event.sessionId !== session.id) return
-        writable = !terminalEnded && event.state === 'attached'
-        writableRef.current = writable && !replaying
+        writable = !terminalEndedRef.current && event.state === 'attached'
+        transportRef.current = event
+        writableRef.current = writable && !replaying && activeRef.current
         setInputReady(writableRef.current)
         setTransport(event)
       })
 
+    const attachStartedAt = performance.now()
+    const attachCount = (terminalAttachCounts.get(session.id) ?? 0) + 1
+    terminalAttachCounts.set(session.id, attachCount)
     void window.projectConsole.terminals
       .attach(session.id, terminal.cols, terminal.rows)
       .then(({ output }) => {
         terminal.write(output, () => {
           replaying = false
-          writableRef.current = writable
-          setInputReady(writable)
+          replayingRef.current = false
+          writable = !terminalEndedRef.current && writable
+          writableRef.current = writable && activeRef.current
+          setInputReady(writableRef.current)
           if (activeRef.current) terminal.focus()
+          if (import.meta.env.DEV) {
+            console.debug('[PanePilot performance] terminal ready', {
+              sessionId: session.id,
+              attachCount,
+              durationMs: Math.round(performance.now() - attachStartedAt)
+            })
+            const selectionName = `panepilot:terminal-select:${session.id}`
+            const selectionMark = performance
+              .getEntriesByName(selectionName, 'mark')
+              .at(-1)
+            if (selectionMark && activeRef.current) {
+              console.debug('[PanePilot performance] terminal focused', {
+                sessionId: session.id,
+                durationMs: Math.round(
+                  performance.now() - selectionMark.startTime
+                ),
+                warm: false
+              })
+              performance.clearMarks(selectionName)
+            }
+          }
         })
       })
       .catch((error) => {
         replaying = false
+        replayingRef.current = false
         writable = false
         writableRef.current = false
         setInputReady(false)
@@ -310,10 +329,17 @@ export function ManagedTerminal({
           attempt: 0,
           message: String(error)
         })
+        transportRef.current = {
+          sessionId: session.id,
+          state: 'offline',
+          attempt: 0,
+          message: String(error)
+        }
         terminal.writeln(`\r\n\x1b[31mPanePilot: ${String(error)}\x1b[0m`)
       })
 
     const resizeObserver = new ResizeObserver(() => {
+      if (!activeRef.current) return
       fit.fit()
       dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
       void window.projectConsole.terminals.resize(session.id, terminal.cols, terminal.rows)
@@ -334,10 +360,26 @@ export function ManagedTerminal({
       if (fitRef.current === fit) fitRef.current = null
       terminal.dispose()
     }
-  }, [session.id, terminalEnded, retainedOutput, projectFolder])
+  }, [session.id, projectFolder])
 
   useEffect(() => {
-    if (!active) return
+    const terminal = terminalRef.current
+    if (terminal) {
+      terminal.options.cursorBlink = !terminalEnded
+      terminal.options.disableStdin = terminalEnded
+    }
+    if (terminalEnded) {
+      writableRef.current = false
+      setInputReady(false)
+    }
+  }, [terminalEnded])
+
+  useEffect(() => {
+    if (!active) {
+      writableRef.current = false
+      setInputReady(false)
+      return
+    }
     const frame = window.requestAnimationFrame(() => {
       const terminal = terminalRef.current
       const fit = fitRef.current
@@ -349,7 +391,25 @@ export function ManagedTerminal({
         terminal.cols,
         terminal.rows
       )
+      const ready =
+        !replayingRef.current &&
+        !terminalEndedRef.current &&
+        transportRef.current.state === 'attached'
+      writableRef.current = ready
+      setInputReady(ready)
       terminal.focus()
+      if (import.meta.env.DEV && ready) {
+        const name = `panepilot:terminal-select:${session.id}`
+        const mark = performance.getEntriesByName(name, 'mark').at(-1)
+        if (mark) {
+          console.debug('[PanePilot performance] terminal focused', {
+            sessionId: session.id,
+            durationMs: Math.round(performance.now() - mark.startTime),
+            warm: (terminalAttachCounts.get(session.id) ?? 0) === 1
+          })
+          performance.clearMarks(name)
+        }
+      }
     })
     return () => window.cancelAnimationFrame(frame)
   }, [active, session.id])

@@ -130,4 +130,25 @@ describe('terminal output chunk storage', () => {
     expect(retained).not.toContain('\ufffd')
     store.close()
   })
+
+  it('keeps saved replay output out of renderer project hydration', () => {
+    const { store, project, session } = createSession()
+    store.replaceOutput(session.id, 'large saved terminal replay')
+
+    expect(store.getProject(project.id)?.sessions[0]?.output).toBe(
+      'large saved terminal replay'
+    )
+    expect(
+      store.getProjectForRenderer(project.id)?.sessions[0]?.output
+    ).toBe('')
+    expect(
+      store.listProjectsForRenderer()[0]?.sessions[0]?.output
+    ).toBe('')
+    expect(store.getSessionWithoutOutput(session.id)?.output).toBe('')
+    const runtimeProject = store.getProjectForRuntime(project.id)
+    expect(runtimeProject?.sessions[0]?.output).toBe('')
+    expect(runtimeProject?.activities).toEqual([])
+    expect(store.listProjectsForRuntime()[0]?.activities).toEqual([])
+    store.close()
+  })
 })

@@ -558,6 +558,7 @@ export interface ProjectConsoleApi {
   }
   projects: {
     list(): Promise<Project[]>
+    get(projectId: string): Promise<Project | null>
     create(input: CreateProjectInput): Promise<Project>
     rename(projectId: string, name: string): Promise<void>
     setIcon(projectId: string, icon: string | null): Promise<void>

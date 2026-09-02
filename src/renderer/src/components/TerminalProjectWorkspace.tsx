@@ -69,17 +69,11 @@ type WorkspaceTab =
   | 'chats'
   | 'history'
 
-interface CachedTerminalView {
-  projectId: string
-  projectFolder: string
-  session: TerminalSession
-}
-
-const MAX_CACHED_TERMINAL_VIEWS = 8
-
 export function TerminalProjectWorkspace({
   project,
   connection,
+  workspaceActive = true,
+  terminalSurfaceCache,
   selectedSessionId,
   launchTerminalRequest,
   openSessionRequest,
@@ -101,9 +95,6 @@ export function TerminalProjectWorkspace({
   const [openFileRequest, setOpenFileRequest] =
     useState<ProjectFileOpenRequest | null>(null)
   const [renameTarget, setRenameTarget] = useState<TerminalSession | null>(null)
-  const [cachedTerminalViews, setCachedTerminalViews] = useState<
-    CachedTerminalView[]
-  >([])
   const [menu, setMenu] = useState<{ sessionId: string; top: number; left: number } | null>(
     null
   )
@@ -210,8 +201,8 @@ export function TerminalProjectWorkspace({
     const currentSessions = new Map(
       project.sessions.map((session) => [session.id, session])
     )
-    const retained = cachedTerminalViews.flatMap((view) => {
-      if (view.projectId !== project.id) return [view]
+    const retained = (terminalSurfaceCache?.views ?? []).flatMap((view) => {
+      if (view.projectId !== project.id) return []
       const current = currentSessions.get(view.session.id)
       return current && !current.archived
         ? [{ ...view, projectFolder: project.folder, session: current }]
@@ -228,13 +219,18 @@ export function TerminalProjectWorkspace({
         session: activeSession
       }
     ]
-  }, [activeSession, cachedTerminalViews, project.folder, project.id, project.sessions])
+  }, [
+    activeSession,
+    project.folder,
+    project.id,
+    project.sessions,
+    terminalSurfaceCache?.views
+  ])
 
   useEffect(() => {
-    if (!activeSession) return
+    if (!workspaceActive || !activeSession) return
     if (activeSession.id !== selectedSessionId) onSelectSession(activeSession.id)
-    void window.projectConsole.terminals.acknowledge(activeSession.id).then(onChanged)
-  }, [activeSession?.id])
+  }, [activeSession?.id, workspaceActive])
 
   // Seed every non-archived terminal as "open" the first time this project is
   // encountered, so existing sessions keep showing as tabs the way they always
@@ -249,49 +245,38 @@ export function TerminalProjectWorkspace({
   }, [project.id])
 
   useEffect(() => {
-    setCachedTerminalViews((current) => {
-      const currentSessions = new Map(
-        project.sessions.map((session) => [session.id, session])
-      )
-      const next = current.flatMap((view) => {
-        if (view.projectId !== project.id) return [view]
-        const latest = currentSessions.get(view.session.id)
-        return latest && !latest.archived
-          ? [{ ...view, projectFolder: project.folder, session: latest }]
-          : []
-      })
-      if (activeSession) {
-        const existingIndex = next.findIndex(
-          (view) => view.session.id === activeSession.id
-        )
-        if (existingIndex >= 0) next.splice(existingIndex, 1)
-        next.push({
-          projectId: project.id,
-          projectFolder: project.folder,
-          session: activeSession
-        })
-      }
-      return next.slice(-MAX_CACHED_TERMINAL_VIEWS)
+    if (!workspaceActive || !activeSession || !terminalSurfaceCache) return
+    terminalSurfaceCache.retain({
+      projectId: project.id,
+      projectFolder: project.folder,
+      session: activeSession
     })
-  }, [activeSession, project.folder, project.id, project.sessions])
+  }, [
+    activeSession,
+    project.folder,
+    project.id,
+    terminalSurfaceCache?.retain,
+    workspaceActive
+  ])
 
   useEffect(() => {
+    if (!workspaceActive) return
     setShowLauncher(false)
     setDraggingTabId(null)
     setTabDropTarget(null)
-  }, [project.id])
+  }, [project.id, workspaceActive])
 
   useEffect(() => {
-    if (launchTerminalRequest == null) return
+    if (!workspaceActive || launchTerminalRequest == null) return
     setShowLauncher(true)
     onLaunchTerminalRequestHandled(launchTerminalRequest)
-  }, [launchTerminalRequest, onLaunchTerminalRequestHandled])
+  }, [launchTerminalRequest, onLaunchTerminalRequestHandled, workspaceActive])
 
   useEffect(() => {
-    if (openSessionRequest == null) return
+    if (!workspaceActive || openSessionRequest == null) return
     setTab('terminal')
     onOpenSessionRequestHandled(openSessionRequest)
-  }, [openSessionRequest, onOpenSessionRequestHandled])
+  }, [openSessionRequest, onOpenSessionRequestHandled, workspaceActive])
 
   useEffect(() => {
     setOpenFileRequest(null)
@@ -319,8 +304,6 @@ export function TerminalProjectWorkspace({
     onSessionSelected(id)
     onOpenSession(id)
     onSelectSession(id)
-    await window.projectConsole.terminals.acknowledge(id)
-    await onChanged()
   }
 
   async function startTerminal(input: Parameters<typeof window.projectConsole.terminals.start>[0]) {
@@ -654,14 +637,20 @@ export function TerminalProjectWorkspace({
               {renderedTerminalViews.map((view) => (
                 <div
                   className={`terminal-surface ${
-                    view.session.id === activeSession.id ? 'active' : ''
+                    workspaceActive && view.session.id === activeSession.id
+                      ? 'active'
+                      : ''
                   }`}
                   key={view.session.id}
-                  aria-hidden={view.session.id !== activeSession.id}
+                  aria-hidden={
+                    !workspaceActive || view.session.id !== activeSession.id
+                  }
                 >
                   <ManagedTerminal
                     session={view.session}
-                    active={view.session.id === activeSession.id}
+                    active={
+                      workspaceActive && view.session.id === activeSession.id
+                    }
                     projectFolder={view.projectFolder}
                     onOpenFile={openFile}
                   />

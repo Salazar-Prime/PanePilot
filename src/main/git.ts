@@ -438,7 +438,7 @@ export class GitService {
   async repositoryVisibility(
     projectId: string
   ): Promise<GitHubRepositoryVisibilityStatus> {
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectForRuntime(projectId)
     if (!project || project.archived) throw new Error('Project not found.')
     const reference = parseGitHubRepositoryReference(project.repositoryUrl)
     const checkedAt = new Date().toISOString()
@@ -557,7 +557,7 @@ export class GitService {
     connection: Connection
     runner: GitRunner
   } {
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectForRuntime(projectId)
     if (!project || project.archived) throw new Error('Project not found.')
     const connection = this.store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')

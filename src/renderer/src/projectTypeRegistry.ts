@@ -8,10 +8,13 @@ import type {
 } from '@shared/types'
 import { LatexProjectWorkspace } from './components/LatexProjectWorkspace'
 import { TerminalProjectWorkspace } from './components/TerminalProjectWorkspace'
+import type { TerminalSurfaceCacheController } from './lib/terminalSurfaceCache'
 
 export interface ProjectWorkspaceProps {
   project: Project
   connection: Connection | undefined
+  workspaceActive?: boolean
+  terminalSurfaceCache?: TerminalSurfaceCacheController
   selectedSessionId: string | null
   launchTerminalRequest: number | null
   openSessionRequest: number | null

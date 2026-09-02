@@ -819,7 +819,7 @@ export class ProjectMetadataService {
     project: Project
     connection: Connection
   } {
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectWithoutOutput(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = this.store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
@@ -1034,7 +1034,7 @@ export class ProjectMetadataService {
       this.store.upsertSharedProjectAction(projectId, action)
     }
     const sharedIds = new Set(shared.actions.map((action) => action.id))
-    const local = this.store.getProject(projectId)?.actions ?? []
+    const local = this.store.getProjectWithoutOutput(projectId)?.actions ?? []
     for (const action of local) {
       if (sharedIds.has(action.id)) continue
       const session = action.lastSessionId
@@ -1043,7 +1043,7 @@ export class ProjectMetadataService {
       if (session && !['completed', 'error'].includes(session.state)) continue
       this.store.deleteProjectAction(action.id)
     }
-    return this.store.getProject(projectId)?.actions ?? []
+    return this.store.getProjectWithoutOutput(projectId)?.actions ?? []
   }
 
   createAction(input: CreateProjectActionInput): ProjectAction {
