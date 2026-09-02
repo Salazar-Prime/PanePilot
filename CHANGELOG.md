@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.3 — 2026-09-02
+
+This patch release improves responsive project switching:
+
+- LaTeX Manuscript, an opened PDF, and the writing-chat margin remain mounted while
+  switching capabilities. Cached source models restore saved or unsaved drafts
+  immediately, ordinary revisits no longer rescan the manuscript, and asynchronous
+  local/SSH reads keep typing and scrolling responsive.
+- Project and terminal switching now use targeted renderer updates instead of
+  reloading the complete project collection. Each pane keeps up to four recently
+  used terminal surfaces warm and loads saved replay output only when a surface
+  first attaches.
+- Proof comments are shared through the project’s versioned
+  `.panepilot/latex-comments.json` file for local and SSH clients. Existing
+  client-local comments migrate only when that shared file does not yet exist.
+
+The v0.8.3 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.8.2 — 2026-08-26
 
 This release improves LaTeX editing and proofing:
