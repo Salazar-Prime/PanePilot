@@ -399,6 +399,7 @@ export function LatexProjectWorkspace({
     activeSession?.id,
     activeSession?.name,
     onWorkspaceDestinationVisited,
+    project.icon,
     project.id,
     project.name,
     project.type,

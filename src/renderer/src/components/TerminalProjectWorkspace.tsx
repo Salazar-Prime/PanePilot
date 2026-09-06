@@ -276,7 +276,9 @@ export function TerminalProjectWorkspace({
   }, [
     activeSession?.id,
     activeSession?.name,
+    activeSession?.state,
     onWorkspaceDestinationVisited,
+    project.icon,
     project.id,
     project.name,
     project.type,

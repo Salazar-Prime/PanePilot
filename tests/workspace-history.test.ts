@@ -9,6 +9,7 @@ import {
   recentWorkspaceDestinations,
   recordWorkspaceDestination,
   saveWorkspaceHistory,
+  workspaceTerminalIndicator,
   workspaceTabRequestFor
 } from '../src/renderer/src/lib/workspaceHistory'
 
@@ -158,5 +159,51 @@ describe('recent workspace history', () => {
     expect(nextWorkspaceSwitcherIndex(0, 5)).toBe(1)
     expect(nextWorkspaceSwitcherIndex(4, 5)).toBe(0)
     expect(nextWorkspaceSwitcherIndex(0, 0)).toBe(0)
+  })
+
+  it('hydrates the project icon and live status for terminal destinations', () => {
+    const runningProject = {
+      ...project,
+      icon: '🚀',
+      sessions: [{ ...session, state: 'running' as const }]
+    }
+    const terminal = createWorkspaceDestination({
+      project: runningProject,
+      tab: 'terminal',
+      sessionId: session.id,
+      sessionName: session.name
+    })
+
+    expect(terminal.projectIcon).toBe('🚀')
+    expect(workspaceTerminalIndicator(terminal)).toBe('working')
+
+    const [attention] = recentWorkspaceDestinations(
+      [terminal],
+      null,
+      [
+        {
+          ...runningProject,
+          icon: '🛰️',
+          sessions: [{ ...session, state: 'needs-input' as const }]
+        }
+      ]
+    )
+    expect(attention.projectIcon).toBe('🛰️')
+    expect(workspaceTerminalIndicator(attention)).toBe('attention')
+  })
+
+  it('never puts terminal lifecycle status on capability sub-icons', () => {
+    const notes = createWorkspaceDestination({
+      project: {
+        ...project,
+        sessions: [{ ...session, state: 'running' as const }]
+      },
+      tab: 'notes',
+      sessionId: session.id,
+      sessionName: session.name
+    })
+
+    expect(notes.terminalState).toBeNull()
+    expect(workspaceTerminalIndicator(notes)).toBeNull()
   })
 })

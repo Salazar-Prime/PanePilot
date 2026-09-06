@@ -1,4 +1,4 @@
-import type { Project, ProjectType } from '@shared/types'
+import type { AgentState, Project, ProjectType } from '@shared/types'
 import type { WorkspacePane, WorkspaceRequest } from './workspaceRequest'
 
 export const WORKSPACE_HISTORY_STORAGE_KEY =
@@ -21,13 +21,17 @@ export interface WorkspaceDestination {
   key: string
   projectId: string
   projectName: string
+  projectIcon?: string | null
   projectType: ProjectType
   tab: WorkspaceTabId
   tabLabel: string
   sessionId: string | null
   sessionName: string | null
+  terminalState?: AgentState | null
   visitedAt: number
 }
+
+export type WorkspaceTerminalIndicator = 'working' | 'attention' | null
 
 export interface WorkspaceTabRequest extends WorkspaceRequest {
   tab: WorkspaceTabId
@@ -66,6 +70,16 @@ const latexTabs = new Set<WorkspaceTabId>([
   'activity'
 ])
 
+const agentStates = new Set<AgentState>([
+  'idle',
+  'running',
+  'needs-input',
+  'response-ready',
+  'needs-attention',
+  'completed',
+  'error'
+])
+
 export function workspaceTabLabel(tab: WorkspaceTabId): string {
   return tabLabels[tab]
 }
@@ -86,15 +100,23 @@ export function createWorkspaceDestination(input: {
   visitedAt?: number
 }): WorkspaceDestination {
   const sessionId = input.sessionId ?? null
+  const session = sessionId
+    ? input.project.sessions.find((candidate) => candidate.id === sessionId)
+    : null
   return {
     key: workspaceDestinationKey(input.project.id, input.tab, sessionId),
     projectId: input.project.id,
     projectName: input.project.name,
+    projectIcon: input.project.icon,
     projectType: input.project.type,
     tab: input.tab,
     tabLabel: workspaceTabLabel(input.tab),
     sessionId,
     sessionName: input.sessionName ?? null,
+    terminalState:
+      input.tab === 'terminal' && session?.kind === 'terminal'
+        ? session.state
+        : null,
     visitedAt: input.visitedAt ?? Date.now()
   }
 }
@@ -122,8 +144,10 @@ function hydrateDestination(
     return {
       ...destination,
       projectName: project.name,
+      projectIcon: project.icon,
       projectType: project.type,
-      tabLabel: workspaceTabLabel(destination.tab)
+      tabLabel: workspaceTabLabel(destination.tab),
+      terminalState: null
     }
   }
 
@@ -135,10 +159,29 @@ function hydrateDestination(
   return {
     ...destination,
     projectName: project.name,
+    projectIcon: project.icon,
     projectType: project.type,
     tabLabel: workspaceTabLabel(destination.tab),
-    sessionName: session.name
+    sessionName: session.name,
+    terminalState:
+      destination.tab === 'terminal' && session.kind === 'terminal'
+        ? session.state
+        : null
   }
+}
+
+export function workspaceTerminalIndicator(
+  destination: WorkspaceDestination
+): WorkspaceTerminalIndicator {
+  if (destination.tab !== 'terminal' || !destination.sessionId) return null
+  if (destination.terminalState === 'running') return 'working'
+  if (
+    destination.terminalState === 'needs-input' ||
+    destination.terminalState === 'needs-attention'
+  ) {
+    return 'attention'
+  }
+  return null
 }
 
 export function recentWorkspaceDestinations(
@@ -208,12 +251,15 @@ function isWorkspaceDestination(value: unknown): value is WorkspaceDestination {
     typeof item.key === 'string' &&
     typeof item.projectId === 'string' &&
     typeof item.projectName === 'string' &&
+    (item.projectIcon == null || typeof item.projectIcon === 'string') &&
     (item.projectType === 'terminal' || item.projectType === 'latex') &&
     typeof item.tab === 'string' &&
     Object.prototype.hasOwnProperty.call(tabLabels, item.tab) &&
     typeof item.tabLabel === 'string' &&
     (item.sessionId == null || typeof item.sessionId === 'string') &&
     (item.sessionName == null || typeof item.sessionName === 'string') &&
+    (item.terminalState == null ||
+      agentStates.has(item.terminalState as AgentState)) &&
     typeof item.visitedAt === 'number' &&
     Number.isFinite(item.visitedAt)
   )

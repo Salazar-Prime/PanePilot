@@ -93,7 +93,7 @@
   width: 100%;
   height: var(--workspace-switcher-row-height);
   min-width: 0;
-  grid-template-columns: 31px minmax(0, 1fr) auto;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 0 11px;
@@ -109,21 +109,95 @@
   color: #eef0f8;
 }
 
-.workspace-switcher-icon {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  color: #8f9ad6;
-  border: 1px solid #737da32e;
-  border-radius: 8px;
-  background: #0b0e1780;
+.workspace-switcher-project-icon {
+  position: relative;
+  display: block;
+  width: 38px;
+  height: 38px;
 }
 
-.workspace-switcher-option[aria-selected="true"] .workspace-switcher-icon {
-  color: #cbd2ff;
-  border-color: #9da8e959;
-  background: #151a2aa8;
+.workspace-switcher-project-glyph {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  overflow: hidden;
+  color: #c9cede;
+  border: 1px solid #77809d42;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #252b3b, #141925);
+  box-shadow: inset 0 1px 0 #ffffff0d;
+  font: 700 12px "SFMono-Regular", "Cascadia Code", monospace;
+}
+
+.workspace-switcher-option[aria-selected="true"]
+  .workspace-switcher-project-glyph {
+  color: #f0f2fa;
+  border-color: #aab4eb6b;
+  background: linear-gradient(145deg, #313950, #192032);
+}
+
+.workspace-switcher-sub-icon {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  color: #b9c2ff;
+  border: 1px solid #8290db70;
+  border-radius: 6px;
+  background: #4e5caa;
+  box-shadow: 0 0 0 2px #151a27;
+}
+
+.workspace-switcher-sub-icon.tab-manuscript {
+  color: #9ae1e3;
+  border-color: #4aa8ad8f;
+  background: #28686e;
+}
+
+.workspace-switcher-sub-icon.tab-pdf {
+  color: #ffc2b8;
+  border-color: #d66f628f;
+  background: #914a43;
+}
+
+.workspace-switcher-sub-icon.tab-actions {
+  color: #ffe0a3;
+  border-color: #ce984b94;
+  background: #8c612b;
+}
+
+.workspace-switcher-sub-icon.tab-qna {
+  color: #dec4ff;
+  border-color: #986bd58f;
+  background: #684496;
+}
+
+.workspace-switcher-sub-icon.tab-notes {
+  color: #b9d5ff;
+  border-color: #6599da8f;
+  background: #3d6598;
+}
+
+.workspace-switcher-sub-icon.tab-files {
+  color: #a7e8ff;
+  border-color: #54a9c78f;
+  background: #34788f;
+}
+
+.workspace-switcher-sub-icon.tab-chats {
+  color: #ffc0e5;
+  border-color: #c868a08f;
+  background: #85456d;
+}
+
+.workspace-switcher-sub-icon.tab-activity {
+  color: #abe8c8;
+  border-color: #55aa7c8f;
+  background: #397456;
 }
 
 .workspace-switcher-copy {
@@ -150,6 +224,47 @@
   font-size: 9px;
 }
 
+.workspace-switcher-trailing {
+  display: flex;
+  min-width: 52px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.workspace-switcher-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font: 680 7px "SFMono-Regular", "Cascadia Code", monospace;
+  letter-spacing: -0.01em;
+}
+
+.workspace-switcher-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.workspace-switcher-status.working {
+  color: #7fc4ff;
+}
+
+.workspace-switcher-status.working i {
+  box-shadow: 0 0 0 3px #5aaeff1c, 0 0 8px #5aaeff70;
+  animation: workspace-switcher-working 1.4s ease-in-out infinite;
+}
+
+.workspace-switcher-status.attention {
+  color: #ffbf70;
+}
+
+.workspace-switcher-status.attention i {
+  box-shadow: 0 0 0 3px #f6a84a20, 0 0 8px #f6a84a66;
+}
+
 .workspace-switcher-option kbd {
   color: #7d8699;
   font: 650 8px "SFMono-Regular", "Cascadia Code", monospace;
@@ -170,6 +285,18 @@
   }
 }
 
+@keyframes workspace-switcher-working {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.86);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .workspace-switcher-overlay {
     animation: none;
@@ -177,7 +304,9 @@
 
   .workspace-switcher-glass,
   .workspace-switcher-option,
-  .workspace-switcher-option kbd {
+  .workspace-switcher-option kbd,
+  .workspace-switcher-status.working i {
     transition: none;
+    animation: none;
   }
 }
