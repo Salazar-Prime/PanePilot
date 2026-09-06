@@ -162,8 +162,8 @@ output while leaving Codex's own conversation archive untouched.
 
 The **Aa** toolbar control changes the complete interface—including terminal and
 Monaco text—between Compact (90%), Standard (100%), Comfortable (110%), and Large
-(125%). The client-local choice survives restarts. Command/Control-plus enlarges and
-Command/Control-0 resets to Standard; use the toolbar to decrease the size.
+(125%). The client-local choice survives restarts. Interface zoom has no keyboard
+shortcut; use this toolbar control to change it.
 
 Press **Command/Control-minus** to revisit recent work. PanePilot tints only the left
 sidebar and shows up to five recent project destinations, including terminal tabs,

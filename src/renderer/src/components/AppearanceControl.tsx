@@ -92,7 +92,7 @@ export function AppearanceControl({ scale, onChange }: Props) {
               </button>
             ))}
           </div>
-          <footer>Use the buttons to shrink · ⌘ + enlarges · ⌘ 0 resets</footer>
+          <footer>Interface size changes are available here only</footer>
         </section>
       )}
     </div>

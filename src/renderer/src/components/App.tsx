@@ -64,10 +64,7 @@ import type {
   TerminalTransportState
 } from '@shared/types'
 import { isAttentionState } from '../lib/status'
-import {
-  nextAppearanceScale,
-  useAppearanceScale
-} from '../lib/appearanceScale'
+import { useAppearanceScale } from '../lib/appearanceScale'
 import { useOpenSessions } from '../lib/openSessions'
 import { isPaneSwapShortcut } from '../lib/projectShortcuts'
 import { isOriginlessGitRepository } from '../lib/gitPane'
@@ -686,8 +683,7 @@ export function App() {
         ['+', '=', '0'].includes(event.key)
       ) {
         event.preventDefault()
-        if (event.key === '0') setAppearanceScale(1)
-        else setAppearanceScale(nextAppearanceScale(appearanceScale, 1))
+        event.stopPropagation()
         return
       }
       if (
@@ -735,7 +731,6 @@ export function App() {
     paneBProjectId,
     paneBSessionId,
     showArchivedProjects,
-    appearanceScale,
     projects,
     sidebarOpen
   ])
