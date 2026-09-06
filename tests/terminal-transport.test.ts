@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { Project, TerminalSession } from '../src/shared/types'
-import { shouldOfferTmuxReconnect } from '../src/renderer/src/lib/terminalTransport'
+import {
+  shouldOfferTmuxReconnect,
+  terminalAcceptsInput
+} from '../src/renderer/src/lib/terminalTransport'
 
 const session: TerminalSession = {
   id: 'session',
@@ -82,5 +85,11 @@ describe('tmux reconnect visibility', () => {
         completed
       )
     ).toBe(false)
+  })
+
+  it('restores input when a rediscovered session is no longer ended', () => {
+    expect(terminalAcceptsInput(true, false, true, 'attached')).toBe(false)
+    expect(terminalAcceptsInput(true, false, false, 'attached')).toBe(true)
+    expect(terminalAcceptsInput(true, false, false, 'offline')).toBe(false)
   })
 })

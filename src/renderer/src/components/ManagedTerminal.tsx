@@ -24,6 +24,7 @@ import {
   prepareClipboardPaste,
   terminalPastePayload
 } from '../lib/terminalClipboard'
+import { terminalAcceptsInput } from '../lib/terminalTransport'
 import { registerSpeechContent } from '../lib/speechContent'
 
 interface Props {
@@ -222,7 +223,6 @@ export function ManagedTerminal({
       terminalWebLinkProvider(terminal, openUrl)
     )
     let replaying = true
-    let writable = !terminalEndedRef.current
     const osc52Disposable = terminal.parser.registerOscHandler(52, (data) => {
       const clipboardText = decodeOsc52Clipboard(data)
       if (clipboardText !== null && activeRef.current) {
@@ -257,12 +257,7 @@ export function ManagedTerminal({
     })
 
     const dataDisposable = terminal.onData((data) => {
-      if (
-        activeRef.current &&
-        !terminalEndedRef.current &&
-        !replaying &&
-        writable
-      ) {
+      if (activeRef.current && writableRef.current) {
         void window.projectConsole.terminals.write(session.id, data).catch(
           (error) => console.error('Could not write terminal input.', error)
         )
@@ -274,9 +269,13 @@ export function ManagedTerminal({
     const removeTransportListener =
       window.projectConsole.terminals.onTransport((event) => {
         if (event.sessionId !== session.id) return
-        writable = !terminalEndedRef.current && event.state === 'attached'
         transportRef.current = event
-        writableRef.current = writable && !replaying && activeRef.current
+        writableRef.current = terminalAcceptsInput(
+          activeRef.current,
+          replaying,
+          terminalEndedRef.current,
+          event.state
+        )
         setInputReady(writableRef.current)
         setTransport(event)
       })
@@ -290,8 +289,12 @@ export function ManagedTerminal({
         terminal.write(output, () => {
           replaying = false
           replayingRef.current = false
-          writable = !terminalEndedRef.current && writable
-          writableRef.current = writable && activeRef.current
+          writableRef.current = terminalAcceptsInput(
+            activeRef.current,
+            false,
+            terminalEndedRef.current,
+            transportRef.current.state
+          )
           setInputReady(writableRef.current)
           if (activeRef.current) terminal.focus()
           if (import.meta.env.DEV) {
@@ -320,7 +323,6 @@ export function ManagedTerminal({
       .catch((error) => {
         replaying = false
         replayingRef.current = false
-        writable = false
         writableRef.current = false
         setInputReady(false)
         setTransport({
@@ -371,7 +373,17 @@ export function ManagedTerminal({
     if (terminalEnded) {
       writableRef.current = false
       setInputReady(false)
+      return
     }
+    const ready = terminalAcceptsInput(
+      activeRef.current,
+      replayingRef.current,
+      false,
+      transportRef.current.state
+    )
+    writableRef.current = ready
+    setInputReady(ready)
+    if (ready) terminalRef.current?.focus()
   }, [terminalEnded])
 
   useEffect(() => {
@@ -391,10 +403,12 @@ export function ManagedTerminal({
         terminal.cols,
         terminal.rows
       )
-      const ready =
-        !replayingRef.current &&
-        !terminalEndedRef.current &&
-        transportRef.current.state === 'attached'
+      const ready = terminalAcceptsInput(
+        true,
+        replayingRef.current,
+        terminalEndedRef.current,
+        transportRef.current.state
+      )
       writableRef.current = ready
       setInputReady(ready)
       terminal.focus()
@@ -473,6 +487,17 @@ export function ManagedTerminal({
       <div
         className="terminal-host"
         ref={hostRef}
+        onPointerDown={() => {
+          const ready = terminalAcceptsInput(
+            activeRef.current,
+            replayingRef.current,
+            terminalEndedRef.current,
+            transportRef.current.state
+          )
+          writableRef.current = ready
+          setInputReady(ready)
+          terminalRef.current?.focus()
+        }}
         onContextMenu={(event) => {
           event.preventDefault()
           setContextMenu({

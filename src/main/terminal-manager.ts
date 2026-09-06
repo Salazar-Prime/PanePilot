@@ -348,6 +348,47 @@ function resolveRemoteTmux(alias: string): string | null {
   return path
 }
 
+async function resolveRemoteTmuxAsync(alias: string): Promise<string | null> {
+  const discoveryCommand =
+    `${remoteTmuxResolutionCommand()}; ` +
+    `printf '%s\\n' "$panepilot_tmux"`
+  try {
+    const result = await execFileAsync(
+      'ssh',
+      [
+        '-T',
+        '-o',
+        'BatchMode=yes',
+        '-o',
+        'ConnectTimeout=3',
+        alias,
+        discoveryCommand
+      ],
+      {
+        encoding: 'utf8',
+        timeout: 3_000,
+        maxBuffer: 64 * 1024
+      }
+    )
+    const path = result.stdout
+      .trim()
+      .split(/\r?\n/)
+      .at(-1)
+      ?.trim()
+    if (
+      !path ||
+      !path.startsWith('/') ||
+      path.length > 4_096 ||
+      /[\u0000-\u001f\u007f]/.test(path)
+    ) {
+      return null
+    }
+    return path
+  } catch {
+    return null
+  }
+}
+
 function validatedTerminalName(value: string): string {
   const name = value.trim()
   if (!name) throw new Error('Terminal name cannot be empty.')
@@ -424,11 +465,37 @@ export class TerminalManager {
     setImmediate(() => loginShellPath()).unref()
   }
 
-  start(input: StartTerminalInput): TerminalSession {
+  async start(input: StartTerminalInput): Promise<TerminalSession> {
     if (input.profile === 'custom') {
       throw new Error('Create a project Action to run a custom command.')
     }
-    return this.startSession(input, 'terminal')
+    const project = this.store.getProjectForRuntime(input.projectId)
+    if (!project) throw new Error('Project not found.')
+    const connection = this.store.getConnection(project.connectionId)
+    if (!connection) throw new Error('Project connection not found.')
+    if (connection.kind === 'local') return this.startSession(input, 'terminal')
+
+    // SSH discovery used to run through spawnSync on Electron's main thread.
+    // While a slow host was resolving tmux (and while checking name collisions),
+    // the entire window stopped accepting keyboard and pointer input. Do every
+    // remote preflight asynchronously, then keep the actual PTY launch immediate.
+    const tmuxPath =
+      this.remoteTmuxPaths.get(connection.id) ??
+      (await resolveRemoteTmuxAsync(connection.sshAlias ?? connection.name))
+    if (!tmuxPath) {
+      return this.startSession(input, 'terminal', undefined, false)
+    }
+    this.remoteTmuxPaths.set(connection.id, tmuxPath)
+
+    const baseName = this.sessionNameForInput(input, project)
+    let sessionName = baseName
+    let suffix = 2
+    while (await this.remoteTmuxSessionExists(connection, tmuxPath, sessionName)) {
+      const suffixText = ` ${suffix}`
+      sessionName = `${baseName.slice(0, 80 - suffixText.length).trimEnd()}${suffixText}`
+      suffix += 1
+    }
+    return this.startSession(input, 'terminal', undefined, true, sessionName)
   }
 
   startLatexChat(
@@ -872,7 +939,8 @@ export class TerminalManager {
     input: StartTerminalInput,
     kind: TerminalSessionKind,
     onPersist?: (session: TerminalSession) => void,
-    tmuxAlreadyConfirmed = false
+    tmuxAvailability?: boolean,
+    preparedSessionName?: string
   ): TerminalSession {
     const project = this.store.getProjectForRuntime(input.projectId)
     if (!project) throw new Error('Project not found.')
@@ -900,7 +968,7 @@ export class TerminalManager {
     }
 
     const tmuxAvailable =
-      tmuxAlreadyConfirmed || this.connectionHasTmux(connection)
+      tmuxAvailability ?? this.connectionHasTmux(connection)
     if (
       (kind === 'action' ||
         kind === 'project-qna' ||
@@ -920,24 +988,9 @@ export class TerminalManager {
         `${capability} require tmux on this connection.`
       )
     }
-    const profileLabel =
-      input.profile === 'shell'
-        ? basename(process.env.SHELL || 'Shell')
-        : input.profile === 'claude'
-          ? 'Claude'
-          : input.profile === 'codex'
-            ? 'Codex'
-            : 'Command'
-    const sameProfileCount = project.sessions.filter(
-      (session) =>
-        session.profile === input.profile &&
-        session.kind !== 'action' &&
-        session.kind !== 'project-qna' &&
-        session.kind !== 'temporary-chat'
-    ).length
-    const requestedName = input.name ? validatedTerminalName(input.name) : null
-    let sessionName = requestedName || `${profileLabel} ${sameProfileCount + 1}`
-    if (tmuxAvailable) {
+    let sessionName =
+      preparedSessionName ?? this.sessionNameForInput(input, project)
+    if (tmuxAvailable && !preparedSessionName) {
       const baseName = sessionName
       let suffix = 2
       while (this.tmuxSessionExists(connection, sessionName)) {
@@ -990,6 +1043,63 @@ export class TerminalManager {
       throw error
     }
     return this.store.getSessionWithoutOutput(session.id)!
+  }
+
+  private sessionNameForInput(
+    input: StartTerminalInput,
+    project: Project
+  ): string {
+    const profileLabel =
+      input.profile === 'shell'
+        ? basename(process.env.SHELL || 'Shell')
+        : input.profile === 'claude'
+          ? 'Claude'
+          : input.profile === 'codex'
+            ? 'Codex'
+            : 'Command'
+    const sameProfileCount = project.sessions.filter(
+      (session) =>
+        session.profile === input.profile &&
+        session.kind !== 'action' &&
+        session.kind !== 'project-qna' &&
+        session.kind !== 'temporary-chat'
+    ).length
+    const requestedName = input.name ? validatedTerminalName(input.name) : null
+    return requestedName || `${profileLabel} ${sameProfileCount + 1}`
+  }
+
+  private async remoteTmuxSessionExists(
+    connection: Connection,
+    tmuxPath: string,
+    name: string
+  ): Promise<boolean> {
+    try {
+      await execFileAsync(
+        'ssh',
+        [
+          '-T',
+          '-o',
+          'BatchMode=yes',
+          '-o',
+          'ConnectTimeout=3',
+          connection.sshAlias ?? connection.name,
+          `${quote(tmuxPath)} has-session -t ${quote(`=${name}`)}`
+        ],
+        {
+          encoding: 'utf8',
+          timeout: 5_000,
+          maxBuffer: 64 * 1024
+        }
+      )
+      return true
+    } catch (error) {
+      const exitCode =
+        error && typeof error === 'object' && 'code' in error
+          ? (error as { code?: unknown }).code
+          : null
+      if (exitCode === 1) return false
+      throw error
+    }
   }
 
   private connectionHasTmux(connection: Connection): boolean {

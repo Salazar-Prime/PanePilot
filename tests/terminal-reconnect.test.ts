@@ -39,7 +39,7 @@ describe('terminal tmux reconnect', () => {
         new RemoteConversationIndexer()
       )
       const name = `Reconnect ${randomUUID()}`
-      const session = manager.start({
+      const session = await manager.start({
         projectId: project.id,
         name,
         profile: 'shell',

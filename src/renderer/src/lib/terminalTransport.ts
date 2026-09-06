@@ -20,3 +20,17 @@ export function shouldOfferTmuxReconnect(
     'is no longer running in tmux.'
   ) ?? false
 }
+
+export function terminalAcceptsInput(
+  active: boolean,
+  replaying: boolean,
+  terminalEnded: boolean,
+  transportState: TerminalTransportState
+): boolean {
+  return (
+    active &&
+    !replaying &&
+    !terminalEnded &&
+    transportState === 'attached'
+  )
+}
