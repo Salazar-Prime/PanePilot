@@ -162,8 +162,14 @@ output while leaving Codex's own conversation archive untouched.
 
 The **Aa** toolbar control changes the complete interface—including terminal and
 Monaco text—between Compact (90%), Standard (100%), Comfortable (110%), and Large
-(125%). The client-local choice survives restarts. Command/Control with plus or minus
-steps through those sizes; Command/Control-0 resets to Standard.
+(125%). The client-local choice survives restarts. Command/Control-plus enlarges and
+Command/Control-0 resets to Standard; use the toolbar to decrease the size.
+
+Press **Command/Control-minus** to revisit recent work. PanePilot tints only the left
+sidebar and shows up to five recent project destinations, including terminal tabs,
+Files, Notes, Actions, and other project capabilities. One tap selects the previous
+destination. Keep holding Command/Control and tap minus again to move the glass
+highlight; release the modifier to open the selection in the focused pane.
 
 Hold **Control** and tap **?** three times to reveal the focused project's keyboard
 KeyTips. The first tap passes through to the focused terminal or editor; the second

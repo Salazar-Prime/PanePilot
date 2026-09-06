@@ -98,6 +98,17 @@ import {
   type WorkspacePane,
   type WorkspaceRequest
 } from '../lib/workspaceRequest'
+import {
+  consumeWorkspaceTabRequest,
+  loadWorkspaceHistory,
+  nextWorkspaceSwitcherIndex,
+  recentWorkspaceDestinations,
+  recordWorkspaceDestination,
+  saveWorkspaceHistory,
+  workspaceTabRequestFor,
+  type WorkspaceDestination,
+  type WorkspaceTabRequest
+} from '../lib/workspaceHistory'
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
 import { AppearanceControl } from './AppearanceControl'
@@ -120,6 +131,7 @@ import { StatusDot } from './StatusDot'
 import { TerminalProfileIcon } from './TerminalProfileIcon'
 import { TemporaryChatsPanel } from './TemporaryChatsPanel'
 import { TransferSessionDialog } from './TransferSessionDialog'
+import { WorkspaceSwitcherOverlay } from './WorkspaceSwitcherOverlay'
 
 type SidebarContext =
   | { kind: 'connection'; connection: Connection; x: number; y: number }
@@ -135,6 +147,13 @@ type SidebarContext =
 type RenameTarget =
   | { kind: 'project'; project: Project }
   | { kind: 'session'; session: TerminalSession }
+
+interface WorkspaceSwitcherState {
+  destinations: WorkspaceDestination[]
+  selectedIndex: number
+  modifier: 'Meta' | 'Control'
+  restoreSidebarCollapsed: boolean
+}
 
 const RENDERER_STATE_PRIORITY: AgentState[] = [
   'needs-input',
@@ -192,6 +211,16 @@ function isSidebarSession(session: TerminalSession): boolean {
     (session.kind === 'latex-chat' &&
       session.latexChat?.purpose === 'writing')
   )
+}
+
+async function getRendererProject(projectId: string): Promise<Project | null> {
+  const getProject = window.projectConsole.projects.get
+  if (typeof getProject === 'function') return getProject(projectId)
+
+  // Electron can hot-reload this renderer while the running preload still
+  // exposes the previous API. Keep that window usable until the next relaunch.
+  const projects = await window.projectConsole.projects.list()
+  return projects.find((project) => project.id === projectId) ?? null
 }
 
 export function App() {
@@ -252,7 +281,19 @@ export function App() {
     useState<WorkspaceRequest | null>(null)
   const [openSessionRequest, setOpenSessionRequest] =
     useState<WorkspaceRequest | null>(null)
+  const [workspaceTabRequest, setWorkspaceTabRequest] =
+    useState<WorkspaceTabRequest | null>(null)
   const workspaceRequestSequence = useRef(0)
+  const workspaceHistoryRef = useRef(
+    loadWorkspaceHistory(window.localStorage)
+  )
+  const paneDestinationsRef = useRef<
+    Record<WorkspacePane, WorkspaceDestination | null>
+  >({ a: null, b: null })
+  const focusedPaneRef = useRef<WorkspacePane>('a')
+  const [workspaceSwitcher, setWorkspaceSwitcher] =
+    useState<WorkspaceSwitcherState | null>(null)
+  const workspaceSwitcherRef = useRef<WorkspaceSwitcherState | null>(null)
   const [sidebarContext, setSidebarContext] = useState<SidebarContext | null>(null)
   const [projectSortMenu, setProjectSortMenu] = useState<{
     connectionId: string
@@ -390,7 +431,7 @@ export function App() {
       const request = (async () => {
         do {
           projectRefreshQueuedRef.current.delete(projectId)
-          const nextProject = await window.projectConsole.projects.get(projectId)
+          const nextProject = await getRendererProject(projectId)
           startBackgroundTransition(() => {
             setProjects((current) => {
               if (!nextProject) {
@@ -459,12 +500,77 @@ export function App() {
     )
   }, [])
 
+  const handleWorkspaceTabRequest = useCallback((requestId: number) => {
+    setWorkspaceTabRequest((current) =>
+      consumeWorkspaceTabRequest(current, requestId)
+    )
+  }, [])
+
+  const storeWorkspaceVisit = useCallback(
+    (destination: WorkspaceDestination) => {
+      const next = recordWorkspaceDestination(
+        workspaceHistoryRef.current,
+        destination
+      )
+      workspaceHistoryRef.current = next
+      saveWorkspaceHistory(window.localStorage, next)
+    },
+    []
+  )
+
+  const handleWorkspaceDestination = useCallback(
+    (pane: WorkspacePane, destination: WorkspaceDestination) => {
+      paneDestinationsRef.current[pane] = destination
+      if (focusedPaneRef.current === pane) storeWorkspaceVisit(destination)
+    },
+    [storeWorkspaceVisit]
+  )
+
+  const handlePaneAWorkspaceDestination = useCallback(
+    (destination: WorkspaceDestination) =>
+      handleWorkspaceDestination('a', destination),
+    [handleWorkspaceDestination]
+  )
+
+  const handlePaneBWorkspaceDestination = useCallback(
+    (destination: WorkspaceDestination) =>
+      handleWorkspaceDestination('b', destination),
+    [handleWorkspaceDestination]
+  )
+
+  useEffect(() => {
+    focusedPaneRef.current = focusedPane
+    const destination = paneDestinationsRef.current[focusedPane]
+    if (destination) storeWorkspaceVisit(destination)
+  }, [focusedPane, storeWorkspaceVisit])
+
   function nextWorkspaceRequest(
     projectId: string,
     pane: WorkspacePane
   ): WorkspaceRequest {
     workspaceRequestSequence.current += 1
     return { id: workspaceRequestSequence.current, projectId, pane }
+  }
+
+  function nextWorkspaceTabRequest(
+    projectId: string,
+    pane: WorkspacePane,
+    tab: WorkspaceTabRequest['tab']
+  ): WorkspaceTabRequest {
+    workspaceRequestSequence.current += 1
+    return { id: workspaceRequestSequence.current, projectId, pane, tab }
+  }
+
+  function updateWorkspaceSwitcher(next: WorkspaceSwitcherState | null) {
+    workspaceSwitcherRef.current = next
+    setWorkspaceSwitcher(next)
+  }
+
+  function closeWorkspaceSwitcher() {
+    if (workspaceSwitcherRef.current?.restoreSidebarCollapsed) {
+      setSidebarOpen(false)
+    }
+    updateWorkspaceSwitcher(null)
   }
 
   async function refreshSshConnections() {
@@ -530,18 +636,58 @@ export function App() {
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
         !event.shiftKey &&
-        ['+', '=', '-', '0'].includes(event.key)
+        (event.key === '-' || event.code === 'Minus')
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (
+          document.querySelector('[role="dialog"][aria-modal="true"]') != null
+        ) {
+          return
+        }
+        const current = workspaceSwitcherRef.current
+        if (current) {
+          updateWorkspaceSwitcher({
+            ...current,
+            selectedIndex: nextWorkspaceSwitcherIndex(
+              current.selectedIndex,
+              current.destinations.length
+            )
+          })
+          return
+        }
+        const currentKey =
+          paneDestinationsRef.current[focusedPaneRef.current]?.key ?? null
+        const destinations = recentWorkspaceDestinations(
+          workspaceHistoryRef.current,
+          currentKey,
+          projects
+        )
+        if (!destinations.length) return
+        setSidebarOpen(true)
+        updateWorkspaceSwitcher({
+          destinations,
+          selectedIndex: 0,
+          modifier: event.metaKey ? 'Meta' : 'Control',
+          restoreSidebarCollapsed: !sidebarOpen
+        })
+        return
+      }
+      if (event.key === 'Escape' && workspaceSwitcherRef.current) {
+        event.preventDefault()
+        event.stopPropagation()
+        closeWorkspaceSwitcher()
+        return
+      }
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        ['+', '=', '0'].includes(event.key)
       ) {
         event.preventDefault()
         if (event.key === '0') setAppearanceScale(1)
-        else {
-          setAppearanceScale(
-            nextAppearanceScale(
-              appearanceScale,
-              event.key === '-' ? -1 : 1
-            )
-          )
-        }
+        else setAppearanceScale(nextAppearanceScale(appearanceScale, 1))
         return
       }
       if (
@@ -566,8 +712,22 @@ export function App() {
         swapPanes()
       }
     }
+    const handleShortcutRelease = (event: KeyboardEvent) => {
+      const current = workspaceSwitcherRef.current
+      if (!current || event.key !== current.modifier) return
+      const destination = current.destinations[current.selectedIndex]
+      closeWorkspaceSwitcher()
+      if (destination) activateWorkspaceDestination(destination)
+    }
+    const cancelSwitcher = () => closeWorkspaceSwitcher()
     window.addEventListener('keydown', handleShortcut, true)
-    return () => window.removeEventListener('keydown', handleShortcut, true)
+    window.addEventListener('keyup', handleShortcutRelease, true)
+    window.addEventListener('blur', cancelSwitcher)
+    return () => {
+      window.removeEventListener('keydown', handleShortcut, true)
+      window.removeEventListener('keyup', handleShortcutRelease, true)
+      window.removeEventListener('blur', cancelSwitcher)
+    }
   }, [
     splitOpen,
     selectedProjectId,
@@ -575,7 +735,9 @@ export function App() {
     paneBProjectId,
     paneBSessionId,
     showArchivedProjects,
-    appearanceScale
+    appearanceScale,
+    projects,
+    sidebarOpen
   ])
 
   const activeProjects = useMemo(
@@ -1104,6 +1266,44 @@ export function App() {
     openSession(sessionId)
     setOpenSessionRequest(nextWorkspaceRequest(projectId, pane))
     await acknowledgeSession(sessionId)
+  }
+
+  function activateWorkspaceDestination(
+    destination: WorkspaceDestination
+  ) {
+    const pane: WorkspacePane =
+      splitOpen && focusedPane === 'b' ? 'b' : 'a'
+    const currentProjectId = pane === 'b' ? paneBProjectId : selectedProjectId
+    const currentSessionId = pane === 'b' ? paneBSessionId : selectedSessionId
+    const sessionId =
+      destination.sessionId ??
+      (currentProjectId === destination.projectId
+        ? currentSessionId
+        : defaultSessionIdFor(
+            activeProjects.find(
+              (candidate) => candidate.id === destination.projectId
+            )
+          ))
+
+    recordProjectSelection(destination.projectId)
+    if (destination.sessionId) {
+      recordSessionSelection(destination.sessionId)
+    }
+    setShowArchivedProjects(false)
+    applyPaneSelection(pane, destination.projectId, sessionId)
+    paneDestinationsRef.current[pane] = destination
+    storeWorkspaceVisit(destination)
+    if (sessionId) {
+      openSession(sessionId)
+      void acknowledgeSession(sessionId)
+    }
+    setWorkspaceTabRequest(
+      nextWorkspaceTabRequest(
+        destination.projectId,
+        pane,
+        destination.tab
+      )
+    )
   }
 
   async function reconnectSession(projectId: string, session: TerminalSession) {
@@ -2265,6 +2465,21 @@ export function App() {
             </button>
           </div>
         </div>
+        {workspaceSwitcher && (
+          <WorkspaceSwitcherOverlay
+            destinations={workspaceSwitcher.destinations}
+            selectedIndex={workspaceSwitcher.selectedIndex}
+            modifierLabel={
+              workspaceSwitcher.modifier === 'Meta' ? '⌘' : 'Ctrl'
+            }
+            onSelect={(selectedIndex) =>
+              updateWorkspaceSwitcher({
+                ...workspaceSwitcher,
+                selectedIndex
+              })
+            }
+          />
+        )}
       </aside>
 
       <div
@@ -2322,6 +2537,11 @@ export function App() {
                     paneAProject.id,
                     'a'
                   )}
+                  workspaceTabRequest={workspaceTabRequestFor(
+                    workspaceTabRequest,
+                    paneAProject.id,
+                    'a'
+                  )}
                   terminalTransportStates={terminalTransportStates}
                   openSessionIds={openSessionIds}
                   onOpenSession={openSession}
@@ -2329,6 +2549,10 @@ export function App() {
                   onSessionSelected={recordSessionSelection}
                   onLaunchTerminalRequestHandled={handleLaunchTerminalRequest}
                   onOpenSessionRequestHandled={handleOpenSessionRequest}
+                  onWorkspaceTabRequestHandled={handleWorkspaceTabRequest}
+                  onWorkspaceDestinationVisited={
+                    handlePaneAWorkspaceDestination
+                  }
                   onSwapPanes={
                     splitOpen && paneAProject && paneBProject
                       ? swapPanes
@@ -2391,6 +2615,11 @@ export function App() {
                       paneBProject.id,
                       'b'
                     )}
+                    workspaceTabRequest={workspaceTabRequestFor(
+                      workspaceTabRequest,
+                      paneBProject.id,
+                      'b'
+                    )}
                     terminalTransportStates={terminalTransportStates}
                     openSessionIds={openSessionIds}
                     onOpenSession={openSession}
@@ -2398,6 +2627,10 @@ export function App() {
                     onSessionSelected={recordSessionSelection}
                     onLaunchTerminalRequestHandled={handleLaunchTerminalRequest}
                     onOpenSessionRequestHandled={handleOpenSessionRequest}
+                    onWorkspaceTabRequestHandled={handleWorkspaceTabRequest}
+                    onWorkspaceDestinationVisited={
+                      handlePaneBWorkspaceDestination
+                    }
                     onSwapPanes={paneAProject ? swapPanes : undefined}
                     onTransferSession={(owner, session) =>
                       promptTransferSession(owner, session)

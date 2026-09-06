@@ -41,7 +41,9 @@ describe('project switching performance contracts', () => {
 
     expect(app).toContain('withTerminalState(project, event)')
     expect(app).toContain('scheduleProjectRefresh(event.projectId)')
-    expect(app).toContain('.get(projectId)')
+    expect(app).toContain("typeof getProject === 'function'")
+    expect(app).toContain('getProject(projectId)')
+    expect(app).toContain('window.projectConsole.projects.list()')
     expect(app).toContain('onChanged={refreshProject}')
   })
 

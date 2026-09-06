@@ -49,6 +49,10 @@ import {
   MIN_LATEX_CHAT_WIDTH,
   saveLatexChatLayout
 } from '../lib/latexChatLayout'
+import {
+  createWorkspaceDestination,
+  type WorkspaceTabId
+} from '../lib/workspaceHistory'
 import { ActionsPanel } from './ActionsPanel'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
 import { FilesPanel } from './FilesPanel'
@@ -78,17 +82,36 @@ type WorkspaceTab =
   | 'chats'
   | 'activity'
 
+const latexWorkspaceTabIds = new Set<WorkspaceTab>([
+  'manuscript',
+  'pdf',
+  'actions',
+  'qna',
+  'notes',
+  'files',
+  'chats',
+  'activity'
+])
+
+function isLatexWorkspaceTab(tab: WorkspaceTabId): tab is WorkspaceTab {
+  return latexWorkspaceTabIds.has(tab as WorkspaceTab)
+}
+
 const latexWorkspaceTabs = new Map<string, WorkspaceTab>()
 const openedPdfProjects = new Set<string>()
 const latexWorkspaceCache = new Map<string, LatexWorkspace>()
 
 export function LatexProjectWorkspace({
   project,
+  workspaceActive = true,
   selectedSessionId,
   launchTerminalRequest,
   openSessionRequest,
+  workspaceTabRequest,
   onLaunchTerminalRequestHandled,
   onOpenSessionRequestHandled,
+  onWorkspaceTabRequestHandled,
+  onWorkspaceDestinationVisited,
   onSessionSelected,
   onSwapPanes,
   onSelectSession,
@@ -361,6 +384,29 @@ export function LatexProjectWorkspace({
   }, [activeSession?.id])
 
   useEffect(() => {
+    if (!workspaceActive) return
+    const session =
+      tab === 'manuscript' || tab === 'pdf' ? activeSession : null
+    onWorkspaceDestinationVisited(
+      createWorkspaceDestination({
+        project,
+        tab,
+        sessionId: session?.id,
+        sessionName: session?.name
+      })
+    )
+  }, [
+    activeSession?.id,
+    activeSession?.name,
+    onWorkspaceDestinationVisited,
+    project.id,
+    project.name,
+    project.type,
+    tab,
+    workspaceActive
+  ])
+
+  useEffect(() => {
     setShowLauncher(false)
   }, [project.id])
 
@@ -375,6 +421,18 @@ export function LatexProjectWorkspace({
     selectWorkspaceTab('manuscript')
     onOpenSessionRequestHandled(openSessionRequest)
   }, [openSessionRequest, onOpenSessionRequestHandled])
+
+  useEffect(() => {
+    if (!workspaceActive || workspaceTabRequest == null) return
+    if (isLatexWorkspaceTab(workspaceTabRequest.tab)) {
+      selectWorkspaceTab(workspaceTabRequest.tab)
+    }
+    onWorkspaceTabRequestHandled(workspaceTabRequest.id)
+  }, [
+    onWorkspaceTabRequestHandled,
+    workspaceActive,
+    workspaceTabRequest
+  ])
 
   const refreshChanges = useCallback(async () => {
     if (!changeSession) {

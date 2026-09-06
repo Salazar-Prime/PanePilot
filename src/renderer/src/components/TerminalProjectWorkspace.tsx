@@ -41,6 +41,10 @@ import {
 } from '../lib/terminalTabOrder'
 import { shouldOfferTmuxReconnect } from '../lib/terminalTransport'
 import { tmuxOptionsCommand } from '../lib/tmuxCommands'
+import {
+  createWorkspaceDestination,
+  type WorkspaceTabId
+} from '../lib/workspaceHistory'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
 import { ActionsPanel } from './ActionsPanel'
 import { FilesPanel } from './FilesPanel'
@@ -67,7 +71,21 @@ type WorkspaceTab =
   | 'notes'
   | 'files'
   | 'chats'
-  | 'history'
+  | 'activity'
+
+const terminalWorkspaceTabs = new Set<WorkspaceTab>([
+  'terminal',
+  'actions',
+  'qna',
+  'notes',
+  'files',
+  'chats',
+  'activity'
+])
+
+function isTerminalWorkspaceTab(tab: WorkspaceTabId): tab is WorkspaceTab {
+  return terminalWorkspaceTabs.has(tab as WorkspaceTab)
+}
 
 export function TerminalProjectWorkspace({
   project,
@@ -77,6 +95,7 @@ export function TerminalProjectWorkspace({
   selectedSessionId,
   launchTerminalRequest,
   openSessionRequest,
+  workspaceTabRequest,
   terminalTransportStates,
   openSessionIds,
   onOpenSession,
@@ -84,6 +103,8 @@ export function TerminalProjectWorkspace({
   onSessionSelected,
   onLaunchTerminalRequestHandled,
   onOpenSessionRequestHandled,
+  onWorkspaceTabRequestHandled,
+  onWorkspaceDestinationVisited,
   onSwapPanes,
   onTransferSession,
   onSelectSession,
@@ -140,43 +161,52 @@ export function TerminalProjectWorkspace({
   )
   const activeSession =
     openTabs.find((session) => session.id === selectedSessionId) ?? openTabs[0]
+
+  function selectWorkspaceTab(nextTab: WorkspaceTab) {
+    setTab(nextTab)
+  }
   const shortcutActions: ProjectShortcutAction[] = [
     {
       key: 't',
       label: 'Terminals',
       active: tab === 'terminal',
-      run: () => setTab('terminal')
+      run: () => selectWorkspaceTab('terminal')
     },
     {
       key: 'a',
       label: 'Actions',
       active: tab === 'actions',
-      run: () => setTab('actions')
+      run: () => selectWorkspaceTab('actions')
     },
-    { key: 'q', label: 'Q&A', active: tab === 'qna', run: () => setTab('qna') },
+    {
+      key: 'q',
+      label: 'Q&A',
+      active: tab === 'qna',
+      run: () => selectWorkspaceTab('qna')
+    },
     {
       key: 'n',
       label: 'Notes',
       active: tab === 'notes',
-      run: () => setTab('notes')
+      run: () => selectWorkspaceTab('notes')
     },
     {
       key: 'f',
       label: 'Files',
       active: tab === 'files',
-      run: () => setTab('files')
+      run: () => selectWorkspaceTab('files')
     },
     {
       key: 'c',
       label: 'Chats',
       active: tab === 'chats',
-      run: () => setTab('chats')
+      run: () => selectWorkspaceTab('chats')
     },
     {
       key: 'h',
       label: 'Activity',
-      active: tab === 'history',
-      run: () => setTab('history')
+      active: tab === 'activity',
+      run: () => selectWorkspaceTab('activity')
     },
     ...(onSwapPanes
       ? [{ key: 's', label: 'Swap panes', run: onSwapPanes }]
@@ -232,6 +262,28 @@ export function TerminalProjectWorkspace({
     if (activeSession.id !== selectedSessionId) onSelectSession(activeSession.id)
   }, [activeSession?.id, workspaceActive])
 
+  useEffect(() => {
+    if (!workspaceActive) return
+    const session = tab === 'terminal' ? activeSession : null
+    onWorkspaceDestinationVisited(
+      createWorkspaceDestination({
+        project,
+        tab,
+        sessionId: session?.id,
+        sessionName: session?.name
+      })
+    )
+  }, [
+    activeSession?.id,
+    activeSession?.name,
+    onWorkspaceDestinationVisited,
+    project.id,
+    project.name,
+    project.type,
+    tab,
+    workspaceActive
+  ])
+
   // Seed every non-archived terminal as "open" the first time this project is
   // encountered, so existing sessions keep showing as tabs the way they always
   // have. Deliberately keyed on project.id only: once the user starts closing
@@ -274,9 +326,21 @@ export function TerminalProjectWorkspace({
 
   useEffect(() => {
     if (!workspaceActive || openSessionRequest == null) return
-    setTab('terminal')
+    selectWorkspaceTab('terminal')
     onOpenSessionRequestHandled(openSessionRequest)
   }, [openSessionRequest, onOpenSessionRequestHandled, workspaceActive])
+
+  useEffect(() => {
+    if (!workspaceActive || workspaceTabRequest == null) return
+    if (isTerminalWorkspaceTab(workspaceTabRequest.tab)) {
+      selectWorkspaceTab(workspaceTabRequest.tab)
+    }
+    onWorkspaceTabRequestHandled(workspaceTabRequest.id)
+  }, [
+    onWorkspaceTabRequestHandled,
+    workspaceActive,
+    workspaceTabRequest
+  ])
 
   useEffect(() => {
     setOpenFileRequest(null)
@@ -300,7 +364,7 @@ export function TerminalProjectWorkspace({
   }, [menu])
 
   async function selectSession(id: string) {
-    setTab('terminal')
+    selectWorkspaceTab('terminal')
     onSessionSelected(id)
     onOpenSession(id)
     onSelectSession(id)
@@ -309,7 +373,7 @@ export function TerminalProjectWorkspace({
   async function startTerminal(input: Parameters<typeof window.projectConsole.terminals.start>[0]) {
     const session = await window.projectConsole.terminals.start(input)
     await onChanged()
-    setTab('terminal')
+    selectWorkspaceTab('terminal')
     onOpenSession(session.id)
     onSelectSession(session.id)
   }
@@ -320,7 +384,7 @@ export function TerminalProjectWorkspace({
       projectId: project.id,
       requestId: (current?.requestId ?? 0) + 1
     }))
-    setTab('files')
+    selectWorkspaceTab('files')
   }
 
   async function rename(session: TerminalSession) {
@@ -363,7 +427,7 @@ export function TerminalProjectWorkspace({
 
   async function reconnect(session: TerminalSession) {
     setMenu(null)
-    setTab('terminal')
+    selectWorkspaceTab('terminal')
     onSessionSelected(session.id)
     onOpenSession(session.id)
     onSelectSession(session.id)
@@ -380,7 +444,7 @@ export function TerminalProjectWorkspace({
   async function resumeAgent(session: TerminalSession) {
     setMenu(null)
     await window.projectConsole.terminals.resumeAgent(session.id)
-    setTab('terminal')
+    selectWorkspaceTab('terminal')
     onSessionSelected(session.id)
     onOpenSession(session.id)
     onSelectSession(session.id)
@@ -390,7 +454,7 @@ export function TerminalProjectWorkspace({
   async function forceReloadAgent(session: TerminalSession) {
     setMenu(null)
     await window.projectConsole.terminals.forceReloadAgent(session.id)
-    setTab('terminal')
+    selectWorkspaceTab('terminal')
     onSessionSelected(session.id)
     onOpenSession(session.id)
     onSelectSession(session.id)
@@ -426,37 +490,37 @@ export function TerminalProjectWorkspace({
   return (
     <div className="project-workspace" ref={projectShortcuts.rootRef}>
       <nav className="workspace-tabs" aria-label="Project tools">
-        <button className={tab === 'terminal' ? 'active' : ''} onClick={() => setTab('terminal')}>
+        <button className={tab === 'terminal' ? 'active' : ''} onClick={() => selectWorkspaceTab('terminal')}>
           <TerminalSquare size={15} />
           Terminals
           <ShortcutKeytip value="T" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'actions' ? 'active' : ''} onClick={() => setTab('actions')}>
+        <button className={tab === 'actions' ? 'active' : ''} onClick={() => selectWorkspaceTab('actions')}>
           <Play size={15} />
           Actions
           <ShortcutKeytip value="A" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'qna' ? 'active' : ''} onClick={() => setTab('qna')}>
+        <button className={tab === 'qna' ? 'active' : ''} onClick={() => selectWorkspaceTab('qna')}>
           <MessageCircleQuestion size={15} />
           Project Q&amp;A
           <ShortcutKeytip value="Q" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>
+        <button className={tab === 'notes' ? 'active' : ''} onClick={() => selectWorkspaceTab('notes')}>
           <FileText size={15} />
           Notes
           <ShortcutKeytip value="N" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>
+        <button className={tab === 'files' ? 'active' : ''} onClick={() => selectWorkspaceTab('files')}>
           <Files size={15} />
           Files
           <ShortcutKeytip value="F" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'chats' ? 'active' : ''} onClick={() => setTab('chats')}>
+        <button className={tab === 'chats' ? 'active' : ''} onClick={() => selectWorkspaceTab('chats')}>
           <MessageSquareText size={15} />
           LLM Chats
           <ShortcutKeytip value="C" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
+        <button className={tab === 'activity' ? 'active' : ''} onClick={() => selectWorkspaceTab('activity')}>
           <History size={15} />
           Activity
           <ShortcutKeytip value="H" open={projectShortcuts.open} />
@@ -756,7 +820,7 @@ export function TerminalProjectWorkspace({
         />
       </div>
       {tab === 'chats' && <ChatHistoryPanel project={project} />}
-      {tab === 'history' && <HistoryPanel project={project} />}
+      {tab === 'activity' && <HistoryPanel project={project} />}
       {menu &&
         createPortal(
           <div

@@ -9,6 +9,10 @@ import type {
 import { LatexProjectWorkspace } from './components/LatexProjectWorkspace'
 import { TerminalProjectWorkspace } from './components/TerminalProjectWorkspace'
 import type { TerminalSurfaceCacheController } from './lib/terminalSurfaceCache'
+import type {
+  WorkspaceDestination,
+  WorkspaceTabRequest
+} from './lib/workspaceHistory'
 
 export interface ProjectWorkspaceProps {
   project: Project
@@ -18,6 +22,7 @@ export interface ProjectWorkspaceProps {
   selectedSessionId: string | null
   launchTerminalRequest: number | null
   openSessionRequest: number | null
+  workspaceTabRequest: WorkspaceTabRequest | null
   terminalTransportStates: Record<string, TerminalTransportState>
   openSessionIds: Set<string>
   onOpenSession(id: string): void
@@ -25,6 +30,8 @@ export interface ProjectWorkspaceProps {
   onSessionSelected(id: string): void
   onLaunchTerminalRequestHandled(id: number): void
   onOpenSessionRequestHandled(id: number): void
+  onWorkspaceTabRequestHandled(id: number): void
+  onWorkspaceDestinationVisited(destination: WorkspaceDestination): void
   onSwapPanes?(): void
   onTransferSession?(session: TerminalSession): void
   onSelectSession(id: string): void

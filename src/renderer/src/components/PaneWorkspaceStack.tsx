@@ -37,6 +37,7 @@ export function PaneWorkspaceStack({
   selectedSessionId,
   launchTerminalRequest,
   openSessionRequest,
+  workspaceTabRequest,
   terminalTransportStates,
   openSessionIds,
   onOpenSession,
@@ -44,6 +45,8 @@ export function PaneWorkspaceStack({
   onSessionSelected,
   onLaunchTerminalRequestHandled,
   onOpenSessionRequestHandled,
+  onWorkspaceTabRequestHandled,
+  onWorkspaceDestinationVisited,
   onSwapPanes,
   onTransferSession,
   onSelectSession,
@@ -103,6 +106,7 @@ export function PaneWorkspaceStack({
               selectedSessionId={active ? selectedSessionId : null}
               launchTerminalRequest={active ? launchTerminalRequest : null}
               openSessionRequest={active ? openSessionRequest : null}
+              workspaceTabRequest={active ? workspaceTabRequest : null}
               terminalTransportStates={terminalTransportStates}
               openSessionIds={openSessionIds}
               onOpenSession={onOpenSession}
@@ -110,6 +114,8 @@ export function PaneWorkspaceStack({
               onSessionSelected={onSessionSelected}
               onLaunchTerminalRequestHandled={onLaunchTerminalRequestHandled}
               onOpenSessionRequestHandled={onOpenSessionRequestHandled}
+              onWorkspaceTabRequestHandled={onWorkspaceTabRequestHandled}
+              onWorkspaceDestinationVisited={onWorkspaceDestinationVisited}
               onSwapPanes={onSwapPanes}
               onTransferSession={
                 onTransferSession
@@ -135,6 +141,7 @@ export function PaneWorkspaceStack({
             selectedSessionId={selectedSessionId}
             launchTerminalRequest={launchTerminalRequest}
             openSessionRequest={openSessionRequest}
+            workspaceTabRequest={workspaceTabRequest}
             terminalTransportStates={terminalTransportStates}
             openSessionIds={openSessionIds}
             onOpenSession={onOpenSession}
@@ -142,6 +149,8 @@ export function PaneWorkspaceStack({
             onSessionSelected={onSessionSelected}
             onLaunchTerminalRequestHandled={onLaunchTerminalRequestHandled}
             onOpenSessionRequestHandled={onOpenSessionRequestHandled}
+            onWorkspaceTabRequestHandled={onWorkspaceTabRequestHandled}
+            onWorkspaceDestinationVisited={onWorkspaceDestinationVisited}
             onSwapPanes={onSwapPanes}
             onTransferSession={
               onTransferSession
