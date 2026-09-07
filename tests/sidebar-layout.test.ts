@@ -7,7 +7,8 @@ import {
   loadSidebarWidth,
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
-  saveSidebarWidth
+  saveSidebarWidth,
+  sidebarRevealDelta
 } from '../src/renderer/src/lib/sidebarLayout'
 
 class MemoryStorage {
@@ -49,5 +50,11 @@ describe('left sidebar layout', () => {
     expect(source).toContain('aria-label="Resize project sidebar"')
     expect(source).toContain('role="separator"')
     expect(source).toContain("'--sidebar-preferred-width': `${sidebarWidth}px`")
+  })
+
+  it('reveals only rows outside the padded sidebar viewport', () => {
+    expect(sidebarRevealDelta(100, 500, 140, 170)).toBe(0)
+    expect(sidebarRevealDelta(100, 500, 96, 124)).toBe(-12)
+    expect(sidebarRevealDelta(100, 500, 482, 510)).toBe(18)
   })
 })

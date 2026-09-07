@@ -68,9 +68,13 @@ export function ProjectShortcutGuide({
         </div>
       )}
       <footer>
+        {navigator.platform.toLocaleLowerCase().includes('mac') && (
+          <span>
+            <kbd>⌘/</kbd> toggle directly
+          </span>
+        )}
         <span>
-          hold <kbd>Ctrl</kbd> · tap <kbd>?</kbd> three times to toggle · first
-          tap passes through
+          terminal-safe: hold <kbd>Ctrl</kbd> · tap <kbd>?</kbd> three times
         </span>
         <span>
           <kbd>{primary}1–9</kbd> jump directly

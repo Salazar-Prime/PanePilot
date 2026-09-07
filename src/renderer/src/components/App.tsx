@@ -85,7 +85,8 @@ import {
   loadSidebarWidth,
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
-  saveSidebarWidth
+  saveSidebarWidth,
+  sidebarRevealDelta
 } from '../lib/sidebarLayout'
 import { shouldOfferTmuxReconnect } from '../lib/terminalTransport'
 import { tmuxAttachCommand, tmuxOptionsCommand } from '../lib/tmuxCommands'
@@ -99,6 +100,8 @@ import {
   consumeWorkspaceTabRequest,
   loadWorkspaceHistory,
   nextWorkspaceSwitcherIndex,
+  projectCapabilityDestinations,
+  projectTerminalDestinations,
   recentWorkspaceDestinations,
   recordWorkspaceDestination,
   saveWorkspaceHistory,
@@ -150,6 +153,8 @@ interface WorkspaceSwitcherState {
   selectedIndex: number
   modifier: 'Meta' | 'Control'
   restoreSidebarCollapsed: boolean
+  mode: 'recent' | 'terminals' | 'capabilities'
+  projectId: string | null
 }
 
 const RENDERER_STATE_PRIORITY: AgentState[] = [
@@ -243,6 +248,7 @@ export function App() {
     )
   )
   const [resizingSidebar, setResizingSidebar] = useState(false)
+  const sidebarScrollRef = useRef<HTMLDivElement>(null)
   const sidebarResizeRef = useRef<{
     startX: number
     startWidth: number
@@ -318,7 +324,11 @@ export function App() {
     recordProjectSelection,
     recordSessionSelection
   } = useSelectionRecency()
-  const [collapsedProjectIds, toggleProjectCollapsed] = useCollapsedProjects()
+  const [
+    collapsedProjectIds,
+    toggleProjectCollapsed,
+    expandSidebarProject
+  ] = useCollapsedProjects()
   const [loading, setLoading] = useState(true)
   const [refreshingConnections, setRefreshingConnections] = useState(false)
   const [error, setError] = useState('')
@@ -627,14 +637,62 @@ export function App() {
   }, [scheduleProjectRefresh, startBackgroundTransition])
 
   useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
-      if (event.repeat || event.isComposing) return
+    function drillIntoProject(
+      mode: 'terminals' | 'capabilities',
+      event: KeyboardEvent
+    ) {
+      const current = workspaceSwitcherRef.current
+      const highlighted = current?.destinations[current.selectedIndex] ?? null
+      const paneDestination =
+        paneDestinationsRef.current[focusedPaneRef.current]
+      const sourceDestination = highlighted ?? paneDestination
+      const projectId =
+        sourceDestination?.projectId ??
+        current?.projectId ??
+        (focusedPaneRef.current === 'b' ? paneBProjectId : selectedProjectId)
+      const project = projects.find(
+        (candidate) => candidate.id === projectId && !candidate.archived
+      )
+      if (!project) return
       if (
+        event.repeat &&
+        current?.mode === mode &&
+        current.projectId === project.id
+      ) {
+        return
+      }
+      const destinations =
+        mode === 'terminals'
+          ? projectTerminalDestinations(project)
+          : projectCapabilityDestinations(project)
+      const preferredIndex = sourceDestination
+        ? destinations.findIndex((destination) =>
+            mode === 'terminals'
+              ? destination.sessionId === sourceDestination.sessionId
+              : destination.tab === sourceDestination.tab
+          )
+        : -1
+      setSidebarOpen(true)
+      updateWorkspaceSwitcher({
+        destinations,
+        selectedIndex: preferredIndex >= 0 ? preferredIndex : 0,
+        modifier:
+          current?.modifier ?? (event.metaKey ? 'Meta' : 'Control'),
+        restoreSidebarCollapsed:
+          current?.restoreSidebarCollapsed ?? !sidebarOpen,
+        mode,
+        projectId: project.id
+      })
+    }
+
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (event.isComposing) return
+      const primaryArrow =
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
         !event.shiftKey &&
-        (event.key === '-' || event.code === 'Minus')
-      ) {
+        ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)
+      if (primaryArrow) {
         event.preventDefault()
         event.stopPropagation()
         if (
@@ -643,12 +701,20 @@ export function App() {
           return
         }
         const current = workspaceSwitcherRef.current
+        if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') {
+          drillIntoProject(
+            event.code === 'ArrowRight' ? 'terminals' : 'capabilities',
+            event
+          )
+          return
+        }
         if (current) {
           updateWorkspaceSwitcher({
             ...current,
             selectedIndex: nextWorkspaceSwitcherIndex(
               current.selectedIndex,
-              current.destinations.length
+              current.destinations.length,
+              event.code === 'ArrowUp' ? -1 : 1
             )
           })
           return
@@ -666,10 +732,13 @@ export function App() {
           destinations,
           selectedIndex: 0,
           modifier: event.metaKey ? 'Meta' : 'Control',
-          restoreSidebarCollapsed: !sidebarOpen
+          restoreSidebarCollapsed: !sidebarOpen,
+          mode: 'recent',
+          projectId: null
         })
         return
       }
+      if (event.repeat) return
       if (event.key === 'Escape' && workspaceSwitcherRef.current) {
         event.preventDefault()
         event.stopPropagation()
@@ -680,7 +749,7 @@ export function App() {
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
         !event.shiftKey &&
-        ['+', '=', '0'].includes(event.key)
+        ['+', '=', '-', '0'].includes(event.key)
       ) {
         event.preventDefault()
         event.stopPropagation()
@@ -787,6 +856,57 @@ export function App() {
       sessionSort
     ]
   )
+  const sidebarActiveProjectId =
+    splitOpen && focusedPane === 'b' ? paneBProjectId : selectedProjectId
+  const sidebarActiveSessionId =
+    splitOpen && focusedPane === 'b' ? paneBSessionId : selectedSessionId
+
+  useEffect(() => {
+    if (
+      !sidebarOpen ||
+      showArchivedProjects ||
+      !sidebarActiveProjectId ||
+      !sidebarActiveSessionId
+    ) {
+      return
+    }
+    expandSidebarProject(sidebarActiveProjectId)
+  }, [
+    expandSidebarProject,
+    showArchivedProjects,
+    sidebarActiveProjectId,
+    sidebarActiveSessionId,
+    sidebarOpen
+  ])
+
+  useEffect(() => {
+    if (!sidebarOpen || showArchivedProjects || !sidebarActiveSessionId) return
+    const frame = window.requestAnimationFrame(() => {
+      const scrollArea = sidebarScrollRef.current
+      if (!scrollArea) return
+      const activeRow = Array.from(
+        scrollArea.querySelectorAll<HTMLElement>('[data-sidebar-session-id]')
+      ).find(
+        (row) => row.dataset.sidebarSessionId === sidebarActiveSessionId
+      )
+      if (!activeRow) return
+      const scrollBounds = scrollArea.getBoundingClientRect()
+      const rowBounds = activeRow.getBoundingClientRect()
+      const delta = sidebarRevealDelta(
+        scrollBounds.top,
+        scrollBounds.bottom,
+        rowBounds.top,
+        rowBounds.bottom
+      )
+      if (delta !== 0) scrollArea.scrollTop += delta
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [
+    collapsedProjectIds,
+    sidebarActiveSessionId,
+    sidebarOpen,
+    showArchivedProjects
+  ])
   const temporaryChatProject = temporaryChatPanel
     ? activeProjects.find(
         (candidate) => candidate.id === temporaryChatPanel.projectId
@@ -2152,7 +2272,7 @@ export function App() {
             <span>Agent workspace</span>
           </div>
         </div>
-        <div className="sidebar-scroll">
+        <div className="sidebar-scroll" ref={sidebarScrollRef}>
           {sidebarConnectionGroups.map(
             ({
               connection: item,
@@ -2311,6 +2431,7 @@ export function App() {
                           {visibleSessions.map((session) => (
                             <div
                               key={session.id}
+                              data-sidebar-session-id={session.id}
                               className={`session-row ${
                                 !showArchivedProjects &&
                                 ((candidate.id === selectedProjectId &&
@@ -2464,6 +2585,12 @@ export function App() {
           <WorkspaceSwitcherOverlay
             destinations={workspaceSwitcher.destinations}
             selectedIndex={workspaceSwitcher.selectedIndex}
+            mode={workspaceSwitcher.mode}
+            projectName={
+              projects.find(
+                (project) => project.id === workspaceSwitcher.projectId
+              )?.name
+            }
             modifierLabel={
               workspaceSwitcher.modifier === 'Meta' ? '⌘' : 'Ctrl'
             }
@@ -2512,7 +2639,7 @@ export function App() {
           <div className={`workspace-split ${splitOpen ? 'split' : ''}`}>
             <div
               className={`workspace-pane ${
-                splitOpen && focusedPane === 'a' ? 'focused' : ''
+                !splitOpen || focusedPane === 'a' ? 'focused' : ''
               }`}
               onMouseDownCapture={() => setFocusedPane('a')}
             >

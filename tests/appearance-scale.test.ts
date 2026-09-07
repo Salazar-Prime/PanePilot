@@ -32,7 +32,7 @@ describe('appearance scale', () => {
       'utf8'
     )
 
-    expect(app).toContain("['+', '=', '0'].includes(event.key)")
+    expect(app).toContain("['+', '=', '-', '0'].includes(event.key)")
     expect(app).not.toContain('setAppearanceScale(1)')
     expect(app).not.toContain('nextAppearanceScale(appearanceScale')
   })

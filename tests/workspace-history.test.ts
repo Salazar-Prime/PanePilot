@@ -6,6 +6,8 @@ import {
   createWorkspaceDestination,
   loadWorkspaceHistory,
   nextWorkspaceSwitcherIndex,
+  projectCapabilityDestinations,
+  projectTerminalDestinations,
   recentWorkspaceDestinations,
   recordWorkspaceDestination,
   saveWorkspaceHistory,
@@ -67,7 +69,7 @@ describe('recent workspace history', () => {
     ).toEqual([expect.objectContaining({ key: files.key })])
   })
 
-  it('shows at most five valid destinations and refreshes their labels', () => {
+  it('shows at most seven valid destinations and refreshes their labels', () => {
     let history = ['terminal', 'actions', 'qna', 'notes', 'files', 'chats', 'activity']
       .map((tab, index) =>
         createWorkspaceDestination({
@@ -93,7 +95,7 @@ describe('recent workspace history', () => {
       null,
       [renamedProject]
     )
-    expect(recent).toHaveLength(5)
+    expect(recent).toHaveLength(7)
     expect(recent.every((item) => item.projectName === 'PanePilot renamed')).toBe(
       true
     )
@@ -155,9 +157,10 @@ describe('recent workspace history', () => {
     expect(consumeWorkspaceTabRequest(request, 8)).toBeNull()
   })
 
-  it('cycles the glass highlight and wraps after the fifth destination', () => {
-    expect(nextWorkspaceSwitcherIndex(0, 5)).toBe(1)
-    expect(nextWorkspaceSwitcherIndex(4, 5)).toBe(0)
+  it('cycles the glass highlight in both directions and wraps', () => {
+    expect(nextWorkspaceSwitcherIndex(0, 7)).toBe(1)
+    expect(nextWorkspaceSwitcherIndex(6, 7)).toBe(0)
+    expect(nextWorkspaceSwitcherIndex(0, 7, -1)).toBe(6)
     expect(nextWorkspaceSwitcherIndex(0, 0)).toBe(0)
   })
 
@@ -165,7 +168,7 @@ describe('recent workspace history', () => {
     const runningProject = {
       ...project,
       icon: '🚀',
-      sessions: [{ ...session, state: 'running' as const }]
+      sessions: [{ ...session, state: 'running' as const, flagged: true }]
     }
     const terminal = createWorkspaceDestination({
       project: runningProject,
@@ -176,6 +179,7 @@ describe('recent workspace history', () => {
 
     expect(terminal.projectIcon).toBe('🚀')
     expect(workspaceTerminalIndicator(terminal)).toBe('working')
+    expect(terminal.terminalFlagged).toBe(true)
 
     const [attention] = recentWorkspaceDestinations(
       [terminal],
@@ -204,6 +208,35 @@ describe('recent workspace history', () => {
     })
 
     expect(notes.terminalState).toBeNull()
+    expect(notes.terminalFlagged).toBe(false)
     expect(workspaceTerminalIndicator(notes)).toBeNull()
+  })
+
+  it('builds project terminal and capability drill-down destinations', () => {
+    const secondSession = {
+      ...session,
+      id: 'session-2',
+      name: 'Shell',
+      profile: 'shell' as const
+    }
+    const populatedProject = {
+      ...project,
+      sessions: [session, secondSession]
+    }
+
+    expect(
+      projectTerminalDestinations(populatedProject).map((item) => item.sessionName)
+    ).toEqual(['Codex release', 'Shell'])
+    expect(
+      projectCapabilityDestinations(project).map((item) => item.tab)
+    ).toEqual([
+      'terminal',
+      'actions',
+      'qna',
+      'notes',
+      'files',
+      'chats',
+      'activity'
+    ])
   })
 })

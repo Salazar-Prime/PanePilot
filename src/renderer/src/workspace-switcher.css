@@ -50,14 +50,83 @@
   text-transform: none;
 }
 
+.workspace-switcher-project-context {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0 4px 14px;
+  padding: 0 4px 12px;
+  border-bottom: 1px solid #8d98c324;
+}
+
+.workspace-switcher-project-context > span {
+  color: #717b92;
+  font: 680 7px "SFMono-Regular", "Cascadia Code", monospace;
+  letter-spacing: 0.12em;
+}
+
+.workspace-switcher-project-context strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #dce1f2;
+  font-size: 11px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-switcher-project-context small {
+  grid-column: 1 / -1;
+  color: #778198;
+  font: 570 8px "SFMono-Regular", "Cascadia Code", monospace;
+}
+
 .workspace-switcher-list {
   --workspace-switcher-row-height: 58px;
   --workspace-switcher-gap: 10px;
   position: relative;
   z-index: 1;
   display: grid;
+  width: 100%;
+  min-height: 0;
+  max-height: calc(100% - 44px);
   gap: var(--workspace-switcher-gap);
   margin-block: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: #6e789344 transparent;
+  scrollbar-width: thin;
+}
+
+.workspace-switcher-list.drilldown {
+  max-height: calc(100% - 106px);
+  padding-left: 10px;
+}
+
+.workspace-switcher-list.drilldown::before {
+  position: absolute;
+  top: 28px;
+  bottom: 28px;
+  left: 3px;
+  width: 1px;
+  background: linear-gradient(#8390cf77, #65708d24);
+  content: "";
+}
+
+.workspace-switcher-list.drilldown .workspace-switcher-option::before {
+  position: absolute;
+  top: 50%;
+  left: -7px;
+  width: 9px;
+  border-top: 1px solid #8390cf5c;
+  content: "";
+}
+
+.workspace-switcher-list.drilldown .workspace-switcher-glass {
+  left: 10px;
 }
 
 .workspace-switcher-glass {
@@ -107,6 +176,10 @@
 
 .workspace-switcher-option[aria-selected="true"] {
   color: #eef0f8;
+}
+
+.workspace-switcher-option:hover {
+  color: #dfe3f2;
 }
 
 .workspace-switcher-project-icon {
@@ -226,10 +299,26 @@
 
 .workspace-switcher-trailing {
   display: flex;
-  min-width: 52px;
+  min-width: 58px;
   flex-direction: column;
   align-items: flex-end;
   gap: 4px;
+}
+
+.workspace-switcher-signals {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.workspace-switcher-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #ff9e84;
+  white-space: nowrap;
+  font: 690 7px "SFMono-Regular", "Cascadia Code", monospace;
 }
 
 .workspace-switcher-status {
@@ -274,6 +363,40 @@
 
 .workspace-switcher-option[aria-selected="true"] kbd {
   opacity: 1;
+}
+
+.workspace-switcher-empty {
+  display: grid;
+  min-height: 150px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 20px 12px;
+  color: #737e95;
+  text-align: center;
+}
+
+.workspace-switcher-empty strong {
+  color: #c3cadb;
+  font-size: 11px;
+}
+
+.workspace-switcher-empty small {
+  max-width: 190px;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.workspace-switcher-footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 10px;
+  padding: 14px 4px 2px;
+  color: #737d93;
+  font: 590 8px "SFMono-Regular", "Cascadia Code", monospace;
 }
 
 @keyframes workspace-switcher-enter {

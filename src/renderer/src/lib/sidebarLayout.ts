@@ -2,6 +2,7 @@ export const DEFAULT_SIDEBAR_WIDTH = 264
 export const COMPACT_SIDEBAR_WIDTH = 225
 export const MIN_SIDEBAR_WIDTH = 210
 export const MAX_SIDEBAR_WIDTH = 440
+export const SIDEBAR_REVEAL_PADDING = 8
 
 const STORAGE_KEY = 'panepilot.sidebar-width'
 
@@ -33,4 +34,18 @@ export function saveSidebarWidth(
   } catch {
     // A layout preference must never block the project workspace.
   }
+}
+
+export function sidebarRevealDelta(
+  containerTop: number,
+  containerBottom: number,
+  itemTop: number,
+  itemBottom: number,
+  padding = SIDEBAR_REVEAL_PADDING
+): number {
+  const visibleTop = containerTop + padding
+  const visibleBottom = containerBottom - padding
+  if (itemTop < visibleTop) return itemTop - visibleTop
+  if (itemBottom > visibleBottom) return itemBottom - visibleBottom
+  return 0
 }

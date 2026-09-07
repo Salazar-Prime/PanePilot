@@ -59,6 +59,16 @@ export function isShortcutOverlayTap(event: ShortcutEvent): boolean {
   )
 }
 
+export function isDirectShortcutOverlayToggle(event: ShortcutEvent): boolean {
+  return (
+    event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.shiftKey &&
+    event.code === 'Slash'
+  )
+}
+
 export function terminalInputForShortcutOverlayTap(
   event: ShortcutEvent
 ): string | null {
@@ -214,6 +224,16 @@ export function useProjectShortcuts(
         return
       }
 
+      if (isDirectShortcutOverlayToggle(event)) {
+        overlayGestureRef.current = { count: 0, lastTapAt: 0 }
+        if (!open && hasBlockingDialog()) return
+        event.preventDefault()
+        event.stopPropagation()
+        if (!open) announceShortcutOwner(rootRef.current)
+        setOpen(!open)
+        return
+      }
+
       const overlayGesture = advanceShortcutOverlayGesture(
         event,
         overlayGestureRef.current,
@@ -336,7 +356,7 @@ function isActiveProjectWorkspace(root: HTMLDivElement | null): boolean {
   )
   if (workspaces.length <= 1) return workspaces[0] === root
   const focused = document.querySelector<HTMLDivElement>(
-    '.workspace-pane.focused .project-workspace'
+    '.workspace-pane.focused .pane-workspace-entry.active .project-workspace'
   )
   return focused ? focused === root : workspaces[0] === root
 }

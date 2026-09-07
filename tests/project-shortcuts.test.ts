@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   advanceShortcutOverlayGesture,
   directSessionIndex,
+  isDirectShortcutOverlayToggle,
   isPaneSwapShortcut,
   isShortcutOverlayTap,
   keyTipActionKey,
@@ -45,6 +46,19 @@ describe('project keyboard shortcuts', () => {
       isShortcutOverlayTap(keyEvent({ key: '/', code: 'Slash', ctrlKey: true }))
     ).toBe(true)
     expect(isShortcutOverlayTap(keyEvent({ key: '?', code: 'Slash' }))).toBe(false)
+  })
+
+  it('supports Command-slash as the direct help toggle', () => {
+    expect(
+      isDirectShortcutOverlayToggle(
+        keyEvent({ key: '/', code: 'Slash', metaKey: true })
+      )
+    ).toBe(true)
+    expect(
+      isDirectShortcutOverlayToggle(
+        keyEvent({ key: '/', code: 'Slash', ctrlKey: true })
+      )
+    ).toBe(false)
   })
 
   it('maps the first terminal tap to the standard control byte', () => {
@@ -172,6 +186,15 @@ describe('project keyboard shortcuts', () => {
   })
 
   it('maps direct and overlay number keys to zero-based session indexes', () => {
+    expect(
+      directSessionIndex(keyEvent({ key: '1', code: 'Digit1', metaKey: true }))
+    ).toBe(0)
+    expect(
+      directSessionIndex(keyEvent({ key: '2', code: 'Digit2', metaKey: true }))
+    ).toBe(1)
+    expect(
+      directSessionIndex(keyEvent({ key: '3', code: 'Digit3', metaKey: true }))
+    ).toBe(2)
     expect(
       directSessionIndex(keyEvent({ key: '4', code: 'Digit4', metaKey: true }))
     ).toBe(3)

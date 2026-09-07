@@ -4,7 +4,7 @@ import type { WorkspacePane, WorkspaceRequest } from './workspaceRequest'
 export const WORKSPACE_HISTORY_STORAGE_KEY =
   'panepilot.workspace-history.v1'
 export const WORKSPACE_HISTORY_LIMIT = 40
-export const WORKSPACE_SWITCHER_LIMIT = 5
+export const WORKSPACE_SWITCHER_LIMIT = 7
 
 export type WorkspaceTabId =
   | 'terminal'
@@ -28,6 +28,7 @@ export interface WorkspaceDestination {
   sessionId: string | null
   sessionName: string | null
   terminalState?: AgentState | null
+  terminalFlagged?: boolean
   visitedAt: number
 }
 
@@ -112,11 +113,15 @@ export function createWorkspaceDestination(input: {
     tab: input.tab,
     tabLabel: workspaceTabLabel(input.tab),
     sessionId,
-    sessionName: input.sessionName ?? null,
+    sessionName: input.sessionName ?? session?.name ?? null,
     terminalState:
       input.tab === 'terminal' && session?.kind === 'terminal'
         ? session.state
         : null,
+    terminalFlagged:
+      input.tab === 'terminal' && session?.kind === 'terminal'
+        ? session.flagged
+        : false,
     visitedAt: input.visitedAt ?? Date.now()
   }
 }
@@ -147,7 +152,8 @@ function hydrateDestination(
       projectIcon: project.icon,
       projectType: project.type,
       tabLabel: workspaceTabLabel(destination.tab),
-      terminalState: null
+      terminalState: null,
+      terminalFlagged: false
     }
   }
 
@@ -166,8 +172,48 @@ function hydrateDestination(
     terminalState:
       destination.tab === 'terminal' && session.kind === 'terminal'
         ? session.state
-        : null
+        : null,
+    terminalFlagged:
+      destination.tab === 'terminal' && session.kind === 'terminal'
+        ? session.flagged
+        : false
   }
+}
+
+export function projectTerminalDestinations(
+  project: Project
+): WorkspaceDestination[] {
+  if (project.archived) return []
+  return project.sessions
+    .filter((session) => session.kind === 'terminal' && !session.archived)
+    .map((session) =>
+      createWorkspaceDestination({
+        project,
+        tab: 'terminal',
+        sessionId: session.id,
+        sessionName: session.name
+      })
+    )
+}
+
+export function projectCapabilityDestinations(
+  project: Project
+): WorkspaceDestination[] {
+  if (project.archived) return []
+  const tabs: WorkspaceTabId[] =
+    project.type === 'latex'
+      ? [
+          'manuscript',
+          'pdf',
+          'actions',
+          'qna',
+          'notes',
+          'files',
+          'chats',
+          'activity'
+        ]
+      : ['terminal', 'actions', 'qna', 'notes', 'files', 'chats', 'activity']
+  return tabs.map((tab) => createWorkspaceDestination({ project, tab }))
 }
 
 export function workspaceTerminalIndicator(
@@ -210,10 +256,11 @@ export function recentWorkspaceDestinations(
 
 export function nextWorkspaceSwitcherIndex(
   selectedIndex: number,
-  destinationCount: number
+  destinationCount: number,
+  direction: -1 | 1 = 1
 ): number {
   return destinationCount > 0
-    ? (selectedIndex + 1) % destinationCount
+    ? (selectedIndex + direction + destinationCount) % destinationCount
     : 0
 }
 
@@ -260,6 +307,7 @@ function isWorkspaceDestination(value: unknown): value is WorkspaceDestination {
     (item.sessionName == null || typeof item.sessionName === 'string') &&
     (item.terminalState == null ||
       agentStates.has(item.terminalState as AgentState)) &&
+    (item.terminalFlagged == null || typeof item.terminalFlagged === 'boolean') &&
     typeof item.visitedAt === 'number' &&
     Number.isFinite(item.visitedAt)
   )

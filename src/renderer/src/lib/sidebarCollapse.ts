@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 
 const STORAGE_KEY = 'panepilot.collapsed-projects'
 
@@ -17,10 +17,14 @@ function persistCollapsedIds(ids: Set<string>) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]))
 }
 
-export function useCollapsedProjects(): [Set<string>, (projectId: string) => void] {
+export function useCollapsedProjects(): [
+  Set<string>,
+  (projectId: string) => void,
+  (projectId: string) => void
+] {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(loadCollapsedIds)
 
-  function toggle(projectId: string) {
+  const toggle = useCallback((projectId: string) => {
     setCollapsedIds((current) => {
       const next = new Set(current)
       if (next.has(projectId)) {
@@ -31,7 +35,17 @@ export function useCollapsedProjects(): [Set<string>, (projectId: string) => voi
       persistCollapsedIds(next)
       return next
     })
-  }
+  }, [])
 
-  return [collapsedIds, toggle]
+  const expand = useCallback((projectId: string) => {
+    setCollapsedIds((current) => {
+      if (!current.has(projectId)) return current
+      const next = new Set(current)
+      next.delete(projectId)
+      persistCollapsedIds(next)
+      return next
+    })
+  }, [])
+
+  return [collapsedIds, toggle, expand]
 }
