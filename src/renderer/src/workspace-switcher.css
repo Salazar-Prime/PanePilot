@@ -11,6 +11,8 @@
   flex-direction: column;
   padding: 18px 12px;
   overflow: hidden;
+  pointer-events: none;
+  user-select: none;
   border-right: 1px solid #8c96e32e;
   background:
     linear-gradient(155deg, #20263ac7 0%, #101521dd 55%, #101219e8 100%);
@@ -176,10 +178,6 @@
 
 .workspace-switcher-option[aria-selected="true"] {
   color: #eef0f8;
-}
-
-.workspace-switcher-option:hover {
-  color: #dfe3f2;
 }
 
 .workspace-switcher-project-icon {

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Project, TerminalSession } from '../src/shared/types'
 import {
   WORKSPACE_HISTORY_STORAGE_KEY,
@@ -238,5 +240,29 @@ describe('recent workspace history', () => {
       'chats',
       'activity'
     ])
+  })
+
+  it('keeps the transient switcher keyboard-only', () => {
+    const component = readFileSync(
+      join(
+        process.cwd(),
+        'src',
+        'renderer',
+        'src',
+        'components',
+        'WorkspaceSwitcherOverlay.tsx'
+      ),
+      'utf8'
+    )
+    const styles = readFileSync(
+      join(process.cwd(), 'src', 'renderer', 'src', 'workspace-switcher.css'),
+      'utf8'
+    )
+
+    expect(component).not.toContain('onMouseEnter')
+    expect(component).not.toContain('onClick')
+    expect(styles).toMatch(
+      /\.workspace-switcher-overlay\s*\{[\s\S]*?pointer-events:\s*none;/
+    )
   })
 })

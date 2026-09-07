@@ -2594,12 +2594,6 @@ export function App() {
             modifierLabel={
               workspaceSwitcher.modifier === 'Meta' ? '⌘' : 'Ctrl'
             }
-            onSelect={(selectedIndex) =>
-              updateWorkspaceSwitcher({
-                ...workspaceSwitcher,
-                selectedIndex
-              })
-            }
           />
         )}
       </aside>

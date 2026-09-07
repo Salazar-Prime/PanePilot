@@ -24,7 +24,6 @@ interface WorkspaceSwitcherOverlayProps {
   modifierLabel: string
   mode: 'recent' | 'terminals' | 'capabilities'
   projectName?: string
-  onSelect(index: number): void
 }
 
 function DestinationIcon({ tab }: { tab: WorkspaceTabId }) {
@@ -93,8 +92,7 @@ export function WorkspaceSwitcherOverlay({
   selectedIndex,
   modifierLabel,
   mode,
-  projectName,
-  onSelect
+  projectName
 }: WorkspaceSwitcherOverlayProps) {
   const listRef = useRef<HTMLDivElement>(null)
   const style = {
@@ -145,14 +143,11 @@ export function WorkspaceSwitcherOverlay({
           <div className="workspace-switcher-glass" aria-hidden="true" />
         )}
         {destinations.map((destination, index) => (
-          <button
+          <div
             key={destination.key}
-            type="button"
             className="workspace-switcher-option"
             role="option"
             aria-selected={index === selectedIndex}
-            onMouseEnter={() => onSelect(index)}
-            onClick={() => onSelect(index)}
           >
             <span className="workspace-switcher-project-icon" aria-hidden="true">
               <span className="workspace-switcher-project-glyph">
@@ -179,7 +174,7 @@ export function WorkspaceSwitcherOverlay({
               <TerminalSignals destination={destination} />
               <kbd>{modifierLabel}↑↓</kbd>
             </span>
-          </button>
+          </div>
         ))}
         {destinations.length === 0 && (
           <div className="workspace-switcher-empty">
