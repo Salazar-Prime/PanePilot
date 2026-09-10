@@ -203,7 +203,10 @@ export function WorkspaceSwitcherOverlay({
                 </span>
               </span>
               <span className="workspace-switcher-copy">
-                <strong>
+                <strong
+                  className={destination.sessionName ? 'workspace-switcher-session-title' : undefined}
+                  title={destination.sessionName ?? destination.tabLabel}
+                >
                   {destination.sessionName ?? destination.tabLabel}
                 </strong>
                 <small>
