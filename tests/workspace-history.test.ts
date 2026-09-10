@@ -9,6 +9,7 @@ import {
   createWorkspaceDestination,
   loadWorkspaceHistory,
   nextWorkspaceSwitcherIndex,
+  nextWorkspaceSwitcherMode,
   projectCapabilityDestinations,
   projectTerminalDestinations,
   recentWorkspaceDestinations,
@@ -263,10 +264,10 @@ describe('recent workspace history', () => {
     expect(workspaceSwitcherArrowAction(shortcut('ArrowLeft'), false)).toBeNull()
     expect(workspaceSwitcherArrowAction(shortcut('ArrowRight'), false)).toBeNull()
     expect(workspaceSwitcherArrowAction(shortcut('ArrowLeft'), true)).toBe(
-      'capabilities'
+      'previous-view'
     )
     expect(workspaceSwitcherArrowAction(shortcut('ArrowRight'), true)).toBe(
-      'terminals'
+      'next-view'
     )
     expect(workspaceSwitcherArrowAction(shortcut('ArrowUp'), false)).toBe(
       'previous'
@@ -274,6 +275,15 @@ describe('recent workspace history', () => {
     expect(workspaceSwitcherArrowAction(shortcut('ArrowDown'), false)).toBe(
       'next'
     )
+  })
+
+  it('cycles through all three switcher views in either direction', () => {
+    expect(nextWorkspaceSwitcherMode('recent', 1)).toBe('capabilities')
+    expect(nextWorkspaceSwitcherMode('capabilities', 1)).toBe('terminals')
+    expect(nextWorkspaceSwitcherMode('terminals', 1)).toBe('recent')
+    expect(nextWorkspaceSwitcherMode('recent', -1)).toBe('terminals')
+    expect(nextWorkspaceSwitcherMode('terminals', -1)).toBe('capabilities')
+    expect(nextWorkspaceSwitcherMode('capabilities', -1)).toBe('recent')
   })
 
   it('hydrates the project icon and live status for terminal destinations', () => {

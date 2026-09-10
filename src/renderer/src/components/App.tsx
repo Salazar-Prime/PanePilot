@@ -100,6 +100,7 @@ import {
   consumeWorkspaceTabRequest,
   loadWorkspaceHistory,
   nextWorkspaceSwitcherIndex,
+  nextWorkspaceSwitcherMode,
   projectCapabilityDestinations,
   projectTerminalDestinations,
   recordWorkspaceDestination,
@@ -686,30 +687,47 @@ export function App() {
   }, [scheduleProjectRefresh, startBackgroundTransition])
 
   useEffect(() => {
-    function drillIntoProject(
-      mode: 'terminals' | 'capabilities',
+    function cycleSwitcherView(
+      direction: -1 | 1,
       event: KeyboardEvent
     ) {
       const current = workspaceSwitcherRef.current
+      if (!current) return
+      const mode = nextWorkspaceSwitcherMode(current.mode, direction)
       const highlighted = current?.destinations[current.selectedIndex] ?? null
       const paneDestination =
         paneDestinationsRef.current[focusedPaneRef.current]
       const sourceDestination = highlighted ?? paneDestination
+      if (mode === 'recent') {
+        const destinations = workspaceSwitcherDestinations(
+          workspaceHistoryRef.current,
+          paneDestination,
+          projects
+        )
+        const preferredIndex = destinations.findIndex(
+          (destination) => destination.key === highlighted?.key
+        )
+        updateWorkspaceSwitcher({
+          ...current,
+          mode,
+          destinations,
+          selectedIndex: preferredIndex >= 0 ? preferredIndex : Math.min(1, Math.max(0, destinations.length - 1)),
+          currentKey: destinations[0]?.key === paneDestination?.key
+            ? paneDestination?.key ?? null : null,
+          projectId: null,
+          hoveredKey: null
+        })
+        return
+      }
       const projectId =
-        sourceDestination?.projectId ??
+        highlighted?.projectId ??
         current?.projectId ??
+        paneDestination?.projectId ??
         (focusedPaneRef.current === 'b' ? paneBProjectId : selectedProjectId)
       const project = projects.find(
         (candidate) => candidate.id === projectId && !candidate.archived
       )
       if (!project) return
-      if (
-        event.repeat &&
-        current?.mode === mode &&
-        current.projectId === project.id
-      ) {
-        return
-      }
       const destinations =
         mode === 'terminals'
           ? projectTerminalDestinations(project)
@@ -778,11 +796,11 @@ export function App() {
         }
         const current = workspaceSwitcherRef.current
         if (
-          switcherArrow === 'capabilities' ||
-          switcherArrow === 'terminals'
+          switcherArrow === 'previous-view' ||
+          switcherArrow === 'next-view'
         ) {
-          drillIntoProject(
-            switcherArrow,
+          cycleSwitcherView(
+            switcherArrow === 'previous-view' ? -1 : 1,
             event
           )
           return

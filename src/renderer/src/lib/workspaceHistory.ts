@@ -36,8 +36,18 @@ export type WorkspaceTerminalIndicator = 'working' | 'attention' | null
 export type WorkspaceSwitcherArrowAction =
   | 'previous'
   | 'next'
-  | 'capabilities'
-  | 'terminals'
+  | 'previous-view'
+  | 'next-view'
+
+export type WorkspaceSwitcherMode = 'recent' | 'capabilities' | 'terminals'
+
+export function nextWorkspaceSwitcherMode(
+  mode: WorkspaceSwitcherMode,
+  direction: -1 | 1
+): WorkspaceSwitcherMode {
+  const modes: WorkspaceSwitcherMode[] = ['recent', 'capabilities', 'terminals']
+  return modes[(modes.indexOf(mode) + direction + modes.length) % modes.length]
+}
 
 export interface WorkspaceTabRequest extends WorkspaceRequest {
   tab: WorkspaceTabId
@@ -332,8 +342,8 @@ export function workspaceSwitcherArrowAction(
   if (event.code === 'ArrowUp') return 'previous'
   if (event.code === 'ArrowDown') return 'next'
   if (!switcherOpen) return null
-  if (event.code === 'ArrowLeft') return 'capabilities'
-  if (event.code === 'ArrowRight') return 'terminals'
+  if (event.code === 'ArrowLeft') return 'previous-view'
+  if (event.code === 'ArrowRight') return 'next-view'
   return null
 }
 

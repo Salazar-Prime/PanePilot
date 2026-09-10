@@ -15,7 +15,7 @@ import type {
   WorkspaceDestination,
   WorkspaceTabId
 } from '../lib/workspaceHistory'
-import { workspaceTerminalIndicator } from '../lib/workspaceHistory'
+import { nextWorkspaceSwitcherMode, workspaceTerminalIndicator } from '../lib/workspaceHistory'
 import '../workspace-switcher.css'
 
 interface WorkspaceSwitcherOverlayProps {
@@ -103,6 +103,9 @@ export function WorkspaceSwitcherOverlay({
   onHoverKey
 }: WorkspaceSwitcherOverlayProps) {
   const listRef = useRef<HTMLDivElement>(null)
+  const modeLabels = { recent: 'history', capabilities: 'tools', terminals: 'terminals' }
+  const previousView = modeLabels[nextWorkspaceSwitcherMode(mode, -1)]
+  const nextView = modeLabels[nextWorkspaceSwitcherMode(mode, 1)]
   const style = {
     '--workspace-switcher-index': selectedIndex
   } as CSSProperties
@@ -134,7 +137,7 @@ export function WorkspaceSwitcherOverlay({
           <span>PROJECT</span>
           <strong>{projectName ?? 'Selected project'}</strong>
           <small>
-            {modifierLabel}← tools&nbsp;&nbsp;{modifierLabel}→ terminals
+            {modifierLabel}← {previousView}&nbsp;&nbsp;{modifierLabel}→ {nextView}
           </small>
         </div>
       )}
@@ -233,13 +236,13 @@ export function WorkspaceSwitcherOverlay({
           <div className="workspace-switcher-empty">
             <TerminalSquare size={18} />
             <strong>No terminals in this project</strong>
-            <small>Press {modifierLabel}← to choose a project tool.</small>
+            <small>Press {modifierLabel}← or {modifierLabel}→ to change views.</small>
           </div>
         )}
       </div>
       <div className="workspace-switcher-footer" aria-hidden="true">
-        <span>{modifierLabel}← tools</span>
-        <span>{modifierLabel}→ terminals</span>
+        <span>{modifierLabel}← {previousView}</span>
+        <span>{modifierLabel}→ {nextView}</span>
         <span>release {modifierLabel} to open</span>
       </div>
     </div>
