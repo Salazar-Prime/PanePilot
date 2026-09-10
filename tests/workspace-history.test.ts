@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { Project, TerminalSession } from '../src/shared/types'
 import {
   WORKSPACE_HISTORY_STORAGE_KEY,
+  WORKSPACE_HISTORY_LIMIT,
   consumeWorkspaceTabRequest,
   createWorkspaceDestination,
   loadWorkspaceHistory,
@@ -12,7 +13,9 @@ import {
   projectTerminalDestinations,
   recentWorkspaceDestinations,
   recordWorkspaceDestination,
+  removeWorkspaceDestination,
   saveWorkspaceHistory,
+  workspaceSwitcherDestinations,
   workspaceTerminalIndicator,
   workspaceTabRequestFor
 } from '../src/renderer/src/lib/workspaceHistory'
@@ -71,6 +74,30 @@ describe('recent workspace history', () => {
     ).toEqual([expect.objectContaining({ key: files.key })])
   })
 
+  it('retains the last twenty unique destinations in access order', () => {
+    const destinations = Array.from({ length: 24 }, (_, index) =>
+      createWorkspaceDestination({
+        project: { ...project, id: `project-${index}` },
+        tab: 'files',
+        visitedAt: index
+      })
+    )
+    let history = destinations.reduce(recordWorkspaceDestination, [])
+
+    expect(WORKSPACE_HISTORY_LIMIT).toBe(20)
+    expect(history).toHaveLength(20)
+    expect(history.map((item) => item.projectId)).toEqual(
+      destinations
+        .slice(4)
+        .reverse()
+        .map((item) => item.projectId)
+    )
+
+    history = recordWorkspaceDestination(history, destinations[10])
+    expect(history[0].key).toBe(destinations[10].key)
+    expect(new Set(history.map((item) => item.key)).size).toBe(20)
+  })
+
   it('shows at most seven valid destinations and refreshes their labels', () => {
     let history = ['terminal', 'actions', 'qna', 'notes', 'files', 'chats', 'activity']
       .map((tab, index) =>
@@ -106,6 +133,46 @@ describe('recent workspace history', () => {
     )
   })
 
+  it('pins the current destination above seven recent items', () => {
+    const current = createWorkspaceDestination({ project, tab: 'notes' })
+    const projects = Array.from({ length: 7 }, (_, index) => ({
+      ...project,
+      id: `recent-${index}`,
+      name: `Recent ${index}`
+    }))
+    const history = [
+      current,
+      ...projects.map((candidate, index) =>
+        createWorkspaceDestination({
+          project: candidate,
+          tab: 'files',
+          visitedAt: 100 - index
+        })
+      )
+    ]
+
+    const destinations = workspaceSwitcherDestinations(
+      history,
+      current,
+      [project, ...projects]
+    )
+    expect(destinations).toHaveLength(8)
+    expect(destinations[0].key).toBe(current.key)
+    expect(destinations.slice(1)).toHaveLength(7)
+  })
+
+  it('removes one history destination without disturbing access order', () => {
+    const notes = createWorkspaceDestination({ project, tab: 'notes' })
+    const files = createWorkspaceDestination({ project, tab: 'files' })
+    const chats = createWorkspaceDestination({ project, tab: 'chats' })
+
+    expect(
+      removeWorkspaceDestination([notes, files, chats], files.key).map(
+        (item) => item.key
+      )
+    ).toEqual([notes.key, chats.key])
+  })
+
   it('drops destinations whose project or session was archived', () => {
     const terminal = createWorkspaceDestination({
       project,
@@ -139,9 +206,25 @@ describe('recent workspace history', () => {
       setItem: (key: string, value: string) => values.set(key, value)
     }
     const notes = createWorkspaceDestination({ project, tab: 'notes' })
+    const files = createWorkspaceDestination({ project, tab: 'files' })
 
     saveWorkspaceHistory(storage, [notes])
     expect(loadWorkspaceHistory(storage)).toEqual([notes])
+    saveWorkspaceHistory(
+      storage,
+      Array.from({ length: 24 }, (_, index) => ({
+        ...notes,
+        key: `notes-${index}`
+      }))
+    )
+    expect(
+      JSON.parse(values.get(WORKSPACE_HISTORY_STORAGE_KEY) ?? '[]')
+    ).toHaveLength(20)
+    saveWorkspaceHistory(storage, [notes, notes, files])
+    expect(loadWorkspaceHistory(storage).map((item) => item.key)).toEqual([
+      notes.key,
+      files.key
+    ])
     values.set(WORKSPACE_HISTORY_STORAGE_KEY, '{bad json')
     expect(loadWorkspaceHistory(storage)).toEqual([])
   })
@@ -259,10 +342,8 @@ describe('recent workspace history', () => {
       'utf8'
     )
 
-    expect(component).not.toContain('onMouseEnter')
     expect(component).not.toContain('onClick')
-    expect(styles).toMatch(
-      /\.workspace-switcher-overlay\s*\{[\s\S]*?pointer-events:\s*none;/
-    )
+    expect(component).not.toContain('onSelect')
+    expect(styles).toContain('user-select: none')
   })
 })

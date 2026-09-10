@@ -3,7 +3,7 @@ import type { WorkspacePane, WorkspaceRequest } from './workspaceRequest'
 
 export const WORKSPACE_HISTORY_STORAGE_KEY =
   'panepilot.workspace-history.v1'
-export const WORKSPACE_HISTORY_LIMIT = 40
+export const WORKSPACE_HISTORY_LIMIT = 20
 export const WORKSPACE_SWITCHER_LIMIT = 7
 
 export type WorkspaceTabId =
@@ -136,6 +136,13 @@ export function recordWorkspaceDestination(
   ].slice(0, WORKSPACE_HISTORY_LIMIT)
 }
 
+export function removeWorkspaceDestination(
+  history: WorkspaceDestination[],
+  key: string
+): WorkspaceDestination[] {
+  return history.filter((destination) => destination.key !== key)
+}
+
 function isSupportedTab(projectType: ProjectType, tab: WorkspaceTabId): boolean {
   return (projectType === 'latex' ? latexTabs : terminalTabs).has(tab)
 }
@@ -254,6 +261,30 @@ export function recentWorkspaceDestinations(
   return result
 }
 
+export function workspaceSwitcherDestinations(
+  history: WorkspaceDestination[],
+  current: WorkspaceDestination | null,
+  projects: Project[],
+  historyLimit = WORKSPACE_SWITCHER_LIMIT
+): WorkspaceDestination[] {
+  const currentProject = current
+    ? projects.find(
+        (project) => project.id === current.projectId && !project.archived
+      )
+    : null
+  const hydratedCurrent =
+    current && currentProject
+      ? hydrateDestination(current, currentProject)
+      : null
+  const recent = recentWorkspaceDestinations(
+    history,
+    hydratedCurrent?.key ?? current?.key ?? null,
+    projects,
+    historyLimit
+  )
+  return hydratedCurrent ? [hydratedCurrent, ...recent] : recent
+}
+
 export function nextWorkspaceSwitcherIndex(
   selectedIndex: number,
   destinationCount: number,
@@ -272,9 +303,7 @@ export function loadWorkspaceHistory(
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter(isWorkspaceDestination)
-      .slice(0, WORKSPACE_HISTORY_LIMIT)
+    return uniqueWorkspaceDestinations(parsed.filter(isWorkspaceDestination))
   } catch {
     return []
   }
@@ -285,10 +314,27 @@ export function saveWorkspaceHistory(
   history: WorkspaceDestination[]
 ): void {
   try {
-    storage.setItem(WORKSPACE_HISTORY_STORAGE_KEY, JSON.stringify(history))
+    storage.setItem(
+      WORKSPACE_HISTORY_STORAGE_KEY,
+      JSON.stringify(uniqueWorkspaceDestinations(history))
+    )
   } catch {
     // Navigation history is a convenience and must never block the workspace.
   }
+}
+
+function uniqueWorkspaceDestinations(
+  history: WorkspaceDestination[]
+): WorkspaceDestination[] {
+  const seen = new Set<string>()
+  const unique: WorkspaceDestination[] = []
+  for (const destination of history) {
+    if (seen.has(destination.key)) continue
+    seen.add(destination.key)
+    unique.push(destination)
+    if (unique.length >= WORKSPACE_HISTORY_LIMIT) break
+  }
+  return unique
 }
 
 function isWorkspaceDestination(value: unknown): value is WorkspaceDestination {

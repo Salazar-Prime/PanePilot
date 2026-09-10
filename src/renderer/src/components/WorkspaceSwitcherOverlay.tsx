@@ -24,6 +24,9 @@ interface WorkspaceSwitcherOverlayProps {
   modifierLabel: string
   mode: 'recent' | 'terminals' | 'capabilities'
   projectName?: string
+  currentKey: string | null
+  hoveredKey: string | null
+  onHoverKey(key: string | null): void
 }
 
 function DestinationIcon({ tab }: { tab: WorkspaceTabId }) {
@@ -92,7 +95,10 @@ export function WorkspaceSwitcherOverlay({
   selectedIndex,
   modifierLabel,
   mode,
-  projectName
+  projectName,
+  currentKey,
+  hoveredKey,
+  onHoverKey
 }: WorkspaceSwitcherOverlayProps) {
   const listRef = useRef<HTMLDivElement>(null)
   const style = {
@@ -138,44 +144,87 @@ export function WorkspaceSwitcherOverlay({
         aria-label={heading.toLocaleLowerCase()}
         style={style}
         ref={listRef}
+        onMouseMove={(event) => {
+          const option =
+            event.target instanceof Element
+              ? event.target.closest<HTMLElement>(
+                  '[data-workspace-option-index]'
+                )
+              : null
+          const hoveredIndex = Number(option?.dataset.workspaceOptionIndex)
+          const destination = Number.isInteger(hoveredIndex)
+            ? destinations[hoveredIndex]
+            : null
+          onHoverKey(
+            mode === 'recent' && destination?.key !== currentKey
+              ? destination?.key ?? null
+              : null
+          )
+        }}
+        onMouseLeave={() => onHoverKey(null)}
       >
         {destinations.length > 0 && (
           <div className="workspace-switcher-glass" aria-hidden="true" />
         )}
-        {destinations.map((destination, index) => (
-          <div
-            key={destination.key}
-            className="workspace-switcher-option"
-            role="option"
-            aria-selected={index === selectedIndex}
-          >
-            <span className="workspace-switcher-project-icon" aria-hidden="true">
-              <span className="workspace-switcher-project-glyph">
-                <ProjectGlyph destination={destination} />
-              </span>
+        {destinations.map((destination, index) => {
+          const isCurrent =
+            mode === 'recent' && destination.key === currentKey
+          const isRemovalTarget =
+            mode === 'recent' &&
+            !isCurrent &&
+            destination.key === hoveredKey
+          return (
+            <div
+              key={destination.key}
+              className={`workspace-switcher-option ${
+                isCurrent ? 'is-current' : ''
+              } ${isRemovalTarget ? 'is-removal-target' : ''}`}
+              role="option"
+              aria-selected={index === selectedIndex}
+              aria-current={isCurrent ? 'page' : undefined}
+              data-workspace-option-index={index}
+            >
               <span
-                className={`workspace-switcher-sub-icon tab-${destination.tab}`}
+                className="workspace-switcher-project-icon"
+                aria-hidden="true"
               >
-                <DestinationIcon tab={destination.tab} />
+                <span className="workspace-switcher-project-glyph">
+                  <ProjectGlyph destination={destination} />
+                </span>
+                <span
+                  className={`workspace-switcher-sub-icon tab-${destination.tab}`}
+                >
+                  <DestinationIcon tab={destination.tab} />
+                </span>
               </span>
-            </span>
-            <span className="workspace-switcher-copy">
-              <strong>
-                {destination.sessionName ?? destination.tabLabel}
-              </strong>
-              <small>
-                {destination.projectName}
-                {destination.sessionName
-                  ? ` · ${destination.tabLabel}`
-                  : ''}
-              </small>
-            </span>
-            <span className="workspace-switcher-trailing">
-              <TerminalSignals destination={destination} />
-              <kbd>{modifierLabel}↑↓</kbd>
-            </span>
-          </div>
-        ))}
+              <span className="workspace-switcher-copy">
+                <strong>
+                  {destination.sessionName ?? destination.tabLabel}
+                </strong>
+                <small>
+                  {destination.projectName}
+                  {destination.sessionName
+                    ? ` · ${destination.tabLabel}`
+                    : ''}
+                </small>
+              </span>
+              <span className="workspace-switcher-trailing">
+                <TerminalSignals destination={destination} />
+                {isCurrent ? (
+                  <span className="workspace-switcher-current-label">
+                    Current
+                  </span>
+                ) : isRemovalTarget ? (
+                  <kbd className="workspace-switcher-remove-hint">
+                    R remove
+                  </kbd>
+                ) : (
+                  <kbd>{modifierLabel}↑↓</kbd>
+                )}
+              </span>
+            </div>
+          )
+        })}
         {destinations.length === 0 && (
           <div className="workspace-switcher-empty">
             <TerminalSquare size={18} />
@@ -187,6 +236,7 @@ export function WorkspaceSwitcherOverlay({
       <div className="workspace-switcher-footer" aria-hidden="true">
         <span>{modifierLabel}← tools</span>
         <span>{modifierLabel}→ terminals</span>
+        {mode === 'recent' && <span>hover + R remove</span>}
         <span>release {modifierLabel} to open</span>
       </div>
     </div>

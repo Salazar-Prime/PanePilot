@@ -102,9 +102,10 @@ import {
   nextWorkspaceSwitcherIndex,
   projectCapabilityDestinations,
   projectTerminalDestinations,
-  recentWorkspaceDestinations,
   recordWorkspaceDestination,
+  removeWorkspaceDestination,
   saveWorkspaceHistory,
+  workspaceSwitcherDestinations,
   workspaceTabRequestFor,
   type WorkspaceDestination,
   type WorkspaceTabRequest
@@ -155,6 +156,8 @@ interface WorkspaceSwitcherState {
   restoreSidebarCollapsed: boolean
   mode: 'recent' | 'terminals' | 'capabilities'
   projectId: string | null
+  currentKey: string | null
+  hoveredKey: string | null
 }
 
 const RENDERER_STATE_PRIORITY: AgentState[] = [
@@ -681,12 +684,69 @@ export function App() {
         restoreSidebarCollapsed:
           current?.restoreSidebarCollapsed ?? !sidebarOpen,
         mode,
-        projectId: project.id
+        projectId: project.id,
+        currentKey: null,
+        hoveredKey: null
       })
     }
 
     const handleShortcut = (event: KeyboardEvent) => {
       if (event.isComposing) return
+      const openSwitcher = workspaceSwitcherRef.current
+      if (
+        openSwitcher &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLocaleLowerCase() === 'r'
+      ) {
+        event.preventDefault()
+        event.stopPropagation()
+        const removableKey =
+          openSwitcher.mode === 'recent' &&
+          openSwitcher.hoveredKey !== openSwitcher.currentKey
+            ? openSwitcher.hoveredKey
+            : null
+        if (!removableKey) return
+        const selectedKey =
+          openSwitcher.destinations[openSwitcher.selectedIndex]?.key ?? null
+        const nextHistory = removeWorkspaceDestination(
+          workspaceHistoryRef.current,
+          removableKey
+        )
+        workspaceHistoryRef.current = nextHistory
+        saveWorkspaceHistory(window.localStorage, nextHistory)
+        const currentDestination = openSwitcher.currentKey
+          ? openSwitcher.destinations.find(
+              (destination) => destination.key === openSwitcher.currentKey
+            ) ?? null
+          : null
+        const destinations = workspaceSwitcherDestinations(
+          nextHistory,
+          currentDestination,
+          projects
+        )
+        const retainedSelectedIndex = selectedKey
+          ? destinations.findIndex(
+              (destination) => destination.key === selectedKey
+            )
+          : -1
+        updateWorkspaceSwitcher({
+          ...openSwitcher,
+          destinations,
+          selectedIndex:
+            retainedSelectedIndex >= 0
+              ? retainedSelectedIndex
+              : Math.max(
+                  0,
+                  Math.min(
+                    openSwitcher.selectedIndex,
+                    destinations.length - 1
+                  )
+                ),
+          hoveredKey: null
+        })
+        return
+      }
       const primaryArrow =
         (event.metaKey || event.ctrlKey) &&
         !event.altKey &&
@@ -719,22 +779,28 @@ export function App() {
           })
           return
         }
-        const currentKey =
-          paneDestinationsRef.current[focusedPaneRef.current]?.key ?? null
-        const destinations = recentWorkspaceDestinations(
+        const currentDestination =
+          paneDestinationsRef.current[focusedPaneRef.current]
+        const currentKey = currentDestination?.key ?? null
+        const destinations = workspaceSwitcherDestinations(
           workspaceHistoryRef.current,
-          currentKey,
+          currentDestination,
           projects
         )
         if (!destinations.length) return
+        const renderedCurrentKey =
+          destinations[0]?.key === currentKey ? currentKey : null
         setSidebarOpen(true)
         updateWorkspaceSwitcher({
           destinations,
-          selectedIndex: 0,
+          selectedIndex:
+            renderedCurrentKey && destinations.length > 1 ? 1 : 0,
           modifier: event.metaKey ? 'Meta' : 'Control',
           restoreSidebarCollapsed: !sidebarOpen,
           mode: 'recent',
-          projectId: null
+          projectId: null,
+          currentKey: renderedCurrentKey,
+          hoveredKey: null
         })
         return
       }
@@ -2586,6 +2652,8 @@ export function App() {
             destinations={workspaceSwitcher.destinations}
             selectedIndex={workspaceSwitcher.selectedIndex}
             mode={workspaceSwitcher.mode}
+            currentKey={workspaceSwitcher.currentKey}
+            hoveredKey={workspaceSwitcher.hoveredKey}
             projectName={
               projects.find(
                 (project) => project.id === workspaceSwitcher.projectId
@@ -2594,6 +2662,11 @@ export function App() {
             modifierLabel={
               workspaceSwitcher.modifier === 'Meta' ? '⌘' : 'Ctrl'
             }
+            onHoverKey={(hoveredKey) => {
+              const current = workspaceSwitcherRef.current
+              if (!current || current.hoveredKey === hoveredKey) return
+              updateWorkspaceSwitcher({ ...current, hoveredKey })
+            }}
           />
         )}
       </aside>

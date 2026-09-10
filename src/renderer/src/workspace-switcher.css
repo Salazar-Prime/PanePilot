@@ -11,7 +11,6 @@
   flex-direction: column;
   padding: 18px 12px;
   overflow: hidden;
-  pointer-events: none;
   user-select: none;
   border-right: 1px solid #8c96e32e;
   background:
@@ -178,6 +177,16 @@
 
 .workspace-switcher-option[aria-selected="true"] {
   color: #eef0f8;
+}
+
+.workspace-switcher-option.is-current {
+  color: #b9d8d6;
+  background: linear-gradient(90deg, #3e7b7424, #284c4a0d);
+  box-shadow: inset 2px 0 0 #69bdb0a8, inset 0 0 0 1px #69bdb02b;
+}
+
+.workspace-switcher-option.is-removal-target {
+  box-shadow: inset 0 0 0 1px #cf796551;
 }
 
 .workspace-switcher-project-icon {
@@ -360,6 +369,22 @@
 }
 
 .workspace-switcher-option[aria-selected="true"] kbd {
+  opacity: 1;
+}
+
+.workspace-switcher-current-label,
+.workspace-switcher-remove-hint {
+  white-space: nowrap;
+  font: 680 8px "SFMono-Regular", "Cascadia Code", monospace;
+  letter-spacing: 0.01em;
+}
+
+.workspace-switcher-current-label {
+  color: #75c9bc;
+}
+
+.workspace-switcher-option .workspace-switcher-remove-hint {
+  color: #e99a87;
   opacity: 1;
 }
 
