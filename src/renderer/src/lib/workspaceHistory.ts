@@ -263,7 +263,7 @@ export function projectCapabilityDestinations(
           'chats',
           'activity'
         ]
-      : ['terminal', 'actions', 'qna', 'notes', 'files', 'chats', 'activity']
+      : ['actions', 'qna', 'notes', 'files', 'chats', 'activity']
   return tabs.map((tab) => createWorkspaceDestination({ project, tab }))
 }
 

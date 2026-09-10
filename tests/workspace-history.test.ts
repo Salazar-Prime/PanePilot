@@ -352,7 +352,6 @@ describe('recent workspace history', () => {
     expect(
       projectCapabilityDestinations(project).map((item) => item.tab)
     ).toEqual([
-      'terminal',
       'actions',
       'qna',
       'notes',

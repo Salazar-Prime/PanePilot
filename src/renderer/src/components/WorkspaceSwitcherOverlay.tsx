@@ -139,18 +139,18 @@ export function WorkspaceSwitcherOverlay({
         <span>{heading}</span>
         <small>{modifierLabel}↑↓ to choose</small>
       </div>
-      {mode !== 'recent' && (
-        <div className="workspace-switcher-project-context" ref={projectContextRef}>
+        <div className="workspace-switcher-project-context" ref={mode === 'recent' ? undefined : projectContextRef}>
           <span className="workspace-switcher-project-glyph" aria-hidden="true">
-            <ProjectGlyph destination={{
+            {mode === 'recent' ? <History size={22} /> : <ProjectGlyph destination={{
               projectIcon: project?.icon,
               projectType: project?.type ?? 'terminal',
               projectName: project?.name ?? 'Project'
-            }} />
+            }} />}
           </span>
-          <strong>{project?.name ?? 'Selected project'}</strong>
+          <strong title={mode === 'recent' ? 'Recent work' : project?.name}>
+            {mode === 'recent' ? 'Recent work' : project?.name ?? 'Selected project'}
+          </strong>
         </div>
-      )}
       <div
         className={`workspace-switcher-list ${
           mode === 'recent' ? '' : 'drilldown'

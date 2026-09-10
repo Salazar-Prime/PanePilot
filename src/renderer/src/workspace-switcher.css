@@ -58,20 +58,23 @@
   grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
-  margin: 6px 4px 18px;
-  padding: 6px 4px 18px;
+  height: 88px;
+  margin: 0 4px;
+  padding: 0 4px 12px;
   flex-shrink: 0;
-  border-bottom: 1px solid #8d98c324;
 }
 
 .workspace-switcher-project-context strong {
   min-width: 0;
   overflow: hidden;
   color: #dce1f2;
-  font-size: 14px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 24px;
+  line-height: 1.2;
   font-weight: 680;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .workspace-switcher-list {
@@ -82,24 +85,13 @@
   display: grid;
   width: 100%;
   min-height: 0;
-  max-height: calc(100% - 44px);
+  flex-shrink: 1;
   gap: var(--workspace-switcher-gap);
   margin-block: auto;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-color: #6e789344 transparent;
   scrollbar-width: thin;
-}
-
-.workspace-switcher-list.drilldown {
-  max-height: calc(100% - 106px);
-  padding-left: 10px;
-  margin-block: 0 auto;
-}
-
-.mode-capabilities .workspace-switcher-list {
-  --workspace-switcher-row-height: 40px;
-  --workspace-switcher-gap: 6px;
 }
 
 .workspace-switcher-option.workspace-switcher-tool-option {
@@ -113,11 +105,6 @@
   line-height: 20px;
 }
 
-.mode-capabilities .workspace-switcher-list::before,
-.workspace-switcher-list.drilldown .workspace-switcher-tool-option::before {
-  display: none;
-}
-
 .workspace-switcher-motion-layer {
   position: absolute;
   inset: 0;
@@ -128,29 +115,6 @@
 
 .workspace-switcher-motion-row {
   pointer-events: none;
-}
-
-.workspace-switcher-list.drilldown::before {
-  position: absolute;
-  top: 28px;
-  bottom: 28px;
-  left: 3px;
-  width: 1px;
-  background: linear-gradient(#8390cf77, #65708d24);
-  content: "";
-}
-
-.workspace-switcher-list.drilldown .workspace-switcher-option::before {
-  position: absolute;
-  top: 50%;
-  left: -7px;
-  width: 9px;
-  border-top: 1px solid #8390cf5c;
-  content: "";
-}
-
-.workspace-switcher-list.drilldown .workspace-switcher-glass {
-  left: 10px;
 }
 
 .workspace-switcher-glass {
@@ -193,7 +157,8 @@
   color: #8f98a9;
   border: 0;
   border-radius: 12px;
-  background: transparent;
+  background: #a4b1d207;
+  box-shadow: inset 0 0 0 1px #a4b1d20c;
   text-align: left;
   transition: color 150ms ease;
 }
