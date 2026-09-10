@@ -33,6 +33,11 @@ export interface WorkspaceDestination {
 }
 
 export type WorkspaceTerminalIndicator = 'working' | 'attention' | null
+export type WorkspaceSwitcherArrowAction =
+  | 'previous'
+  | 'next'
+  | 'capabilities'
+  | 'terminals'
 
 export interface WorkspaceTabRequest extends WorkspaceRequest {
   tab: WorkspaceTabId
@@ -293,6 +298,28 @@ export function nextWorkspaceSwitcherIndex(
   return destinationCount > 0
     ? (selectedIndex + direction + destinationCount) % destinationCount
     : 0
+}
+
+export function workspaceSwitcherArrowAction(
+  event: Pick<
+    KeyboardEvent,
+    'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey' | 'code'
+  >,
+  switcherOpen: boolean
+): WorkspaceSwitcherArrowAction | null {
+  if (
+    (!event.metaKey && !event.ctrlKey) ||
+    event.altKey ||
+    event.shiftKey
+  ) {
+    return null
+  }
+  if (event.code === 'ArrowUp') return 'previous'
+  if (event.code === 'ArrowDown') return 'next'
+  if (!switcherOpen) return null
+  if (event.code === 'ArrowLeft') return 'capabilities'
+  if (event.code === 'ArrowRight') return 'terminals'
+  return null
 }
 
 export function loadWorkspaceHistory(

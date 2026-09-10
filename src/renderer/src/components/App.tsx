@@ -105,6 +105,7 @@ import {
   recordWorkspaceDestination,
   removeWorkspaceDestination,
   saveWorkspaceHistory,
+  workspaceSwitcherArrowAction,
   workspaceSwitcherDestinations,
   workspaceTabRequestFor,
   type WorkspaceDestination,
@@ -747,12 +748,11 @@ export function App() {
         })
         return
       }
-      const primaryArrow =
-        (event.metaKey || event.ctrlKey) &&
-        !event.altKey &&
-        !event.shiftKey &&
-        ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)
-      if (primaryArrow) {
+      const switcherArrow = workspaceSwitcherArrowAction(
+        event,
+        openSwitcher != null
+      )
+      if (switcherArrow) {
         event.preventDefault()
         event.stopPropagation()
         if (
@@ -761,9 +761,12 @@ export function App() {
           return
         }
         const current = workspaceSwitcherRef.current
-        if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') {
+        if (
+          switcherArrow === 'capabilities' ||
+          switcherArrow === 'terminals'
+        ) {
           drillIntoProject(
-            event.code === 'ArrowRight' ? 'terminals' : 'capabilities',
+            switcherArrow,
             event
           )
           return
@@ -774,7 +777,7 @@ export function App() {
             selectedIndex: nextWorkspaceSwitcherIndex(
               current.selectedIndex,
               current.destinations.length,
-              event.code === 'ArrowUp' ? -1 : 1
+              switcherArrow === 'previous' ? -1 : 1
             )
           })
           return

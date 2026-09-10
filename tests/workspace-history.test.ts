@@ -15,6 +15,7 @@ import {
   recordWorkspaceDestination,
   removeWorkspaceDestination,
   saveWorkspaceHistory,
+  workspaceSwitcherArrowAction,
   workspaceSwitcherDestinations,
   workspaceTerminalIndicator,
   workspaceTabRequestFor
@@ -247,6 +248,31 @@ describe('recent workspace history', () => {
     expect(nextWorkspaceSwitcherIndex(6, 7)).toBe(0)
     expect(nextWorkspaceSwitcherIndex(0, 7, -1)).toBe(6)
     expect(nextWorkspaceSwitcherIndex(0, 0)).toBe(0)
+  })
+
+  it('reserves horizontal primary arrows only while the switcher is open', () => {
+    const shortcut = (code: string) => ({
+      code,
+      metaKey: true,
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: false
+    })
+
+    expect(workspaceSwitcherArrowAction(shortcut('ArrowLeft'), false)).toBeNull()
+    expect(workspaceSwitcherArrowAction(shortcut('ArrowRight'), false)).toBeNull()
+    expect(workspaceSwitcherArrowAction(shortcut('ArrowLeft'), true)).toBe(
+      'capabilities'
+    )
+    expect(workspaceSwitcherArrowAction(shortcut('ArrowRight'), true)).toBe(
+      'terminals'
+    )
+    expect(workspaceSwitcherArrowAction(shortcut('ArrowUp'), false)).toBe(
+      'previous'
+    )
+    expect(workspaceSwitcherArrowAction(shortcut('ArrowDown'), false)).toBe(
+      'next'
+    )
   })
 
   it('hydrates the project icon and live status for terminal destinations', () => {
