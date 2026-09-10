@@ -382,8 +382,7 @@
   opacity: 1;
 }
 
-.workspace-switcher-current-label,
-.workspace-switcher-remove-hint {
+.workspace-switcher-current-label {
   white-space: nowrap;
   font: 680 8px "SFMono-Regular", "Cascadia Code", monospace;
   letter-spacing: 0.01em;
@@ -391,11 +390,6 @@
 
 .workspace-switcher-current-label {
   color: #75c9bc;
-}
-
-.workspace-switcher-option .workspace-switcher-remove-hint {
-  color: #e99a87;
-  opacity: 1;
 }
 
 .workspace-switcher-empty {
