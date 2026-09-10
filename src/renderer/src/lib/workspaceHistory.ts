@@ -148,6 +148,21 @@ export function removeWorkspaceDestination(
   return history.filter((destination) => destination.key !== key)
 }
 
+export function workspaceHistoryRemovalTarget(input: {
+  mode: 'recent' | 'terminals' | 'capabilities'
+  currentKey: string | null
+  hoveredKey: string | null
+  selectedIndex: number
+  destinations: WorkspaceDestination[]
+}): string | null {
+  if (input.mode !== 'recent') return null
+  const key = input.hoveredKey ?? input.destinations[input.selectedIndex]?.key
+  return key && key !== input.currentKey &&
+    input.destinations.some((destination) => destination.key === key)
+    ? key
+    : null
+}
+
 function isSupportedTab(projectType: ProjectType, tab: WorkspaceTabId): boolean {
   return (projectType === 'latex' ? latexTabs : terminalTabs).has(tab)
 }

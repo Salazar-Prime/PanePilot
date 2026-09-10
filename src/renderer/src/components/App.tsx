@@ -104,6 +104,7 @@ import {
   projectTerminalDestinations,
   recordWorkspaceDestination,
   removeWorkspaceDestination,
+  workspaceHistoryRemovalTarget,
   saveWorkspaceHistory,
   workspaceSwitcherArrowAction,
   workspaceSwitcherDestinations,
@@ -159,6 +160,8 @@ interface WorkspaceSwitcherState {
   projectId: string | null
   currentKey: string | null
   hoveredKey: string | null
+  removingKey?: string | null
+  releaseAfterRemoval?: boolean
 }
 
 const RENDERER_STATE_PRIORITY: AgentState[] = [
@@ -573,9 +576,8 @@ export function App() {
   }
 
   function updateWorkspaceSwitcher(next: WorkspaceSwitcherState | null) {
-    // Electron's application menu owns Command-R by default. Yield menu
-    // accelerators only during this held-modifier gesture so R reaches the
-    // renderer removal handler without changing shortcuts anywhere else.
+    // Yield menu accelerators during this held-modifier gesture so the
+    // switcher can handle its own keys.
     const wasOpen = workspaceSwitcherRef.current != null
     const willOpen = next != null
     if (wasOpen !== willOpen) {
@@ -591,6 +593,41 @@ export function App() {
     }
     updateWorkspaceSwitcher(null)
   }
+
+  const removingHistoryKey = workspaceSwitcher?.removingKey
+  useEffect(() => {
+    if (!removingHistoryKey) return
+    const timer = window.setTimeout(() => {
+      const current = workspaceSwitcherRef.current
+      if (!current || current.removingKey !== removingHistoryKey) return
+      if (current.releaseAfterRemoval) {
+        closeWorkspaceSwitcher()
+        return
+      }
+      const selectedKey = current.destinations[current.selectedIndex]?.key
+      const currentDestination = current.destinations.find(
+        (destination) => destination.key === current.currentKey
+      ) ?? null
+      const destinations = workspaceSwitcherDestinations(
+        workspaceHistoryRef.current,
+        currentDestination,
+        projects
+      )
+      const retainedIndex = destinations.findIndex(
+        (destination) => destination.key === selectedKey
+      )
+      updateWorkspaceSwitcher({
+        ...current,
+        destinations,
+        selectedIndex: retainedIndex >= 0
+          ? retainedIndex
+          : Math.max(0, Math.min(current.selectedIndex, destinations.length - 1)),
+        removingKey: null,
+        hoveredKey: null
+      })
+    }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220)
+    return () => window.clearTimeout(timer)
+  }, [removingHistoryKey, projects])
 
   async function refreshSshConnections() {
     setRefreshingConnections(true)
@@ -706,52 +743,22 @@ export function App() {
         openSwitcher &&
         !event.altKey &&
         !event.shiftKey &&
-        event.key.toLocaleLowerCase() === 'r'
+        (event.code === 'KeyD' || event.key.toLocaleLowerCase() === 'd')
       ) {
         event.preventDefault()
         event.stopPropagation()
-        const removableKey =
-          openSwitcher.mode === 'recent' &&
-          openSwitcher.hoveredKey !== openSwitcher.currentKey
-            ? openSwitcher.hoveredKey
-            : null
+        if (event.repeat || openSwitcher.removingKey) return
+        const removableKey = workspaceHistoryRemovalTarget(openSwitcher)
         if (!removableKey) return
-        const selectedKey =
-          openSwitcher.destinations[openSwitcher.selectedIndex]?.key ?? null
         const nextHistory = removeWorkspaceDestination(
           workspaceHistoryRef.current,
           removableKey
         )
         workspaceHistoryRef.current = nextHistory
         saveWorkspaceHistory(window.localStorage, nextHistory)
-        const currentDestination = openSwitcher.currentKey
-          ? openSwitcher.destinations.find(
-              (destination) => destination.key === openSwitcher.currentKey
-            ) ?? null
-          : null
-        const destinations = workspaceSwitcherDestinations(
-          nextHistory,
-          currentDestination,
-          projects
-        )
-        const retainedSelectedIndex = selectedKey
-          ? destinations.findIndex(
-              (destination) => destination.key === selectedKey
-            )
-          : -1
         updateWorkspaceSwitcher({
           ...openSwitcher,
-          destinations,
-          selectedIndex:
-            retainedSelectedIndex >= 0
-              ? retainedSelectedIndex
-              : Math.max(
-                  0,
-                  Math.min(
-                    openSwitcher.selectedIndex,
-                    destinations.length - 1
-                  )
-                ),
+          removingKey: removableKey,
           hoveredKey: null
         })
         return
@@ -763,6 +770,7 @@ export function App() {
       if (switcherArrow) {
         event.preventDefault()
         event.stopPropagation()
+        if (openSwitcher?.removingKey) return
         if (
           document.querySelector('[role="dialog"][aria-modal="true"]') != null
         ) {
@@ -857,6 +865,10 @@ export function App() {
     const handleShortcutRelease = (event: KeyboardEvent) => {
       const current = workspaceSwitcherRef.current
       if (!current || event.key !== current.modifier) return
+      if (current.removingKey) {
+        updateWorkspaceSwitcher({ ...current, releaseAfterRemoval: true })
+        return
+      }
       const destination = current.destinations[current.selectedIndex]
       closeWorkspaceSwitcher()
       if (destination) activateWorkspaceDestination(destination)
@@ -2665,6 +2677,7 @@ export function App() {
             mode={workspaceSwitcher.mode}
             currentKey={workspaceSwitcher.currentKey}
             hoveredKey={workspaceSwitcher.hoveredKey}
+            removingKey={workspaceSwitcher.removingKey ?? null}
             projectName={
               projects.find(
                 (project) => project.id === workspaceSwitcher.projectId
@@ -2675,7 +2688,7 @@ export function App() {
             }
             onHoverKey={(hoveredKey) => {
               const current = workspaceSwitcherRef.current
-              if (!current || current.hoveredKey === hoveredKey) return
+              if (!current || current.removingKey || current.hoveredKey === hoveredKey) return
               updateWorkspaceSwitcher({ ...current, hoveredKey })
             }}
           />

@@ -26,6 +26,7 @@ interface WorkspaceSwitcherOverlayProps {
   projectName?: string
   currentKey: string | null
   hoveredKey: string | null
+  removingKey: string | null
   onHoverKey(key: string | null): void
 }
 
@@ -98,6 +99,7 @@ export function WorkspaceSwitcherOverlay({
   projectName,
   currentKey,
   hoveredKey,
+  removingKey,
   onHoverKey
 }: WorkspaceSwitcherOverlayProps) {
   const listRef = useRef<HTMLDivElement>(null)
@@ -156,12 +158,13 @@ export function WorkspaceSwitcherOverlay({
             ? destinations[hoveredIndex]
             : null
           onHoverKey(
-            mode === 'recent' && destination?.key !== currentKey
+            mode === 'recent'
               ? destination?.key ?? null
               : null
           )
         }}
         onMouseLeave={() => onHoverKey(null)}
+        onScroll={() => onHoverKey(null)}
       >
         {destinations.length > 0 && (
           <div className="workspace-switcher-glass" aria-hidden="true" />
@@ -172,13 +175,15 @@ export function WorkspaceSwitcherOverlay({
           const isRemovalTarget =
             mode === 'recent' &&
             !isCurrent &&
-            destination.key === hoveredKey
+            destination.key === (hoveredKey ?? destinations[selectedIndex]?.key)
           return (
             <div
               key={destination.key}
               className={`workspace-switcher-option ${
                 isCurrent ? 'is-current' : ''
-              } ${isRemovalTarget ? 'is-removal-target' : ''}`}
+              } ${isRemovalTarget ? 'is-removal-target' : ''} ${
+                destination.key === removingKey ? 'is-removing' : ''
+              }`}
               role="option"
               aria-selected={index === selectedIndex}
               aria-current={isCurrent ? 'page' : undefined}
@@ -216,7 +221,7 @@ export function WorkspaceSwitcherOverlay({
                   </span>
                 ) : isRemovalTarget ? (
                   <kbd className="workspace-switcher-remove-hint">
-                    R remove
+                    D remove
                   </kbd>
                 ) : (
                   <kbd>{modifierLabel}↑↓</kbd>
@@ -236,7 +241,7 @@ export function WorkspaceSwitcherOverlay({
       <div className="workspace-switcher-footer" aria-hidden="true">
         <span>{modifierLabel}← tools</span>
         <span>{modifierLabel}→ terminals</span>
-        {mode === 'recent' && <span>hover + R remove</span>}
+        {mode === 'recent' && <span>D removes hovered or selected item</span>}
         <span>release {modifierLabel} to open</span>
       </div>
     </div>

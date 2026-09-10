@@ -14,6 +14,7 @@ import {
   recentWorkspaceDestinations,
   recordWorkspaceDestination,
   removeWorkspaceDestination,
+  workspaceHistoryRemovalTarget,
   saveWorkspaceHistory,
   workspaceSwitcherArrowAction,
   workspaceSwitcherDestinations,
@@ -373,7 +374,7 @@ describe('recent workspace history', () => {
     expect(styles).toContain('user-select: none')
   })
 
-  it('temporarily yields Electron menu accelerators so Command-R reaches history', () => {
+  it('temporarily yields Electron menu accelerators to history', () => {
     const app = readFileSync(
       join(process.cwd(), 'src', 'renderer', 'src', 'components', 'App.tsx'),
       'utf8'
@@ -391,5 +392,24 @@ describe('recent workspace history', () => {
     expect(preload).toContain("workspace-history:set-switcher-open")
     expect(main).toContain('setIgnoreMenuShortcuts(open === true)')
     expect(main).toContain('setIgnoreMenuShortcuts(false)')
+  })
+
+  it('removes the keyboard selection or hovered history row while protecting Current', () => {
+    const notes = createWorkspaceDestination({ project, tab: 'notes' })
+    const files = createWorkspaceDestination({ project, tab: 'files' })
+    const chats = createWorkspaceDestination({ project, tab: 'chats' })
+    const state = {
+      mode: 'recent' as const,
+      currentKey: notes.key,
+      hoveredKey: null,
+      selectedIndex: 1,
+      destinations: [notes, files, chats]
+    }
+    expect(workspaceHistoryRemovalTarget(state)).toBe(files.key)
+    expect(workspaceHistoryRemovalTarget({ ...state, hoveredKey: chats.key })).toBe(chats.key)
+    expect(workspaceHistoryRemovalTarget({ ...state, hoveredKey: notes.key })).toBeNull()
+    expect(workspaceHistoryRemovalTarget({ ...state, selectedIndex: 0 })).toBeNull()
+    expect(workspaceHistoryRemovalTarget({ ...state, mode: 'terminals' })).toBeNull()
+    expect(workspaceHistoryRemovalTarget({ ...state, hoveredKey: 'missing' })).toBeNull()
   })
 })

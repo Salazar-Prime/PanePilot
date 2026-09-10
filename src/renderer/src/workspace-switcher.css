@@ -431,6 +431,16 @@
   }
 }
 
+.workspace-switcher-option.is-removing {
+  pointer-events: none;
+  animation: workspace-switcher-remove 200ms ease-in forwards;
+}
+
+@keyframes workspace-switcher-remove {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-115%); opacity: 0; }
+}
+
 @keyframes workspace-switcher-working {
   0%,
   100% {
@@ -444,6 +454,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .workspace-switcher-option.is-removing {
+    animation: none;
+    opacity: 0;
+  }
+
   .workspace-switcher-overlay {
     animation: none;
   }
