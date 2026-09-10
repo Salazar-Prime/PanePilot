@@ -108,6 +108,12 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+  mainWindow.on('blur', () => {
+    mainWindow?.webContents.setIgnoreMenuShortcuts(false)
+  })
+  mainWindow.webContents.on('did-start-loading', () => {
+    mainWindow?.webContents.setIgnoreMenuShortcuts(false)
+  })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void openExternalWebUrl(url).catch((error) => {
       console.error('Could not open external URL.', error)
@@ -123,6 +129,13 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.on(
+    'workspace-history:set-switcher-open',
+    (event, open: unknown) => {
+      if (event.sender !== mainWindow?.webContents) return
+      event.sender.setIgnoreMenuShortcuts(open === true)
+    }
+  )
   ipcMain.handle('connections:list', () => store.listConnections())
   ipcMain.handle('connections:refresh', () => {
     store.syncConnections(discoverSshAliases())

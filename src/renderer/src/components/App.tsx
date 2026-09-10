@@ -573,6 +573,14 @@ export function App() {
   }
 
   function updateWorkspaceSwitcher(next: WorkspaceSwitcherState | null) {
+    // Electron's application menu owns Command-R by default. Yield menu
+    // accelerators only during this held-modifier gesture so R reaches the
+    // renderer removal handler without changing shortcuts anywhere else.
+    const wasOpen = workspaceSwitcherRef.current != null
+    const willOpen = next != null
+    if (wasOpen !== willOpen) {
+      window.projectConsole.workspaceHistory?.setSwitcherOpen(willOpen)
+    }
     workspaceSwitcherRef.current = next
     setWorkspaceSwitcher(next)
   }

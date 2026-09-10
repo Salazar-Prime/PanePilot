@@ -697,6 +697,9 @@ export interface ProjectConsoleApi {
     testConnection(): Promise<SpeechConnectionTestResult>
     synthesize(input: SynthesizeSpeechInput): Promise<SynthesizeSpeechResult>
   }
+  workspaceHistory: {
+    setSwitcherOpen(open: boolean): void
+  }
   system: {
     copyText(text: string): Promise<void>
     readText(): Promise<string>

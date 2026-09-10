@@ -264,6 +264,10 @@ const api: ProjectConsoleApi = {
     synthesize: (input: SynthesizeSpeechInput) =>
       ipcRenderer.invoke('speech:synthesize', input)
   },
+  workspaceHistory: {
+    setSwitcherOpen: (open: boolean) =>
+      ipcRenderer.send('workspace-history:set-switcher-open', open)
+  },
   system: {
     copyText: (text: string) => ipcRenderer.invoke('system:copy-text', text),
     readText: () => ipcRenderer.invoke('system:read-text'),

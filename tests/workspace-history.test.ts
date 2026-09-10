@@ -372,4 +372,24 @@ describe('recent workspace history', () => {
     expect(component).not.toContain('onSelect')
     expect(styles).toContain('user-select: none')
   })
+
+  it('temporarily yields Electron menu accelerators so Command-R reaches history', () => {
+    const app = readFileSync(
+      join(process.cwd(), 'src', 'renderer', 'src', 'components', 'App.tsx'),
+      'utf8'
+    )
+    const preload = readFileSync(
+      join(process.cwd(), 'src', 'preload', 'index.ts'),
+      'utf8'
+    )
+    const main = readFileSync(
+      join(process.cwd(), 'src', 'main', 'index.ts'),
+      'utf8'
+    )
+
+    expect(app).toContain('workspaceHistory?.setSwitcherOpen(willOpen)')
+    expect(preload).toContain("workspace-history:set-switcher-open")
+    expect(main).toContain('setIgnoreMenuShortcuts(open === true)')
+    expect(main).toContain('setIgnoreMenuShortcuts(false)')
+  })
 })
