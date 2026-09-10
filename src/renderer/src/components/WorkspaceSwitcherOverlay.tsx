@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { useLayoutEffect, useRef, type CSSProperties } from 'react'
 import {
   Activity,
   FileText,
@@ -103,6 +103,12 @@ export function WorkspaceSwitcherOverlay({
   onHoverKey
 }: WorkspaceSwitcherOverlayProps) {
   const listRef = useRef<HTMLDivElement>(null)
+  const projectContextRef = useRef<HTMLDivElement>(null)
+  const transitionRef = useRef<{
+    view: string
+    origin: { x: number; y: number } | null
+  } | null>(null)
+  const animationsRef = useRef<Animation[]>([])
   const modeLabels = { recent: 'history', capabilities: 'tools', terminals: 'terminals' }
   const previousView = modeLabels[nextWorkspaceSwitcherMode(mode, -1)]
   const nextView = modeLabels[nextWorkspaceSwitcherMode(mode, 1)]
@@ -116,11 +122,70 @@ export function WorkspaceSwitcherOverlay({
         ? 'PROJECT TOOLS'
         : 'RECENT WORK'
 
-  useEffect(() => {
-    listRef.current
-      ?.querySelector<HTMLElement>('[aria-selected="true"]')
-      ?.scrollIntoView({ block: 'nearest' })
-  }, [mode, selectedIndex])
+  useLayoutEffect(() => {
+    // Finish measuring the destination layout before applying visual transforms.
+    // The previous selected project glyph is the origin of the next view.
+    for (const animation of animationsRef.current) animation.cancel()
+    animationsRef.current = []
+    const list = listRef.current
+    if (!list) return
+    const selected = list.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (selected) {
+      const viewport = list.getBoundingClientRect()
+      const bounds = selected.getBoundingClientRect()
+      if (bounds.top < viewport.top) list.scrollTop += bounds.top - viewport.top
+      else if (bounds.bottom > viewport.bottom) list.scrollTop += bounds.bottom - viewport.bottom
+    }
+    const previous = transitionRef.current
+    const view = `${mode}:${projectName ?? ''}`
+    const source = (mode === 'recent'
+      ? selected?.querySelector('.workspace-switcher-project-glyph')
+      : projectContextRef.current) ?? selected
+    const sourceBounds = source?.getBoundingClientRect()
+    transitionRef.current = {
+      view,
+      origin: sourceBounds
+        ? { x: sourceBounds.left + 17, y: sourceBounds.top + sourceBounds.height / 2 }
+        : null
+    }
+    if (
+      !previous?.origin || previous.view === view || removingKey ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) return
+
+    const viewport = list.getBoundingClientRect()
+    const rows = Array.from(list.querySelectorAll<HTMLElement>('.workspace-switcher-option'))
+      .filter((row) => {
+        const bounds = row.getBoundingClientRect()
+        return bounds.bottom > viewport.top && bounds.top < viewport.bottom
+      })
+    const origin = previous.origin
+    const context = projectContextRef.current
+    const entering = context ? [context, ...rows] : rows
+    for (const [index, element] of entering.entries()) {
+      const bounds = element.getBoundingClientRect()
+      const x = origin.x - bounds.left
+      const y = origin.y - (bounds.top + bounds.height / 2)
+      const animation = element.animate([
+        {
+          transform: `translate(${x}px, ${y}px) scale(0.18, 0.35)`,
+          transformOrigin: '0 50%',
+          opacity: 0
+        },
+        { transform: 'translate(0, 0) scale(1)', transformOrigin: '0 50%', opacity: 1 }
+      ], {
+        duration: mode === 'recent' ? 220 : 280,
+        delay: Math.min(index, 7) * 16,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        fill: 'backwards'
+      })
+      animationsRef.current.push(animation)
+    }
+    return () => {
+      for (const animation of animationsRef.current) animation.cancel()
+      animationsRef.current = []
+    }
+  }, [mode, projectName, selectedIndex, removingKey])
 
   return (
     <div
@@ -133,7 +198,7 @@ export function WorkspaceSwitcherOverlay({
         <small>{modifierLabel}↑↓ to choose</small>
       </div>
       {mode !== 'recent' && (
-        <div className="workspace-switcher-project-context">
+        <div className="workspace-switcher-project-context" ref={projectContextRef}>
           <span>PROJECT</span>
           <strong>{projectName ?? 'Selected project'}</strong>
           <small>
