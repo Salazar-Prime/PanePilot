@@ -362,6 +362,28 @@ describe('recent workspace history', () => {
     ])
   })
 
+  it('sorts each project terminal by recent history, with access history as fallback', () => {
+    const sessions = [
+      { ...session, id: 'older', name: 'Older', pinned: true },
+      { ...session, id: 'first', name: 'First' },
+      { ...session, id: 'second', name: 'Second' },
+      { ...session, id: 'fallback', name: 'Fallback' }
+    ]
+    const owner = { ...project, sessions }
+    const history = ['second', 'first'].map((sessionId) =>
+      createWorkspaceDestination({ project: owner, tab: 'terminal', sessionId })
+    )
+    const destinations = projectTerminalDestinations(owner, history, { fallback: 3, older: 1 })
+    expect(destinations.map((item) => item.sessionId)).toEqual([
+      'second', 'first', 'fallback', 'older'
+    ])
+    // Two entries from the same project retain separate animation identities.
+    expect(destinations.slice(0, 2).map((item) => item.key)).toEqual(
+      history.map((item) => item.key)
+    )
+    expect(owner.sessions.map((item) => item.id)).toEqual(['older', 'first', 'second', 'fallback'])
+  })
+
   it('keeps the transient switcher keyboard-only', () => {
     const component = readFileSync(
       join(

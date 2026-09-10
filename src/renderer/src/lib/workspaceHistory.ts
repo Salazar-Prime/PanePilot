@@ -218,11 +218,25 @@ function hydrateDestination(
 }
 
 export function projectTerminalDestinations(
-  project: Project
+  project: Project,
+  history: WorkspaceDestination[] = [],
+  selectionRecency: Record<string, number> = {}
 ): WorkspaceDestination[] {
   if (project.archived) return []
+  const ranks = new Map<string, number>()
+  for (const destination of history) {
+    if (destination.projectId !== project.id || destination.tab !== 'terminal' ||
+      !destination.sessionId || ranks.has(destination.sessionId)) continue
+    ranks.set(destination.sessionId, ranks.size)
+  }
   return project.sessions
     .filter((session) => session.kind === 'terminal' && !session.archived)
+    .sort((left, right) => {
+      const rankOrder = (ranks.get(left.id) ?? Infinity) - (ranks.get(right.id) ?? Infinity)
+      if (!Number.isNaN(rankOrder) && rankOrder !== 0) return rankOrder
+      return (selectionRecency[right.id] ?? 0) - (selectionRecency[left.id] ?? 0) ||
+        Date.parse(right.createdAt) - Date.parse(left.createdAt)
+    })
     .map((session) =>
       createWorkspaceDestination({
         project,

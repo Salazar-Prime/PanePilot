@@ -1,4 +1,6 @@
-import { useLayoutEffect, useRef, type CSSProperties } from 'react'
+import { useRef, type CSSProperties } from 'react'
+import type { Project } from '@shared/types'
+import { useWorkspaceSwitcherMotion } from '../lib/useWorkspaceSwitcherMotion'
 import {
   Activity,
   FileText,
@@ -23,7 +25,7 @@ interface WorkspaceSwitcherOverlayProps {
   selectedIndex: number
   modifierLabel: string
   mode: 'recent' | 'terminals' | 'capabilities'
-  projectName?: string
+  project?: Pick<Project, 'id' | 'name' | 'icon' | 'type'>
   currentKey: string | null
   hoveredKey: string | null
   removingKey: string | null
@@ -43,7 +45,9 @@ function DestinationIcon({ tab }: { tab: WorkspaceTabId }) {
   return <Activity size={11} />
 }
 
-function ProjectGlyph({ destination }: { destination: WorkspaceDestination }) {
+function ProjectGlyph({ destination }: {
+  destination: Pick<WorkspaceDestination, 'projectIcon' | 'projectType' | 'projectName'>
+}) {
   if (destination.projectIcon) return destination.projectIcon
   if (destination.projectType === 'latex') return <FileType2 size={17} />
   return destination.projectName.slice(0, 1).toUpperCase()
@@ -96,19 +100,16 @@ export function WorkspaceSwitcherOverlay({
   selectedIndex,
   modifierLabel,
   mode,
-  projectName,
+  project,
   currentKey,
   hoveredKey,
   removingKey,
   onHoverKey
 }: WorkspaceSwitcherOverlayProps) {
   const listRef = useRef<HTMLDivElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const motionRef = useRef<HTMLDivElement>(null)
   const projectContextRef = useRef<HTMLDivElement>(null)
-  const transitionRef = useRef<{
-    view: string
-    origin: { x: number; y: number } | null
-  } | null>(null)
-  const animationsRef = useRef<Animation[]>([])
   const modeLabels = { recent: 'history', capabilities: 'tools', terminals: 'terminals' }
   const previousView = modeLabels[nextWorkspaceSwitcherMode(mode, -1)]
   const nextView = modeLabels[nextWorkspaceSwitcherMode(mode, 1)]
@@ -122,76 +123,17 @@ export function WorkspaceSwitcherOverlay({
         ? 'PROJECT TOOLS'
         : 'RECENT WORK'
 
-  useLayoutEffect(() => {
-    // Finish measuring the destination layout before applying visual transforms.
-    // The previous selected project glyph is the origin of the next view.
-    for (const animation of animationsRef.current) animation.cancel()
-    animationsRef.current = []
-    const list = listRef.current
-    if (!list) return
-    const selected = list.querySelector<HTMLElement>('[aria-selected="true"]')
-    if (selected) {
-      const viewport = list.getBoundingClientRect()
-      const bounds = selected.getBoundingClientRect()
-      if (bounds.top < viewport.top) list.scrollTop += bounds.top - viewport.top
-      else if (bounds.bottom > viewport.bottom) list.scrollTop += bounds.bottom - viewport.bottom
-    }
-    const previous = transitionRef.current
-    const view = `${mode}:${projectName ?? ''}`
-    const source = (mode === 'recent'
-      ? selected?.querySelector('.workspace-switcher-project-glyph')
-      : projectContextRef.current) ?? selected
-    const sourceBounds = source?.getBoundingClientRect()
-    transitionRef.current = {
-      view,
-      origin: sourceBounds
-        ? { x: sourceBounds.left + 17, y: sourceBounds.top + sourceBounds.height / 2 }
-        : null
-    }
-    if (
-      !previous?.origin || previous.view === view || removingKey ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) return
-
-    const viewport = list.getBoundingClientRect()
-    const rows = Array.from(list.querySelectorAll<HTMLElement>('.workspace-switcher-option'))
-      .filter((row) => {
-        const bounds = row.getBoundingClientRect()
-        return bounds.bottom > viewport.top && bounds.top < viewport.bottom
-      })
-    const origin = previous.origin
-    const context = projectContextRef.current
-    const entering = context ? [context, ...rows] : rows
-    for (const [index, element] of entering.entries()) {
-      const bounds = element.getBoundingClientRect()
-      const x = origin.x - bounds.left
-      const y = origin.y - (bounds.top + bounds.height / 2)
-      const animation = element.animate([
-        {
-          transform: `translate(${x}px, ${y}px) scale(0.18, 0.35)`,
-          transformOrigin: '0 50%',
-          opacity: 0
-        },
-        { transform: 'translate(0, 0) scale(1)', transformOrigin: '0 50%', opacity: 1 }
-      ], {
-        duration: mode === 'recent' ? 220 : 280,
-        delay: Math.min(index, 7) * 16,
-        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-        fill: 'backwards'
-      })
-      animationsRef.current.push(animation)
-    }
-    return () => {
-      for (const animation of animationsRef.current) animation.cancel()
-      animationsRef.current = []
-    }
-  }, [mode, projectName, selectedIndex, removingKey])
+  useWorkspaceSwitcherMotion({
+    overlayRef, listRef, contextRef: projectContextRef, motionRef,
+    mode, projectId: project?.id, destinations, selectedIndex, removingKey
+  })
 
   return (
     <div
       className={`workspace-switcher-overlay mode-${mode}`}
       role="presentation"
       data-testid="workspace-switcher"
+      ref={overlayRef}
     >
       <div className="workspace-switcher-header">
         <span>{heading}</span>
@@ -199,11 +141,14 @@ export function WorkspaceSwitcherOverlay({
       </div>
       {mode !== 'recent' && (
         <div className="workspace-switcher-project-context" ref={projectContextRef}>
-          <span>PROJECT</span>
-          <strong>{projectName ?? 'Selected project'}</strong>
-          <small>
-            {modifierLabel}← {previousView}&nbsp;&nbsp;{modifierLabel}→ {nextView}
-          </small>
+          <span className="workspace-switcher-project-glyph" aria-hidden="true">
+            <ProjectGlyph destination={{
+              projectIcon: project?.icon,
+              projectType: project?.type ?? 'terminal',
+              projectName: project?.name ?? 'Project'
+            }} />
+          </span>
+          <strong>{project?.name ?? 'Selected project'}</strong>
         </div>
       )}
       <div
@@ -251,12 +196,17 @@ export function WorkspaceSwitcherOverlay({
                 isCurrent ? 'is-current' : ''
               } ${isRemovalTarget ? 'is-removal-target' : ''} ${
                 destination.key === removingKey ? 'is-removing' : ''
+              } ${
+                mode === 'capabilities' ? 'workspace-switcher-tool-option' : ''
               }`}
               role="option"
               aria-selected={index === selectedIndex}
               aria-current={isCurrent ? 'page' : undefined}
               data-workspace-option-index={index}
             >
+              {mode === 'capabilities' ? (
+                <strong className="workspace-switcher-tool-label">{destination.tabLabel}</strong>
+              ) : (<>
               <span
                 className="workspace-switcher-project-icon"
                 aria-hidden="true"
@@ -294,6 +244,7 @@ export function WorkspaceSwitcherOverlay({
                   <kbd>{modifierLabel}↑↓</kbd>
                 )}
               </span>
+              </>)}
             </div>
           )
         })}
@@ -310,6 +261,7 @@ export function WorkspaceSwitcherOverlay({
         <span>{modifierLabel}→ {nextView}</span>
         <span>release {modifierLabel} to open</span>
       </div>
+      <div className="workspace-switcher-motion-layer" ref={motionRef} aria-hidden="true" />
     </div>
   )
 }

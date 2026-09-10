@@ -730,7 +730,7 @@ export function App() {
       if (!project) return
       const destinations =
         mode === 'terminals'
-          ? projectTerminalDestinations(project)
+          ? projectTerminalDestinations(project, workspaceHistoryRef.current, selectionRecency.sessions)
           : projectCapabilityDestinations(project)
       const preferredIndex = sourceDestination
         ? destinations.findIndex((destination) =>
@@ -742,7 +742,7 @@ export function App() {
       setSidebarOpen(true)
       updateWorkspaceSwitcher({
         destinations,
-        selectedIndex: preferredIndex >= 0 ? preferredIndex : 0,
+        selectedIndex: mode === 'capabilities' ? 0 : preferredIndex >= 0 ? preferredIndex : 0,
         modifier:
           current?.modifier ?? (event.metaKey ? 'Meta' : 'Control'),
         restoreSidebarCollapsed:
@@ -908,6 +908,7 @@ export function App() {
     paneBSessionId,
     showArchivedProjects,
     projects,
+    selectionRecency.sessions,
     sidebarOpen
   ])
 
@@ -2696,10 +2697,10 @@ export function App() {
             currentKey={workspaceSwitcher.currentKey}
             hoveredKey={workspaceSwitcher.hoveredKey}
             removingKey={workspaceSwitcher.removingKey ?? null}
-            projectName={
+            project={
               projects.find(
                 (project) => project.id === workspaceSwitcher.projectId
-              )?.name
+              )
             }
             modifierLabel={
               workspaceSwitcher.modifier === 'Meta' ? '⌘' : 'Ctrl'

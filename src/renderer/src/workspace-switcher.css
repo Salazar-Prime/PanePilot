@@ -53,36 +53,25 @@
 
 .workspace-switcher-project-context {
   position: relative;
-  z-index: 1;
+  z-index: 4;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  gap: 4px 8px;
-  margin: 0 4px 14px;
-  padding: 0 4px 12px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 6px 4px 18px;
+  padding: 6px 4px 18px;
+  flex-shrink: 0;
   border-bottom: 1px solid #8d98c324;
-}
-
-.workspace-switcher-project-context > span {
-  color: #717b92;
-  font: 680 7px "SFMono-Regular", "Cascadia Code", monospace;
-  letter-spacing: 0.12em;
 }
 
 .workspace-switcher-project-context strong {
   min-width: 0;
   overflow: hidden;
   color: #dce1f2;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 680;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.workspace-switcher-project-context small {
-  grid-column: 1 / -1;
-  color: #778198;
-  font: 570 8px "SFMono-Regular", "Cascadia Code", monospace;
 }
 
 .workspace-switcher-list {
@@ -105,6 +94,40 @@
 .workspace-switcher-list.drilldown {
   max-height: calc(100% - 106px);
   padding-left: 10px;
+  margin-block: 0 auto;
+}
+
+.mode-capabilities .workspace-switcher-list {
+  --workspace-switcher-row-height: 40px;
+  --workspace-switcher-gap: 6px;
+}
+
+.workspace-switcher-option.workspace-switcher-tool-option {
+  grid-template-columns: minmax(0, 1fr);
+  padding-inline: 15px;
+}
+
+.workspace-switcher-tool-label {
+  font-size: 13px;
+  font-weight: 570;
+  line-height: 20px;
+}
+
+.mode-capabilities .workspace-switcher-list::before,
+.workspace-switcher-list.drilldown .workspace-switcher-tool-option::before {
+  display: none;
+}
+
+.workspace-switcher-motion-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.workspace-switcher-motion-row {
+  pointer-events: none;
 }
 
 .workspace-switcher-list.drilldown::before {
