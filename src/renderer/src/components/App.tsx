@@ -114,6 +114,7 @@ import {
   type WorkspaceTabRequest
 } from '../lib/workspaceHistory'
 import { projectTypeRegistry } from '../projectTypeRegistry'
+import { WorkspaceSwitcherReleaseGuard } from '../lib/workspaceSwitcherRelease'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
 import { AppearanceControl } from './AppearanceControl'
 import {
@@ -162,7 +163,6 @@ interface WorkspaceSwitcherState {
   currentKey: string | null
   hoveredKey: string | null
   removingKey?: string | null
-  releaseAfterRemoval?: boolean
 }
 
 const RENDERER_STATE_PRIORITY: AgentState[] = [
@@ -305,6 +305,13 @@ export function App() {
   const [workspaceSwitcher, setWorkspaceSwitcher] =
     useState<WorkspaceSwitcherState | null>(null)
   const workspaceSwitcherRef = useRef<WorkspaceSwitcherState | null>(null)
+  const workspaceSwitcherReleaseRef = useRef<WorkspaceSwitcherReleaseGuard | null>(null)
+  if (!workspaceSwitcherReleaseRef.current) {
+    workspaceSwitcherReleaseRef.current = new WorkspaceSwitcherReleaseGuard(
+      () => document.hasFocus() && !document.hidden
+    )
+  }
+  useEffect(() => () => workspaceSwitcherReleaseRef.current?.reset(), [])
   const [sidebarContext, setSidebarContext] = useState<SidebarContext | null>(null)
   const [projectSortMenu, setProjectSortMenu] = useState<{
     connectionId: string
@@ -582,6 +589,7 @@ export function App() {
     const wasOpen = workspaceSwitcherRef.current != null
     const willOpen = next != null
     if (wasOpen !== willOpen) {
+      workspaceSwitcherReleaseRef.current?.reset()
       window.projectConsole.workspaceHistory?.setSwitcherOpen(willOpen)
     }
     workspaceSwitcherRef.current = next
@@ -601,10 +609,6 @@ export function App() {
     const timer = window.setTimeout(() => {
       const current = workspaceSwitcherRef.current
       if (!current || current.removingKey !== removingHistoryKey) return
-      if (current.releaseAfterRemoval) {
-        closeWorkspaceSwitcher()
-        return
-      }
       const selectedKey = current.destinations[current.selectedIndex]?.key
       const currentDestination = current.destinations.find(
         (destination) => destination.key === current.currentKey
@@ -755,6 +759,9 @@ export function App() {
     }
 
     const handleShortcut = (event: KeyboardEvent) => {
+      workspaceSwitcherReleaseRef.current?.observe(
+        event, workspaceSwitcherRef.current?.modifier ?? null
+      )
       if (event.isComposing) return
       const openSwitcher = workspaceSwitcherRef.current
       if (
@@ -881,24 +888,37 @@ export function App() {
       }
     }
     const handleShortcutRelease = (event: KeyboardEvent) => {
-      const current = workspaceSwitcherRef.current
-      if (!current || event.key !== current.modifier) return
-      if (current.removingKey) {
-        updateWorkspaceSwitcher({ ...current, releaseAfterRemoval: true })
-        return
-      }
-      const destination = current.destinations[current.selectedIndex]
-      closeWorkspaceSwitcher()
-      if (destination) activateWorkspaceDestination(destination)
+      const releasedSwitcher = workspaceSwitcherRef.current
+      // Releasing during a deletion never opens the replacement row, even
+      // if its swipe animation finishes before release confirmation.
+      const wasRemoving = Boolean(releasedSwitcher?.removingKey)
+      workspaceSwitcherReleaseRef.current?.observe(
+        event, releasedSwitcher?.modifier ?? null, () => {
+          const current = workspaceSwitcherRef.current
+          if (!current) return
+          if (wasRemoving || current.removingKey) {
+            closeWorkspaceSwitcher()
+            return
+          }
+          const destination = current.destinations[current.selectedIndex]
+          closeWorkspaceSwitcher()
+          if (destination) activateWorkspaceDestination(destination)
+        }
+      )
     }
     const cancelSwitcher = () => closeWorkspaceSwitcher()
+    const handleVisibilityChange = () => {
+      if (document.hidden) cancelSwitcher()
+    }
     window.addEventListener('keydown', handleShortcut, true)
     window.addEventListener('keyup', handleShortcutRelease, true)
     window.addEventListener('blur', cancelSwitcher)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       window.removeEventListener('keydown', handleShortcut, true)
       window.removeEventListener('keyup', handleShortcutRelease, true)
       window.removeEventListener('blur', cancelSwitcher)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [
     splitOpen,
