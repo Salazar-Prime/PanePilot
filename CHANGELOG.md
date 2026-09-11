@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.0 — 2026-09-11
+
+This release adds fast keyboard navigation across active PanePilot workspaces:
+
+- Command/Control-Up or Down opens client-local recent-work history for projects,
+  terminal tabs, and project capabilities. Keep the modifier held to move through
+  destinations, then release it to open the selection in the focused pane.
+- While the switcher is open, Left or Right moves between Recent work, Project tools,
+  and Project terminals. Project and capability icons, exact terminal attention
+  states, removable recent entries, animated transitions, and reduced-motion support
+  make the destination clear without changing manual tab or sidebar order.
+- Remote terminal launches now perform tmux discovery and name-collision checks
+  asynchronously, and recovered SSH terminal transports resume accepting input.
+
+The v0.9.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.8.3 — 2026-09-02
 
 This patch release improves responsive project switching:

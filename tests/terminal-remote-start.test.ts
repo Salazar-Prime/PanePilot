@@ -11,9 +11,12 @@ import { TerminalManager } from '../src/main/terminal-manager'
 describe('remote terminal start', () => {
   let temporaryRoot: string | null = null
   const originalPath = process.env.PATH
+  const originalShell = process.env.SHELL
 
   afterEach(() => {
     process.env.PATH = originalPath
+    if (originalShell == null) delete process.env.SHELL
+    else process.env.SHELL = originalShell
     if (temporaryRoot) rmSync(temporaryRoot, { recursive: true, force: true })
     temporaryRoot = null
   })
@@ -36,6 +39,7 @@ describe('remote terminal start', () => {
     )
     chmodSync(fakeSsh, 0o755)
     process.env.PATH = `${fakeBin}:${originalPath ?? ''}`
+    process.env.SHELL = '/bin/sh'
 
     const appData = join(temporaryRoot, 'data')
     mkdirSync(appData)

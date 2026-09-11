@@ -165,13 +165,16 @@ Monaco text—between Compact (90%), Standard (100%), Comfortable (110%), and La
 (125%). The client-local choice survives restarts. Interface zoom has no keyboard
 shortcut; use this toolbar control to change it.
 
-Press **Command/Control-minus** to revisit recent work. PanePilot tints only the left
-sidebar and shows up to five recent project destinations, including terminal tabs,
-Files, Notes, Actions, and other project capabilities. One tap selects the previous
-destination. Keep holding Command/Control and tap minus again to move the glass
-highlight; release the modifier to open the selection in the focused pane. Rows show
-the project glyph with a color-coded capability badge. Terminal rows also identify
-live Working and Needs attention states without adding status noise to other tools.
+Press **Command/Control-Up or Down** to revisit recent work. PanePilot tints only the
+left sidebar and shows the current destination with up to seven prior destinations,
+including terminal tabs, Files, Notes, Actions, and other project capabilities. The
+first press selects the previous destination. Keep holding Command/Control and use Up
+or Down to move the glass highlight; release the modifier to open the selection in the
+focused pane. While the switcher is open, Left or Right cycles between Recent work,
+Project tools, and Project terminals, and `D` removes a selected recent destination.
+Rows show the project glyph with a color-coded capability badge. Terminal rows also
+identify Working, Needs attention, and Flagged states without adding status noise to
+other tools.
 
 Hold **Control** and tap **?** three times to reveal the focused project's keyboard
 KeyTips. The first tap passes through to the focused terminal or editor; the second
