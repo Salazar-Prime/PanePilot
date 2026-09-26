@@ -115,6 +115,7 @@ import {
 } from '../lib/workspaceHistory'
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { WorkspaceSwitcherReleaseGuard } from '../lib/workspaceSwitcherRelease'
+import { commandPaletteSession, contextualCommands } from '../lib/commandPalette'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
 import { AppearanceControl } from './AppearanceControl'
 import {
@@ -1652,7 +1653,59 @@ export function App() {
   const typeDefinition = project
     ? projectTypeRegistry[project.type]
     : projectTypeRegistry.terminal
+  const paletteSession = commandPaletteSession(
+    project, paneDestinationsRef.current[focusedPane], focusedSession
+  )
   const commandPaletteCommands: CommandPaletteCommand[] = [
+    ...(project && paletteSession
+      ? contextualCommands(
+          contextItems({ kind: 'session', project, session: paletteSession, x: 0, y: 0 })
+            .filter((item) => item.id !== 'open' &&
+              (item.id !== 'transfer' || paletteSession.kind === 'terminal')),
+          {
+            id: `current-session:${paletteSession.id}`,
+            section: paletteSession.kind === 'latex-chat' ? 'Current writing chat' : 'Current terminal',
+            detail: `${project.name} · ${paletteSession.name} · ${paletteSession.profile}`
+          }
+        )
+      : []),
+    ...(project
+      ? contextualCommands(
+          contextItems({ kind: 'project', project, x: 0, y: 0 })
+            .filter((item) => !['open', 'new-terminal', 'repository'].includes(item.id)),
+          { id: `current-project:${project.id}`, section: 'Current project', detail: project.name, project: true }
+        )
+      : []),
+    ...(project ? projectCapabilityDestinations(project).map((destination) => ({
+      id: `capability:${destination.key}`,
+      section: 'Project views',
+      label: `Open ${destination.tabLabel}`,
+      detail: project.name,
+      keywords: ['navigate', 'view', destination.tab],
+      icon: <PanelRight size={15} />,
+      action: () => activateWorkspaceDestination(destination)
+    })) : []),
+    ...(connection ? contextualCommands(
+      contextItems({ kind: 'connection', connection, x: 0, y: 0 })
+        .filter((item) => item.id !== 'new-project'),
+      { id: `connection:${connection.id}`, section: 'Current connection', detail: connection.name }
+    ) : []),
+    {
+      id: 'action:refresh-ssh',
+      section: 'Actions',
+      label: 'Refresh SSH connections',
+      keywords: ['reload', 'hosts', 'machines'],
+      icon: <RefreshCw size={15} />,
+      action: refreshSshConnections
+    },
+    ...(splitOpen && paneAProject && paneBProject ? [{
+      id: 'action:swap-panes',
+      section: 'Actions',
+      label: 'Swap left and right panes',
+      keywords: ['split', 'projects'],
+      icon: <PanelRight size={15} />,
+      action: swapPanes
+    }] : []),
     {
       id: 'action:new-project',
       section: 'Actions',
@@ -1736,7 +1789,7 @@ export function App() {
                   keywords: ['github', 'git'],
                   icon: <Github size={15} />,
                   action: () =>
-                    void window.projectConsole.projects.openRepository(
+                    window.projectConsole.projects.openRepository(
                       project.repositoryUrl!
                     )
                 }
@@ -1798,7 +1851,7 @@ export function App() {
             detail: `${owner.name} · ${session.profile} · ${session.state}`,
             keywords: [owner.name, session.profile, session.state, 'terminal'],
             icon: <TerminalProfileIcon profile={session.profile} size={15} />,
-            action: () => void selectSession(owner.id, session.id)
+            action: () => selectSession(owner.id, session.id)
           })
         )
     )
@@ -3034,6 +3087,7 @@ export function App() {
         open={showCommandPalette}
         commands={commandPaletteCommands}
         onClose={() => setShowCommandPalette(false)}
+        onError={showError}
       />
       {projectSortMenu &&
         (() => {

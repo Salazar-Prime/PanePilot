@@ -1,3 +1,52 @@
+import type { Project, TerminalSession } from '@shared/types'
+import type { WorkspaceDestination } from './workspaceHistory'
+
+/** Resolve only the visible destination, not a terminal remembered behind Files/Notes. */
+export function commandPaletteSession(
+  project: Project | null,
+  destination: Pick<WorkspaceDestination, 'projectId' | 'sessionId'> | null,
+  fallback: TerminalSession | null
+): TerminalSession | null {
+  if (!project || project.archived) return null
+  const id = destination?.projectId === project.id ? destination.sessionId : fallback?.id
+  return project.sessions.find((session) => session.id === id && !session.archived &&
+    (session.kind === 'terminal' ||
+      (session.kind === 'latex-chat' && session.latexChat?.purpose === 'writing'))) ?? null
+}
+
+interface MenuCommand {
+  id: string
+  label: string
+  disabled?: boolean
+  action(): void | Promise<void>
+}
+
+/** Preserve the menu's handlers, availability checks, and confirmation paths. */
+export function contextualCommands<T extends MenuCommand>(
+  items: T[],
+  context: { id: string; section: string; detail: string; project?: boolean }
+) {
+  return items.filter((item) => !item.disabled).map((item) => ({
+    ...item,
+    id: `${context.id}:${item.id}`,
+    label: context.project && item.id === 'rename' ? 'Rename project' : item.label,
+    section: context.section,
+    detail: context.detail,
+    keywords: item.id === 'force-reload-agent' ? ['restart', 'reload', 'reconnect'] : []
+  }))
+}
+
+export async function runPaletteCommand(
+  command: Pick<MenuCommand, 'action'>,
+  onError: (error: unknown) => void
+): Promise<void> {
+  try {
+    await command.action()
+  } catch (error) {
+    onError(error)
+  }
+}
+
 export interface SearchableCommand {
   id: string
   label: string

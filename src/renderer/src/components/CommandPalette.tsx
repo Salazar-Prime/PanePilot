@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, CornerDownLeft, Search } from 'lucide-react'
 import {
   filterCommands,
+  runPaletteCommand,
   type SearchableCommand
 } from '../lib/commandPalette'
 import { useModalEscape } from '../lib/modalEscape'
@@ -10,19 +11,22 @@ export interface CommandPaletteCommand extends SearchableCommand {
   section: string
   icon: ReactNode
   shortcut?: string
-  action(): void
+  danger?: boolean
+  action(): void | Promise<void>
 }
 
 interface Props {
   open: boolean
   commands: CommandPaletteCommand[]
   onClose(): void
+  onError(error: unknown): void
 }
 
-export function CommandPalette({ open, commands, onClose }: Props) {
+export function CommandPalette({ open, commands, onClose, onError }: Props) {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const resultsRef = useRef<HTMLDivElement | null>(null)
   const results = useMemo(
     () => filterCommands(commands, query).slice(0, 80),
     [commands, query]
@@ -41,11 +45,16 @@ export function CommandPalette({ open, commands, onClose }: Props) {
     setSelectedIndex((current) => Math.min(current, Math.max(0, results.length - 1)))
   }, [results.length])
 
+  useEffect(() => {
+    if (!open) return
+    resultsRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+  }, [open, selectedIndex, query, results.length])
+
   if (!open) return null
 
   function run(command: CommandPaletteCommand) {
     onClose()
-    window.queueMicrotask(command.action)
+    window.queueMicrotask(() => { void runPaletteCommand(command, onError) })
   }
 
   return (
@@ -88,12 +97,12 @@ export function CommandPalette({ open, commands, onClose }: Props) {
                 run(results[selectedIndex])
               }
             }}
-            placeholder="Jump to a project, terminal, or action…"
+            placeholder="Search commands: reload, rename, files…"
             aria-label="Search commands"
           />
           <kbd>esc</kbd>
         </div>
-        <div className="command-results" role="listbox">
+        <div className="command-results" role="listbox" ref={resultsRef}>
           {results.length === 0 ? (
             <div className="command-empty">
               <Search size={19} />
@@ -108,7 +117,7 @@ export function CommandPalette({ open, commands, onClose }: Props) {
                     <div className="command-section-label">{command.section}</div>
                   )}
                   <button
-                    className={index === selectedIndex ? 'selected' : ''}
+                    className={`${index === selectedIndex ? 'selected' : ''} ${command.danger ? 'danger-text' : ''}`}
                     role="option"
                     aria-selected={index === selectedIndex}
                     onMouseMove={() => setSelectedIndex(index)}
