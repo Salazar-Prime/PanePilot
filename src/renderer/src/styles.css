@@ -735,6 +735,38 @@ select:focus-visible {
   letter-spacing: 0.02em;
 }
 
+.terminal-drop-target {
+  outline: 2px solid #8b9cff;
+  outline-offset: -2px;
+}
+
+.terminal-drop-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 60%;
+  gap: 6px;
+  margin-inline: 12px;
+  color: #adb9e5;
+  white-space: nowrap;
+}
+
+.terminal-drop-status.failed { color: #ff8192; }
+.terminal-drop-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.terminal-drop-status progress { width: 65px; height: 5px; accent-color: #8b9cff; }
+.terminal-drop-status button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  color: inherit;
+  background: #161b28;
+  border: 1px solid #30394e;
+  border-radius: 3px;
+  font-size: 9px;
+}
+.status-bar > .status-summary { flex-shrink: 0; white-space: nowrap; }
+
 .status-brand,
 .status-summary,
 .status-summary > span {

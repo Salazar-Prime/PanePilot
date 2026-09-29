@@ -4,7 +4,7 @@ import type { ProjectConsoleApi } from '../../shared/types'
 
 declare global {
   interface Window {
-    projectConsole: ProjectConsoleApi
+    projectConsole: ProjectConsoleApi // Includes the typed terminalDrops preload bridge.
   }
 }
 

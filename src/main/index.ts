@@ -63,10 +63,12 @@ import { discoverSshAliases } from './ssh-config'
 import { SpeechService } from './speech-service'
 import { Store } from './store'
 import { TerminalManager } from './terminal-manager'
+import { TerminalDropService } from './terminal-drop-service'
 
 let mainWindow: BrowserWindow | null = null
 let store: Store
 let terminals: TerminalManager
+let terminalDrops: TerminalDropService
 let conversations: ConversationIndexer
 let remoteConversations: RemoteConversationIndexer
 let portForwards: PortForwardManager
@@ -129,6 +131,14 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('terminal-drops:drop', (event, sessionId: string, paths: string[]) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid upload sender.')
+    return terminalDrops.drop(sessionId, paths)
+  })
+  ipcMain.handle('terminal-drops:list', (event) => {
+    if (event.sender !== mainWindow?.webContents) throw new Error('Invalid upload sender.')
+    return terminalDrops.list()
+  })
   ipcMain.on(
     'workspace-history:set-switcher-open',
     (event, open: unknown) => {
@@ -691,6 +701,9 @@ if (!ownsSingleInstanceLock) {
     .whenReady()
     .then(() => {
       store = new Store(app.getPath('userData'))
+      terminalDrops = new TerminalDropService(store, (progress) => {
+        if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('terminal-drops:progress', progress)
+      })
       store.syncConnections(discoverSshAliases())
       conversations = new ConversationIndexer()
       remoteConversations = new RemoteConversationIndexer()
@@ -738,6 +751,7 @@ if (!ownsSingleInstanceLock) {
 }
 
 app.on('before-quit', () => {
+  terminalDrops?.shutdown()
   speech?.close()
   terminals?.shutdown()
   portForwards?.shutdown()

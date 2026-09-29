@@ -138,6 +138,7 @@ import { TerminalProfileIcon } from './TerminalProfileIcon'
 import { TemporaryChatsPanel } from './TemporaryChatsPanel'
 import { TransferSessionDialog } from './TransferSessionDialog'
 import { WorkspaceSwitcherOverlay } from './WorkspaceSwitcherOverlay'
+import { TerminalDropStatus } from './TerminalDropStatus'
 
 type SidebarContext =
   | { kind: 'connection'; connection: Connection; x: number; y: number }
@@ -2994,6 +2995,7 @@ export function App() {
             </span>
           )}
         </div>
+        <TerminalDropStatus />
         <div className="status-summary">
           <span>
             <span className="mini-dot running" />

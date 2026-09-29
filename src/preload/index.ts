@@ -1,4 +1,5 @@
-import { contextBridge, ipcRenderer, webFrame } from 'electron'
+import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
+import type { TerminalDropProgress } from '../shared/terminalDrops'
 import type {
   ConnectGoogleDriveInput,
   CreateLatexCommentInput,
@@ -23,6 +24,19 @@ import type {
 } from '../shared/types'
 
 const api: ProjectConsoleApi = {
+  terminalDrops: {
+    drop: async (sessionId, files) => {
+      const paths = files.map((file) => webUtils.getPathForFile(file))
+      if (paths.some((path) => !path)) throw new Error('Save the image or file to your computer before dropping it.')
+      return ipcRenderer.invoke('terminal-drops:drop', sessionId, paths)
+    },
+    list: () => ipcRenderer.invoke('terminal-drops:list'),
+    onProgress: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: TerminalDropProgress) => listener(progress)
+      ipcRenderer.on('terminal-drops:progress', handler)
+      return () => ipcRenderer.removeListener('terminal-drops:progress', handler)
+    }
+  },
   connections: {
     list: () => ipcRenderer.invoke('connections:list'),
     refresh: () => ipcRenderer.invoke('connections:refresh'),

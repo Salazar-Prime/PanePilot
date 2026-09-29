@@ -551,6 +551,11 @@ export interface GoogleDrivePublicLinkResult {
 }
 
 export interface ProjectConsoleApi {
+  terminalDrops: {
+    drop(sessionId: string, files: File[]): Promise<import('./terminalDrops').TerminalDropResult>
+    list(): Promise<import('./terminalDrops').TerminalDropProgress[]>
+    onProgress(listener: (event: import('./terminalDrops').TerminalDropProgress) => void): () => void
+  }
   connections: {
     list(): Promise<Connection[]>
     refresh(): Promise<Connection[]>

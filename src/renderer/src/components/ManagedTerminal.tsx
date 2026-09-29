@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { droppedPathsText } from '@shared/terminalDrops'
 import { createPortal } from 'react-dom'
 import {
   ClipboardCopy,
@@ -66,6 +67,9 @@ export function ManagedTerminal({
   const transportRef = useRef(transport)
   transportRef.current = transport
   const [inputReady, setInputReady] = useState(false)
+  const dropPendingRef = useRef(false)
+  const dropFocusVersionRef = useRef(0)
+  const [draggingFiles, setDraggingFiles] = useState(false)
   const [contextMenu, setContextMenu] = useState<{
     top: number
     left: number
@@ -75,6 +79,42 @@ export function ManagedTerminal({
     setContextMenu(null)
     const selection = terminalRef.current?.getSelection() ?? ''
     if (selection) await window.projectConsole.system.copyText(selection)
+  }
+
+  async function dropFiles(event: DragEvent<HTMLDivElement>): Promise<void> {
+    event.preventDefault()
+    event.stopPropagation()
+    setDraggingFiles(false)
+    const files = Array.from(event.dataTransfer.files)
+    if (!files.length) return
+    const terminal = terminalRef.current
+    if (!terminal || !activeRef.current || !writableRef.current || dropPendingRef.current) return
+    if (!window.projectConsole.terminalDrops) {
+      window.alert('Restart PanePilot to enable terminal file drops.')
+      return
+    }
+    terminal.focus()
+    const focusVersion = dropFocusVersionRef.current
+    dropPendingRef.current = true
+    try {
+      const result = await window.projectConsole.terminalDrops.drop(session.id, files)
+      const stillTarget = document.hasFocus() && terminalRef.current === terminal && activeRef.current && writableRef.current &&
+        focusVersion === dropFocusVersionRef.current && hostRef.current?.contains(document.activeElement)
+      if (result.paths.length && stillTarget) {
+        await window.projectConsole.terminals.write(session.id,
+          terminalPastePayload(droppedPathsText(result.paths), terminal.modes.bracketedPasteMode))
+        terminal.scrollToBottom()
+      } else if (result.paths.length && !result.transferId) {
+        // Remote paths remain available in the application transfer status.
+        // Never send input to a hidden or newly focused terminal.
+        window.alert(`Files are ready, but the target terminal lost focus. Paths were not pasted:\n${droppedPathsText(result.paths)}`)
+      }
+      // Remote completion/errors stay in the status bar without interrupting work.
+    } catch (error) {
+      window.alert(`Could not drop files: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      dropPendingRef.current = false
+    }
   }
 
   async function pasteClipboard(): Promise<void> {
@@ -125,6 +165,12 @@ export function ManagedTerminal({
       window.alert(error instanceof Error ? error.message : String(error))
     }
   }
+
+  useEffect(() => {
+    const leaveWindow = () => { dropFocusVersionRef.current++ }
+    window.addEventListener('blur', leaveWindow)
+    return () => window.removeEventListener('blur', leaveWindow)
+  }, [])
 
   useEffect(() => {
     const host = hostRef.current
@@ -388,6 +434,7 @@ export function ManagedTerminal({
 
   useEffect(() => {
     if (!active) {
+      dropFocusVersionRef.current++
       writableRef.current = false
       setInputReady(false)
       return
@@ -480,9 +527,24 @@ export function ManagedTerminal({
 
   return (
     <div
-      className="managed-terminal"
+      className={`managed-terminal ${draggingFiles ? 'terminal-drop-target' : ''}`}
       data-speech-terminal-id={session.id}
       data-terminal-session-id={session.id}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) dropFocusVersionRef.current++
+      }}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return
+        event.preventDefault()
+        event.stopPropagation()
+        const allowed = activeRef.current && writableRef.current && !dropPendingRef.current
+        event.dataTransfer.dropEffect = allowed ? 'copy' : 'none'
+        setDraggingFiles(allowed)
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDraggingFiles(false)
+      }}
+      onDrop={(event) => { void dropFiles(event) }}
     >
       <div
         className="terminal-host"
