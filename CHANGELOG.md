@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.10.0 — 2026-10-01
+
+This release makes common project actions searchable and adds guarded file drops for
+local and SSH terminals:
+
+- Command-K now exposes enabled actions for the focused terminal or LaTeX writing
+  chat, project, and connection alongside project navigation and global tools. Each
+  result identifies its target and reuses the existing confirmation flow.
+- Drop up to 20 regular files or 1 GB onto a writable terminal to insert quoted paths
+  without submitting. Local paths stay in place; SSH files stream into unique,
+  permission-restricted project folders with byte and file progress plus copyable
+  completed paths.
+- Remote drops reject symlinks, traversal, overwrite attempts, excessive concurrency,
+  and stale terminal targets. Handled failures clean partial uploads, and focus or tab
+  changes prevent paths from being pasted into the wrong terminal.
+
+The v0.10.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.9.0 — 2026-09-11
 
 This release adds fast keyboard navigation across active PanePilot workspaces:

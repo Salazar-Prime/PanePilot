@@ -14,15 +14,15 @@ section, and review source changes highlighted directly in the editor. Optional
 repository, Overleaf, and `context/` links keep the paper and its research material
 together.
 
-## Install the preview release
+## Install PanePilot
 
-PanePilot v0.2.0-rc.1 is available from
-[GitHub Releases](https://github.com/Salazar-Prime/PanePilot/releases). The packaged
-preview supports Apple silicon Macs running macOS 12 or newer.
+The latest PanePilot release is available from
+[GitHub Releases](https://github.com/Salazar-Prime/PanePilot/releases/latest). The
+packaged desktop app supports Apple silicon Macs running macOS 12 or newer.
 
 1. Download the `.dmg`, open it, and drag PanePilot into Applications.
-2. Because this preview is not yet Developer ID signed or notarized, Control-click
-   PanePilot in Finder, choose **Open**, and confirm the first launch.
+2. Because the direct-download build is ad-hoc signed and not Apple-notarized,
+   Control-click PanePilot in Finder, choose **Open**, and confirm the first launch.
 
 The `.zip` contains the same application for users who prefer an archive. Verify either
 download against `SHA256SUMS.txt` attached to the release.
@@ -151,8 +151,32 @@ After an upload, **Create public link** explicitly asks rclone to make an
 anyone-with-the-link URL and copies it to the clipboard. **Stop sharing** removes the
 public link. Uploading by itself never changes the file's public sharing state.
 
-Press **Command-K** (or **Control-K**) to open the command palette for projects,
-terminals, and common project actions.
+## Command palette
+
+Press **Command-K** (or **Control-K**) to search projects, terminal sessions,
+capabilities, and global tools. The palette also includes enabled actions for the
+focused project, connection, and visible ordinary terminal or LaTeX writing chat.
+Each result names its target and reuses the same confirmations as the corresponding
+context menu. A terminal hidden behind Files, Notes, or another capability is not
+treated as the current target.
+
+## Terminal file drops
+
+Drop disk-backed files onto an active, writable terminal to insert shell-quoted paths
+without submitting the command. Local-terminal drops keep files in their original
+locations. For an SSH terminal, PanePilot streams the selected bytes over the existing
+SSH connection into permission-restricted, unique directories under the remote
+project's `.panepilot/dropped-assets/` folder; the remote host must provide Python 3.
+The status bar reports received bytes and file counts and keeps successful paths
+available to copy. Losing terminal focus suppresses automatic path insertion while
+allowing an in-progress upload to finish.
+
+Each batch is limited to 20 regular files and 1 GB, at most two batches can run at
+once, and a transfer is stopped after 15 minutes. Folders, symlinks, path traversal,
+and overwriting an existing upload are rejected. Handled failures remove partial
+uploads, but an abrupt host or power loss can leave an incomplete upload directory.
+Completed remote files remain in the project until you explicitly delete them;
+PanePilot does not store additional SSH credentials or persist transfer progress.
 
 The message-plus button beside the audio control opens project-scoped **Quick Codex
 chats**. You can also open the collection or create a new chat from Command-K. These
