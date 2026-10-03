@@ -101,6 +101,8 @@ These are owner-approved decisions and should be treated as product invariants u
 
 70. Dropping disk-backed files onto a writable ManagedTerminal inserts quoted paths without submitting the prompt. Local terminals use the existing local paths. SSH terminals stream files into unique, permission-restricted `.panepilot/dropped-assets/<uuid>/<filename>` directories on their project host; metadata symlinks are rejected and existing assets are never overwritten. The main process validates regular files, limits each drop to 20 files/1 GB and two concurrent batches, and bounds transfers to 15 minutes. The status bar reports remote-received bytes, file counts, completion/errors, and copyable successful paths. Focus loss, tab changes, terminal replacement, or unavailable input suppress automatic paste; uploads may finish in the background. Progress is application-lifetime state; completed assets remain project files until explicitly deleted. Partial uploads are cleaned up on handled failures, although abrupt host/power loss can leave incomplete upload directories. The preload resolves native File objects with Electron webUtils; renderer code never receives Node filesystem access.
 
+71. The LLM Chats archive viewer has a bounded “Hide first” message counter and a “Show all” reset. It omits only the first X rendered message cards, regardless of role, without changing archives, search indexing, or message contents. Counts are scoped by project and conversation and retained only while that viewer remains mounted; counter changes reveal the beginning of the remaining transcript.
+
 ## Agent lifecycle semantics
 
 Agent state describes the current turn, not merely whether the terminal process exists.

@@ -6,16 +6,31 @@ import type {
   Project
 } from '@shared/types'
 import { copyConversationSessionId } from '../lib/conversationSessionId'
+import { conversationMessageWindow } from '../lib/conversationMessageWindow'
 
 export function ChatHistoryPanel({ project }: { project: Project }) {
   const [query, setQuery] = useState('')
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [detail, setDetail] = useState<ConversationDetail | null>(null)
+  const [loadedDetail, setDetail] = useState<ConversationDetail | null>(null)
+  const detail = loadedDetail?.id === selectedId ? loadedDetail : null
+  const [hiddenByConversation, setHiddenByConversation] = useState<Record<string, number>>({})
+  const messagesRef = useRef<HTMLDivElement | null>(null)
+  const renderKey = JSON.stringify([project.id, detail?.id ?? null])
+  const rendered = conversationMessageWindow(detail?.messages ?? [], hiddenByConversation[renderKey] ?? 0)
+
+  function setHiddenCount(value: number) {
+    const count = conversationMessageWindow(detail?.messages ?? [], value).hiddenCount
+    setHiddenByConversation((current) => ({ ...current, [renderKey]: count }))
+  }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null)
   const copiedTimer = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (messagesRef.current) messagesRef.current.scrollTop = 0
+  }, [renderKey, rendered.hiddenCount])
 
   useEffect(() => {
     setSelectedId(null)
@@ -183,8 +198,30 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
                 </button>
               )}
             </header>
-            <div className="chat-messages">
-              {detail.messages.map((message) => (
+            <div className="chat-render-controls">
+              <label title="Hide the first messages in this view only. Nothing is deleted from the archive.">
+                Hide first
+                <input
+                  type="number"
+                  min={0}
+                  max={detail.messages.length}
+                  step={1}
+                  value={rendered.hiddenCount}
+                  onChange={(event) => setHiddenCount(event.target.valueAsNumber)}
+                  aria-label="Number of messages to hide from the top"
+                />
+                messages
+              </label>
+              <span role="status">Showing {rendered.messages.length} of {detail.messages.length}</span>
+              <button className="secondary-button" disabled={!rendered.hiddenCount} onClick={() => setHiddenCount(0)}>
+                Show all
+              </button>
+            </div>
+            <div className="chat-messages" ref={messagesRef}>
+              {rendered.hiddenCount > 0 && !rendered.messages.length && (
+                <p className="chat-list-message">All messages are hidden. Choose Show all or lower the counter to see them again.</p>
+              )}
+              {rendered.messages.map((message) => (
                 <article className={`chat-message ${message.role}`} key={message.id}>
                   <header>
                     <span>{message.role === 'user' ? 'You' : detail.provider}</span>
