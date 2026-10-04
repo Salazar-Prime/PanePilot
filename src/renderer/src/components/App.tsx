@@ -995,28 +995,8 @@ export function App() {
   useSidebarProjectMotion(sidebarScrollRef, sidebarOpen, sidebarMotionRevision)
   const sidebarProjectOrder = JSON.stringify(sidebarConnectionGroups.map(({ connection, projects }) =>
     [connection.id, projects.map(({ project }) => project.id)]))
-  const sidebarActiveProjectId =
-    splitOpen && focusedPane === 'b' ? paneBProjectId : selectedProjectId
   const sidebarActiveSessionId =
     splitOpen && focusedPane === 'b' ? paneBSessionId : selectedSessionId
-
-  useEffect(() => {
-    if (
-      !sidebarOpen ||
-      showArchivedProjects ||
-      !sidebarActiveProjectId ||
-      !sidebarActiveSessionId
-    ) {
-      return
-    }
-    expandSidebarProject(sidebarActiveProjectId)
-  }, [
-    expandSidebarProject,
-    showArchivedProjects,
-    sidebarActiveProjectId,
-    sidebarActiveSessionId,
-    sidebarOpen
-  ])
 
   useEffect(() => {
     if (!sidebarOpen || showArchivedProjects || !sidebarActiveSessionId) return
@@ -1373,6 +1353,7 @@ export function App() {
     sessionId: string,
     pane: 'a' | 'b'
   ) {
+    expandSidebarProject(projectId)
     recordProjectSelection(projectId)
     recordSessionSelection(sessionId)
     setShowArchivedProjects(false)
@@ -1515,6 +1496,7 @@ export function App() {
   }
 
   async function selectSession(projectId: string, sessionId: string) {
+    expandSidebarProject(projectId)
     const pane = splitOpen && focusedPane === 'b' ? 'b' : 'a'
     recordProjectSelection(projectId)
     recordSessionSelection(sessionId)
@@ -1544,6 +1526,7 @@ export function App() {
 
     recordProjectSelection(destination.projectId)
     if (destination.sessionId) {
+      expandSidebarProject(destination.projectId)
       recordSessionSelection(destination.sessionId)
     }
     setShowArchivedProjects(false)
@@ -2864,7 +2847,10 @@ export function App() {
                   openSessionIds={openSessionIds}
                   onOpenSession={openSession}
                   onCloseSession={closeSession}
-                  onSessionSelected={recordSessionSelection}
+                  onSessionSelected={(id) => {
+                    expandSidebarProject(paneAProject.id)
+                    recordSessionSelection(id)
+                  }}
                   onLaunchTerminalRequestHandled={handleLaunchTerminalRequest}
                   onOpenSessionRequestHandled={handleOpenSessionRequest}
                   onWorkspaceTabRequestHandled={handleWorkspaceTabRequest}
@@ -2942,7 +2928,10 @@ export function App() {
                     openSessionIds={openSessionIds}
                     onOpenSession={openSession}
                     onCloseSession={closeSession}
-                    onSessionSelected={recordSessionSelection}
+                    onSessionSelected={(id) => {
+                      expandSidebarProject(paneBProject.id)
+                      recordSessionSelection(id)
+                    }}
                     onLaunchTerminalRequestHandled={handleLaunchTerminalRequest}
                     onOpenSessionRequestHandled={handleOpenSessionRequest}
                     onWorkspaceTabRequestHandled={handleWorkspaceTabRequest}

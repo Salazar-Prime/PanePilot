@@ -463,6 +463,7 @@ export function LatexProjectWorkspace({
     const session = await window.projectConsole.latex.startChat(input)
     await onChanged()
     selectWorkspaceTab('manuscript')
+    onSessionSelected(session.id)
     onSelectSession(session.id)
   }
 

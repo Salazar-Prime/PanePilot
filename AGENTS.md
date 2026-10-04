@@ -107,6 +107,8 @@ These are owner-approved decisions and should be treated as product invariants u
 
 73. Sidebar project reordering uses a short, eased vertical layout animation within each connection, including automatic Newest first and sticky Needs attention promotions. Each real project subtree travels with its expanded terminal rows; labels remain visible and existing DOM/focus are preserved. Interrupted sorts continue from their current visual positions, including expansion during a sort. Initial loading, scrolling, ordinary status updates, and standalone expand/collapse changes do not initiate sorting motion. Reduced-motion preference, hidden documents, sidebar collapse, and unmount clear animation state. Active-terminal visibility uses the final project position rather than an in-flight transform. Animation does not change any sorting, recency, attention, or machine-group semantics.
 
+74. Clicking a project or opening it in either pane preserves its saved sidebar collapse state, even when the workspace restores a default or remembered terminal. Restoring selection, switching pane focus, and reopening the sidebar must not implicitly expand terminal lists. Expansion is explicit through the chevron or a user action targeting a specific terminal/chat (including terminal tabs, terminal history destinations, and newly created sessions). Non-terminal history destinations preserve collapsed lists.
+
 ## Agent lifecycle semantics
 
 Agent state describes the current turn, not merely whether the terminal process exists.

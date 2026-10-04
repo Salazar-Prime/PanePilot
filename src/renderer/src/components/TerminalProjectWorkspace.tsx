@@ -376,6 +376,7 @@ export function TerminalProjectWorkspace({
     const session = await window.projectConsole.terminals.start(input)
     await onChanged()
     selectWorkspaceTab('terminal')
+    onSessionSelected(session.id)
     onOpenSession(session.id)
     onSelectSession(session.id)
   }
