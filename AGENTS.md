@@ -103,6 +103,8 @@ These are owner-approved decisions and should be treated as product invariants u
 
 71. The LLM Chats archive viewer has a bounded “Hide first” message counter and a “Show all” reset. It omits only the first X rendered message cards, regardless of role, without changing archives, search indexing, or message contents. Counts are scoped by project and conversation and retained only while that viewer remains mounted; counter changes reveal the beginning of the remaining transcript.
 
+72. Dropping disk-backed files anywhere in Files copies them into the currently browsed project folder, locally or over SSH, without requiring a terminal. The destination is captured at drop time; originals remain untouched, existing destination entries are never overwritten, and folder drops are not supported. Imports reuse the terminal-drop batch limits and status-bar progress, reject traversal and symlink destination directories, and publish completed files from temporary siblings with an exclusive hard link. Handled failures clean partial temporary files; abrupt power loss or destination changes may leave temporary `.panepilot-upload-*.part` files. The folder listing refreshes after successful or partially successful imports without changing the current folder, open previews, or unsaved drafts; unmounted Files caches are invalidated. File drops are captured ahead of Monaco so they never insert file contents into the editor or paste terminal input.
+
 ## Agent lifecycle semantics
 
 Agent state describes the current turn, not merely whether the terminal process exists.

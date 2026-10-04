@@ -630,6 +630,7 @@ export interface ProjectConsoleApi {
     delete(projectId: string, path: string): Promise<void>
   }
   files: {
+    importFiles(projectId: string, parentPath: string, files: File[]): Promise<import('./terminalDrops').TerminalDropResult>
     list(projectId: string, relativePath?: string): Promise<FileEntry[]>
     search(projectId: string, query: string): Promise<FileEntry[]>
     createFile(projectId: string, parentPath: string, name: string): Promise<string>

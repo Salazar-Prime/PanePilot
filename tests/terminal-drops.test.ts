@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn, spawnSync, type SpawnOptions } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { MAX_DROP_BYTES, RECEIVE_DROP_SCRIPT, streamRemoteDrop, TerminalDropService } from '../src/main/terminal-drop-service'
+import { copyLocalDrop, MAX_DROP_BYTES, RECEIVE_DROP_SCRIPT, streamRemoteDrop, TerminalDropService } from '../src/main/terminal-drop-service'
 import { droppedPathsText, type TerminalDropProgress } from '../src/shared/terminalDrops'
 import type { Store } from '../src/main/store'
 
@@ -25,9 +25,9 @@ function store(remote = true) {
   } as unknown as Pick<Store, 'getSession' | 'getProjectForRuntime' | 'getConnection'>
 }
 
-function receive(name: string, data: Buffer, size = data.length, id = randomUUID()) {
+function receive(name: string, data: Buffer, size = data.length, id = randomUUID(), directory?: string) {
   const result = spawnSync('python3', ['-c', RECEIVE_DROP_SCRIPT], {
-    input: Buffer.concat([Buffer.from(JSON.stringify({ root, name, size, id }) + '\n'), data]),
+    input: Buffer.concat([Buffer.from(JSON.stringify({ root, name, size, id, directory }) + '\n'), data]),
     encoding: 'utf8', timeout: 10_000
   })
   return { ...result, id }
@@ -159,6 +159,136 @@ describe('terminal drop routing and progress', () => {
     await ready
     service.shutdown()
     expect(await pending).toMatchObject({ paths: [], error: 'Upload timed out or was cancelled.' })
+  })
+})
+
+describe('Files workspace drops', () => {
+  it('copies local bytes into the browsed folder, preserves the source, and needs no terminal', async () => {
+    const source = join(root, 'image.png')
+    const data = Buffer.alloc(700_000, 117)
+    await writeFile(source, data)
+    await mkdir(join(root, 'assets'))
+    const events: TerminalDropProgress[] = []
+    const service = new TerminalDropService({ ...store(false), getSession: () => { throw new Error('Must not require a terminal') } }, (event) => events.push(event))
+    const result = await service.copyToProject('project', 'assets', [source])
+    expect(result.error).toBeUndefined()
+    expect(result.paths).toHaveLength(1)
+    expect(await readFile(join(root, 'assets', 'image.png'))).toEqual(data)
+    expect(await readFile(source)).toEqual(data)
+    expect(await readdir(join(root, 'assets'))).toEqual(['image.png'])
+    expect(events.at(-1)).toMatchObject({ state: 'completed', operation: 'copy', sessionId: null, completedFiles: 1, transferredBytes: data.length })
+  })
+
+  it('keeps earlier successful copies when a later filename collides and cleans temporary files', async () => {
+    await mkdir(join(root, 'assets'))
+    await writeFile(join(root, 'one'), 'first')
+    await writeFile(join(root, 'two'), 'new')
+    await writeFile(join(root, 'assets', 'two'), 'original')
+    const service = new TerminalDropService(store(false), vi.fn())
+    const result = await service.copyToProject('project', 'assets', [join(root, 'one'), join(root, 'two')])
+    expect(result.paths).toHaveLength(1)
+    expect(result.error).toContain('already exists')
+    expect(await readFile(join(root, 'assets', 'two'), 'utf8')).toBe('original')
+    expect((await readdir(join(root, 'assets'))).sort()).toEqual(['one', 'two'])
+  })
+
+  it('rejects a local symlink destination and never follows a filename symlink', async () => {
+    await mkdir(join(root, 'assets'))
+    await symlink(join(root, 'assets'), join(root, 'shortcut'))
+    const source = join(root, 'file')
+    await writeFile(source, 'source')
+    const service = new TerminalDropService(store(false), vi.fn())
+    expect((await service.copyToProject('project', 'shortcut', [source])).error).toContain('symbolic link')
+    await symlink(source, join(root, 'assets', 'file'))
+    expect((await service.copyToProject('project', 'assets', [source])).error).toContain('already exists')
+    expect(await readFile(source, 'utf8')).toBe('source')
+  })
+
+  it('copies an empty file to the project root without creating metadata directories', async () => {
+    await mkdir(join(root, 'source'))
+    const source = join(root, 'source', 'empty')
+    await writeFile(source, '')
+    const result = await new TerminalDropService(store(false), vi.fn()).copyToProject('project', '.', [source])
+    expect(result.error).toBeUndefined()
+    expect(await readFile(join(root, 'empty'), 'utf8')).toBe('')
+    expect((await readdir(root)).sort()).toEqual(['empty', 'source'])
+  })
+
+  it.each(['../outside', '/absolute', 'assets/../outside', 'assets//sub', 'assets\\sub', ''])('rejects invalid destination %s before transfer', async (directory) => {
+    const upload = vi.fn()
+    await expect(new TerminalDropService(store(), vi.fn(), upload).copyToProject('project', directory, [join(root, 'file')])).rejects.toThrow('inside the project')
+    expect(upload).not.toHaveBeenCalled()
+  })
+
+  it('does not import into an archived project', async () => {
+    const base = store()
+    const archived = { ...base, getProjectForRuntime: () => ({ ...base.getProjectForRuntime('project')!, archived: true }) }
+    await expect(new TerminalDropService(archived, vi.fn()).copyToProject('project', '.', [join(root, 'file')])).rejects.toThrow('no longer available')
+  })
+
+  it('routes remote imports to the selected directory and publishes upload progress', async () => {
+    const source = join(root, 'file')
+    await writeFile(source, 'data')
+    const upload = vi.fn(async (_alias, _root, _name, size, _file, _signal, progress, directory) => {
+      expect(directory).toBe('figures/current')
+      progress(size)
+      return '/project/figures/current/file'
+    })
+    const service = new TerminalDropService(store(), vi.fn(), upload)
+    const result = await service.copyToProject('project', 'figures/current', [source])
+    expect(result.paths).toEqual(['/project/figures/current/file'])
+    expect(service.list().at(-1)).toMatchObject({ operation: 'upload', state: 'completed', sessionId: null })
+  })
+
+  it('runs a remote Files import through the streaming transport', async () => {
+    const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process')
+    vi.mocked(spawn).mockImplementationOnce(((_command: string, _args: unknown, options?: SpawnOptions) =>
+      actual.spawn('python3', ['-c', RECEIVE_DROP_SCRIPT], options ?? {})) as unknown as typeof spawn)
+    await mkdir(join(root, 'assets'))
+    const source = join(root, 'picture.png')
+    const data = Buffer.alloc(700_000, 29)
+    await writeFile(source, data)
+    const result = await new TerminalDropService(store(), vi.fn()).copyToProject('project', 'assets', [source])
+    expect(result.error).toBeUndefined()
+    expect(await readFile(result.paths[0])).toEqual(data)
+    expect(await readdir(join(root, 'assets'))).toEqual(['picture.png'])
+    expect(await readFile(source)).toEqual(data)
+  })
+
+  it('cleans local partial copies on cancellation or a changed source', async () => {
+    await mkdir(join(root, 'assets'))
+    const source = join(root, 'file')
+    await writeFile(source, 'data')
+    const file = await open(source, 'r')
+    try {
+      const controller = new AbortController()
+      controller.abort()
+      await expect(copyLocalDrop(root, 'assets', 'cancelled', 4, file, controller.signal, vi.fn())).rejects.toThrow()
+      await expect(copyLocalDrop(root, 'assets', 'changed', 7, file, new AbortController().signal, vi.fn())).rejects.toThrow('changed')
+      expect(await readdir(join(root, 'assets'))).toEqual([])
+    } finally { await file.close() }
+  })
+
+  it('remote receiver copies into a nested folder, rejects collisions, and cleans truncated transfers', async () => {
+    await mkdir(join(root, 'assets', 'figures'), { recursive: true })
+    const directory = 'assets/figures'
+    const first = receive('figure.png', Buffer.from('original'), 8, randomUUID(), directory)
+    expect(first.status, first.stderr).toBe(0)
+    const collision = receive('figure.png', Buffer.from('changed'), 7, randomUUID(), directory)
+    expect(collision.status).not.toBe(0)
+    expect(collision.stderr).toContain('already exists')
+    expect(receive('short.png', Buffer.from('short'), 100, randomUUID(), directory).status).not.toBe(0)
+    expect(await readFile(join(root, directory, 'figure.png'), 'utf8')).toBe('original')
+    expect(await readdir(join(root, directory))).toEqual(['figure.png'])
+  })
+
+  it('remote receiver rejects traversal, symlink folders, and missing folders', async () => {
+    await mkdir(join(root, 'assets'))
+    await symlink(join(root, 'assets'), join(root, 'shortcut'))
+    for (const directory of ['../escape', '/tmp', 'shortcut', 'missing']) {
+      expect(receive('file', Buffer.from('data'), 4, randomUUID(), directory).status).not.toBe(0)
+    }
+    expect(await readdir(join(root, 'assets'))).toEqual([])
   })
 })
 

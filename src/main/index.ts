@@ -131,6 +131,10 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('files:import', (event, projectId: string, parentPath: string, paths: string[]) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid file import sender.')
+    return terminalDrops.copyToProject(projectId, parentPath, paths)
+  })
   ipcMain.handle('terminal-drops:drop', (event, sessionId: string, paths: string[]) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid upload sender.')
     return terminalDrops.drop(sessionId, paths)

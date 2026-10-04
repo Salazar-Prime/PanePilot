@@ -164,6 +164,11 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('notes:delete', projectId, path)
   },
   files: {
+    importFiles: async (projectId: string, parentPath: string, files: File[]) => {
+      const paths = files.map((file) => webUtils.getPathForFile(file))
+      if (paths.some((path) => !path)) throw new Error('Save the file to your computer before dropping it here.')
+      return ipcRenderer.invoke('files:import', projectId, parentPath, paths)
+    },
     list: (projectId: string, relativePath = '.') =>
       ipcRenderer.invoke('files:list', projectId, relativePath),
     search: (projectId: string, query: string) =>

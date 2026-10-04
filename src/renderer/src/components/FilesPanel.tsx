@@ -75,6 +75,13 @@ interface FileEntryDialogRequest {
 }
 
 const filesPanelCache = new Map<string, FilesPanelSnapshot>()
+const fileImportListeners = new Map<string, Set<() => void>>()
+
+function notifyFilesImported(projectId: string): void {
+  const cached = filesPanelCache.get(projectId)
+  if (cached) filesPanelCache.set(projectId, { ...cached, loaded: false })
+  fileImportListeners.get(projectId)?.forEach((refresh) => refresh())
+}
 
 function uniqueEntries(entries: FileEntry[]): FileEntry[] {
   const unique = new Map<string, FileEntry>()
@@ -114,6 +121,8 @@ function FilesPanelInstance({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [dropHover, setDropHover] = useState(false)
+  const [dropError, setDropError] = useState('')
   const [uploadingToDrive, setUploadingToDrive] = useState(false)
   const [changingDriveSharing, setChangingDriveSharing] = useState(false)
   const [driveMessage, setDriveMessage] = useState('')
@@ -137,6 +146,11 @@ function FilesPanelInstance({
   const initialPathRef = useRef(initialPath)
   const listingRequestRef = useRef(0)
   const markdownLinkRequestRef = useRef(0)
+  const mountedRef = useRef(false)
+  const dropPendingRef = useRef(false)
+  const dragDepthRef = useRef(0)
+  const listingRef = useRef(listing)
+  listingRef.current = listing
   const path = listing.path
   const entries = listing.entries
   const loaded = listing.loaded
@@ -190,8 +204,65 @@ function FilesPanelInstance({
   }
 
   useEffect(() => {
-    if (!loaded) void load(initialPath)
+    if (!loaded) void load(path)
   }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    let active = true
+    const resetDrag = () => { dragDepthRef.current = 0; setDropHover(false) }
+    const refresh = () => {
+      // Only refresh the listing. Never reopen a file, replace a draft, or
+      // navigate back to the drop folder if the user has moved elsewhere.
+      const currentPath = listingRef.current.path
+      const request = listingRequestRef.current
+      setListing((current) => ({ ...current, loaded: false }))
+      setSearchRevision((current) => current + 1)
+      void window.projectConsole.files.list(project.id, currentPath).then((nextEntries) => {
+        if (active && request === listingRequestRef.current && currentPath === listingRef.current.path) {
+          setListing({ path: currentPath, entries: uniqueEntries(nextEntries), loaded: true })
+        }
+      }).catch((caught) => {
+        if (active) setDropError(`Files transferred, but refreshing the folder failed: ${String(caught)}`)
+      })
+    }
+    const listeners = fileImportListeners.get(project.id) ?? new Set<() => void>()
+    listeners.add(refresh)
+    fileImportListeners.set(project.id, listeners)
+    window.addEventListener('blur', resetDrag)
+    window.addEventListener('dragend', resetDrag)
+    return () => {
+      active = false
+      mountedRef.current = false
+      listeners.delete(refresh)
+      if (!listeners.size) fileImportListeners.delete(project.id)
+      window.removeEventListener('blur', resetDrag)
+      window.removeEventListener('dragend', resetDrag)
+    }
+  }, [project.id])
+
+  async function importDroppedFiles(files: File[]): Promise<void> {
+    if (dropPendingRef.current) {
+      setDropError('A file drop is already in progress here. Wait for it to finish before dropping more files.')
+      return
+    }
+    const destination = listingRef.current.path
+    if (!window.projectConsole.files.importFiles) {
+      setDropError('Restart PanePilot to enable file drops in Files.')
+      return
+    }
+    dropPendingRef.current = true
+    setDropError('')
+    try {
+      const result = await window.projectConsole.files.importFiles(project.id, destination, files)
+      if (result.paths.length) notifyFilesImported(project.id)
+      if (mountedRef.current && result.error) setDropError(result.error)
+    } catch (caught) {
+      if (mountedRef.current) setDropError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      dropPendingRef.current = false
+    }
+  }
 
   useEffect(
     () => () => {
@@ -702,7 +773,41 @@ function FilesPanelInstance({
   }
 
   return (
-    <div className="files-layout">
+    <div className={`files-layout${dropHover ? ' files-drop-target' : ''}`}
+      onDragEnterCapture={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return
+        event.preventDefault()
+        event.stopPropagation()
+        dragDepthRef.current++
+        setDropHover(true)
+      }}
+      onDragOverCapture={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return
+        event.preventDefault()
+        event.stopPropagation()
+        event.dataTransfer.dropEffect = 'copy'
+        setDropHover(true)
+      }}
+      onDragLeaveCapture={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return
+        event.stopPropagation()
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+        if (!dragDepthRef.current) setDropHover(false)
+      }}
+      onDropCapture={(event) => {
+        if (!event.dataTransfer.types.includes('Files')) return
+        event.preventDefault()
+        event.stopPropagation()
+        dragDepthRef.current = 0
+        setDropHover(false)
+        void importDroppedFiles(Array.from(event.dataTransfer.files))
+      }}
+    >
+      {dropHover && <div className="files-drop-hint" role="status">
+        <Copy size={18} />
+        <span>Copy into <strong>{project.name}{path === '.' ? '' : ` / ${path}`}</strong></span>
+        <small>Originals stay where they are · Existing files won’t be replaced</small>
+      </div>}
       <aside className="file-browser">
         <div className="file-browser-header">
           <div className="breadcrumbs">
@@ -774,6 +879,10 @@ function FilesPanelInstance({
             </button>
           ) : null}
         </div>
+        {dropError && <div className="file-error" role="alert">
+          <p>{dropError}</p>
+          <button onClick={() => setDropError('')}>Dismiss</button>
+        </div>}
         {error ? (
           <div className="file-error">
             <p>{error}</p>

@@ -34,22 +34,24 @@ export function TerminalDropStatus() {
   if (!event) return null
   const uploading = event.state === 'uploading'
   const percent = event.totalBytes ? Math.min(100, Math.floor(event.transferredBytes * 100 / event.totalBytes)) : 0
-  const label = uploading ? 'Uploading' : event.state === 'completed' ? 'Uploaded' : 'Upload failed'
+  const label = event.operation === 'copy'
+    ? uploading ? 'Copying' : event.state === 'completed' ? 'Copied' : 'Copy failed'
+    : uploading ? 'Uploading' : event.state === 'completed' ? 'Uploaded' : 'Upload failed'
   return (
-    <div className={`terminal-drop-status ${event.state}`} title={`${event.target}\n${event.fileName}\n${event.error ?? 'Uploaded paths can be copied and pasted into your prompt.'}`}>
+    <div className={`terminal-drop-status ${event.state}`} title={`${event.target}\n${event.fileName}\n${event.error ?? 'Transferred file paths can be copied.'}`}>
       <Upload size={12} />
       <span className="terminal-drop-label" role="status">{label} · {event.fileName || event.target}{event.error ? ` · ${event.error}` : ''}</span>
       {uploading ? <>
-        <progress aria-label="File upload progress" max={event.totalBytes || 1} value={event.transferredBytes} />
+        <progress aria-label="File transfer progress" max={event.totalBytes || 1} value={event.transferredBytes} />
         <span>{percent}% · {bytes(event.transferredBytes)}/{bytes(event.totalBytes)} · {event.completedFiles}/{event.totalFiles} files</span>
       </> : <span>{event.completedFiles}/{event.totalFiles} files</span>}
       {visible.length > 1 && <span title="Other transfers">+{visible.length - 1}</span>}
-      {!!event.paths.length && <button aria-label="Copy uploaded file paths" onClick={() => {
+      {!!event.paths.length && <button aria-label="Copy transferred file paths" onClick={() => {
         void window.projectConsole.system.copyText(droppedPathsText(event.paths))
           .then(() => { setCopied(`${event.id}:${event.paths.length}`); setCopyError('') })
           .catch((error) => setCopyError(String(error)))
       }}><ClipboardCopy size={12} />{copied === `${event.id}:${event.paths.length}` ? 'Copied' : 'Copy paths'}</button>}
-      {!uploading && <button aria-label="Dismiss upload status" onClick={() => setDismissed((current) => [...current.slice(-19), event.id])}><X size={12} /></button>}
+      {!uploading && <button aria-label="Dismiss transfer status" onClick={() => setDismissed((current) => [...current.slice(-19), event.id])}><X size={12} /></button>}
       {copyError && <span role="alert">{copyError}</span>}
     </div>
   )

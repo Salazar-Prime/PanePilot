@@ -7,7 +7,8 @@ export function droppedPathsText(paths: string[]): string {
 
 export interface TerminalDropProgress {
   id: string
-  sessionId: string
+  sessionId: string | null
+  operation?: 'copy' | 'upload'
   projectId: string
   target: string
   fileName: string

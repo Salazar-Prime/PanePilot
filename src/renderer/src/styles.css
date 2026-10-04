@@ -1383,11 +1383,50 @@ select:focus-visible {
 }
 
 .files-layout {
+  position: relative;
   display: grid;
   min-height: 0;
   overflow: hidden;
   flex: 1;
   grid-template-columns: minmax(260px, 32%) minmax(0, 1fr);
+}
+
+.files-drop-target::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  z-index: 9;
+  border: 2px solid #7387f6;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.files-drop-hint {
+  position: absolute;
+  z-index: 10;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 28px);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: 1px solid #7387f6;
+  border-radius: 8px;
+  color: #d8dbe4;
+  background: #101219;
+  box-shadow: 0 8px 24px #090b1080;
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+
+.files-drop-hint small {
+  flex-basis: 100%;
+  text-align: center;
+  color: #a7afc4;
 }
 
 .workspace-panel-cache {
