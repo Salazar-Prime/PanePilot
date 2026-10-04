@@ -38,9 +38,24 @@ describe('sidebar collapse selection routing', () => {
   })
 
   it('workspace user selections reveal terminals in either pane, not passive selection synchronization', () => {
-    expect(app).toContain('onSessionSelected={(id) => {\n                    expandSidebarProject(paneAProject.id)')
-    expect(app).toContain('onSessionSelected={(id) => {\n                      expandSidebarProject(paneBProject.id)')
+    expect(app).toContain('if (options?.revealSidebar !== false) expandSidebarProject(paneAProject.id)')
+    expect(app).toContain('if (options?.revealSidebar !== false) expandSidebarProject(paneBProject.id)')
     expect(app).toContain('onSelectSession={(id) => {\n                    setSelectedSessionId(id)')
     expect(app).toContain('onSelectSession={(id) => {\n                      setPaneBSessionId(id)')
+  })
+
+  it('number and cycling shortcuts preserve collapse in terminal and LaTeX workspaces', () => {
+    const terminal = readFileSync('src/renderer/src/components/TerminalProjectWorkspace.tsx', 'utf8')
+    expect(terminal).toContain('onSelectSession: (id) => selectSession(id, false)')
+    const select = terminal.slice(terminal.indexOf('  async function selectSession('), terminal.indexOf('  async function startTerminal('))
+    expect(select).toContain('onSessionSelected(id, { revealSidebar })')
+    expect(select).toContain('onOpenSession(id)')
+    expect(select).toContain('onSelectSession(id)')
+
+    const latex = readFileSync('src/renderer/src/components/LatexProjectWorkspace.tsx', 'utf8')
+    const shortcut = latex.slice(latex.indexOf('  async function selectShortcutSession('), latex.indexOf('  async function clearChanges('))
+    expect(latex).toContain('onSelectSession: selectShortcutSession')
+    expect(shortcut).toContain('onSessionSelected(id, { revealSidebar: false })')
+    expect(shortcut).toContain('onSelectSession(id)')
   })
 })

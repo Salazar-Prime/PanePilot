@@ -221,7 +221,7 @@ export function TerminalProjectWorkspace({
     actions: shortcutActions,
     sessions: shortcutSessions,
     activeSessionId: activeSession?.id ?? null,
-    onSelectSession: selectSession
+    onSelectSession: (id) => selectSession(id, false)
   })
   useModalEscape(
     () => setShowArchivedSessions(false),
@@ -365,9 +365,9 @@ export function TerminalProjectWorkspace({
     }
   }, [menu])
 
-  async function selectSession(id: string) {
+  async function selectSession(id: string, revealSidebar = true) {
     selectWorkspaceTab('terminal')
-    onSessionSelected(id)
+    onSessionSelected(id, { revealSidebar })
     onOpenSession(id)
     onSelectSession(id)
   }

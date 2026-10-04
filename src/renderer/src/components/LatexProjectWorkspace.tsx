@@ -540,7 +540,7 @@ export function LatexProjectWorkspace({
 
   async function selectShortcutSession(id: string) {
     selectWorkspaceTab('manuscript')
-    onSessionSelected(id)
+    onSessionSelected(id, { revealSidebar: false })
     onSelectSession(id)
   }
 

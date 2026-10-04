@@ -2885,8 +2885,8 @@ export function App() {
                   openSessionIds={openSessionIds}
                   onOpenSession={openSession}
                   onCloseSession={closeSession}
-                  onSessionSelected={(id) => {
-                    expandSidebarProject(paneAProject.id)
+                  onSessionSelected={(id, options) => {
+                    if (options?.revealSidebar !== false) expandSidebarProject(paneAProject.id)
                     recordSessionSelection(id)
                   }}
                   onLaunchTerminalRequestHandled={handleLaunchTerminalRequest}
@@ -2966,8 +2966,8 @@ export function App() {
                     openSessionIds={openSessionIds}
                     onOpenSession={openSession}
                     onCloseSession={closeSession}
-                    onSessionSelected={(id) => {
-                      expandSidebarProject(paneBProject.id)
+                    onSessionSelected={(id, options) => {
+                      if (options?.revealSidebar !== false) expandSidebarProject(paneBProject.id)
                       recordSessionSelection(id)
                     }}
                     onLaunchTerminalRequestHandled={handleLaunchTerminalRequest}

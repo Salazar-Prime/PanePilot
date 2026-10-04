@@ -27,7 +27,7 @@ export interface ProjectWorkspaceProps {
   openSessionIds: Set<string>
   onOpenSession(id: string): void
   onCloseSession(id: string): void
-  onSessionSelected(id: string): void
+  onSessionSelected(id: string, options?: { revealSidebar?: boolean }): void
   onLaunchTerminalRequestHandled(id: number): void
   onOpenSessionRequestHandled(id: number): void
   onWorkspaceTabRequestHandled(id: number): void
