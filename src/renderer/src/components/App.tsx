@@ -77,6 +77,8 @@ import {
 import { useProjectAttentionOrder } from '../lib/projectAttentionOrder'
 import { useCollapsedProjects } from '../lib/sidebarCollapse'
 import { useSelectionRecency } from '../lib/selectionRecency'
+import { useSidebarProjectMotion } from '../lib/useSidebarProjectMotion'
+import { sidebarProjectTranslation } from '../lib/sidebarProjectMotion'
 import { sortSessions, useSessionSort } from '../lib/sessionSort'
 import {
   clampSidebarWidth,
@@ -986,6 +988,13 @@ export function App() {
       sessionSort
     ]
   )
+  const sidebarMotionRevision = useMemo(
+    () => ({ sidebarConnectionGroups, collapsedProjectIds, sidebarWidth }),
+    [sidebarConnectionGroups, collapsedProjectIds, sidebarWidth]
+  )
+  useSidebarProjectMotion(sidebarScrollRef, sidebarOpen, sidebarMotionRevision)
+  const sidebarProjectOrder = JSON.stringify(sidebarConnectionGroups.map(({ connection, projects }) =>
+    [connection.id, projects.map(({ project }) => project.id)]))
   const sidebarActiveProjectId =
     splitOpen && focusedPane === 'b' ? paneBProjectId : selectedProjectId
   const sidebarActiveSessionId =
@@ -1022,11 +1031,13 @@ export function App() {
       if (!activeRow) return
       const scrollBounds = scrollArea.getBoundingClientRect()
       const rowBounds = activeRow.getBoundingClientRect()
+      // Reveal the destination, not a transient position midway through sorting.
+      const translation = sidebarProjectTranslation(activeRow.closest<HTMLElement>('[data-sidebar-project-id]'))
       const delta = sidebarRevealDelta(
         scrollBounds.top,
         scrollBounds.bottom,
-        rowBounds.top,
-        rowBounds.bottom
+        rowBounds.top - translation,
+        rowBounds.bottom - translation
       )
       if (delta !== 0) scrollArea.scrollTop += delta
     })
@@ -1034,6 +1045,7 @@ export function App() {
   }, [
     collapsedProjectIds,
     sidebarActiveSessionId,
+    sidebarProjectOrder,
     sidebarOpen,
     showArchivedProjects
   ])
@@ -2462,7 +2474,7 @@ export function App() {
               projects: connectionProjects
             }) => {
               return (
-                <section className="connection-group" key={item.id}>
+                <section className="connection-group" key={item.id} data-sidebar-connection-id={item.id}>
                 <div
                   className="connection-heading"
                   onContextMenu={(event) => {
@@ -2513,7 +2525,7 @@ export function App() {
                     const isCollapsed = collapsedProjectIds.has(candidate.id)
                     const showSessions = hasSessions && !isCollapsed
                     return (
-                      <div className="project-tree" key={candidate.id}>
+                      <div className="project-tree" key={candidate.id} data-sidebar-project-id={candidate.id}>
                       <div
                         className={`project-row ${
                           candidate.id === project?.id && !showArchivedProjects

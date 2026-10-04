@@ -387,6 +387,10 @@ select:focus-visible {
   padding: 12px 8px;
 }
 
+.connection-group {
+  position: relative;
+}
+
 .connection-group + .connection-group {
   margin-top: 18px;
 }
@@ -436,7 +440,28 @@ select:focus-visible {
 }
 
 .project-tree {
+  position: relative;
   margin-top: 2px;
+}
+
+.sidebar-project-moving {
+  z-index: 1;
+  will-change: transform;
+  border-radius: 7px;
+  background: #101219;
+}
+
+.sidebar-project-promoted {
+  z-index: 2;
+  box-shadow: 0 5px 16px #090b1033;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-project-moving {
+    transform: none !important;
+    will-change: auto;
+    box-shadow: none;
+  }
 }
 
 .project-row,
