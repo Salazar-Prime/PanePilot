@@ -19,7 +19,7 @@ describe('appearance scale', () => {
     expect(values.every((value) => value >= 0.9 && value <= 1.25)).toBe(true)
   })
 
-  it('keeps interface zoom in the toolbar instead of keyboard shortcuts', () => {
+  it('preserves saved scale without exposing the removed toolbar menu or zoom shortcuts', () => {
     const app = readFileSync(
       join(
         process.cwd(),
@@ -35,5 +35,6 @@ describe('appearance scale', () => {
     expect(app).toContain("['+', '=', '-', '0'].includes(event.key)")
     expect(app).not.toContain('setAppearanceScale(1)')
     expect(app).not.toContain('nextAppearanceScale(appearanceScale')
+    expect(app).not.toContain('AppearanceControl')
   })
 })

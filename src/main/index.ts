@@ -26,6 +26,7 @@ import type {
   UpdateSpeechSettingsInput
 } from '../shared/types'
 import { ConversationIndexer } from './conversation-indexer'
+import { CodexSubagentReader } from './codex-subagents'
 import {
   createLocalDirectory,
   createLocalFile,
@@ -71,6 +72,7 @@ let terminals: TerminalManager
 let terminalDrops: TerminalDropService
 let conversations: ConversationIndexer
 let remoteConversations: RemoteConversationIndexer
+const codexSubagents = new CodexSubagentReader()
 let portForwards: PortForwardManager
 let latex: LatexProjectService
 let metadata: ProjectMetadataService
@@ -230,6 +232,24 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('terminals:start', (_event, input: StartTerminalInput) => terminals.start(input))
+  ipcMain.handle('terminals:subagents', async (event, sessionId: string) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) {
+      throw new Error('Invalid sub-agent viewer sender.')
+    }
+    if (typeof sessionId !== 'string') throw new Error('Choose a Codex terminal.')
+    const session = store.getSession(sessionId)
+    if (!session || session.archived || session.profile !== 'codex' ||
+      (session.kind !== 'terminal' && (session.kind !== 'latex-chat' || session.latexChat?.purpose !== 'writing'))) {
+      throw new Error('Choose an active Codex terminal or writing chat.')
+    }
+    const project = store.getProjectForRuntime(session.projectId)
+    if (!project || project.archived) throw new Error('Project not found.')
+    const connection = store.getConnection(project.connectionId)
+    if (!connection) throw new Error('Project connection not found.')
+    if (!session.providerSessionId) throw new Error('This terminal has no linked Codex thread yet. Wait for it to connect, then try again.')
+    return codexSubagents.read(session.providerSessionId, project.folder,
+      connection.kind === 'ssh' ? connection.sshAlias ?? connection.name : undefined)
+  })
   ipcMain.handle('actions:sync', (_event, projectId: string) =>
     terminals.syncActions(projectId)
   )

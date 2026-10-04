@@ -550,6 +550,30 @@ export interface GoogleDrivePublicLinkResult {
   destination: string
 }
 
+export interface CodexSubagentOutput {
+  kind: 'message' | 'tool' | 'result'
+  text: string
+  timestamp: string | null
+}
+
+export interface CodexSubagent {
+  id: string
+  parentId: string
+  name: string
+  path: string
+  state: 'working' | 'finished' | 'stopped' | 'unknown'
+  updatedAt: string
+  output: CodexSubagentOutput[]
+  truncated: boolean
+}
+
+export interface CodexSubagentSnapshot {
+  agents: CodexSubagent[]
+  total: number
+  limited: boolean
+  rootFound: boolean
+}
+
 export interface ProjectConsoleApi {
   terminalDrops: {
     drop(sessionId: string, files: File[]): Promise<import('./terminalDrops').TerminalDropResult>
@@ -580,6 +604,7 @@ export interface ProjectConsoleApi {
     commits(projectId: string, offset?: number, limit?: number): Promise<GitCommitPage>
   }
   terminals: {
+    subagents(sessionId: string): Promise<CodexSubagentSnapshot>
     start(input: StartTerminalInput): Promise<TerminalSession>
     discover(connectionId?: string): Promise<number>
     attach(sessionId: string, cols: number, rows: number): Promise<{ output: string }>

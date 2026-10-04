@@ -26,6 +26,7 @@ import {
   FolderInput,
   FolderOpen,
   GitBranch,
+  GitFork,
   Github,
   Globe2,
   Laptop,
@@ -121,7 +122,8 @@ import { WorkspaceSwitcherReleaseGuard } from '../lib/workspaceSwitcherRelease'
 import { WorkspaceVisitDwell } from '../lib/workspaceVisitDwell'
 import { commandPaletteSession, contextualCommands } from '../lib/commandPalette'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
-import { AppearanceControl } from './AppearanceControl'
+import { SubagentOverlay } from './SubagentOverlay'
+import { visibleCodexSession } from '../lib/subagents'
 import {
   CommandPalette,
   type CommandPaletteCommand
@@ -241,7 +243,9 @@ async function getRendererProject(projectId: string): Promise<Project | null> {
 
 export function App() {
   const [, startBackgroundTransition] = useTransition()
-  const [appearanceScale, setAppearanceScale] = useAppearanceScale()
+  useAppearanceScale()
+  const [subagentSessionId, setSubagentSessionId] = useState<string | null>(null)
+  const [visibleDestinations, setVisibleDestinations] = useState<Record<WorkspacePane, WorkspaceDestination | null>>({ a: null, b: null })
   const [connections, setConnections] = useState<Connection[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [terminalTransportStates, setTerminalTransportStates] = useState<
@@ -565,6 +569,8 @@ export function App() {
   const handleWorkspaceDestination = useCallback(
     (pane: WorkspacePane, destination: WorkspaceDestination) => {
       paneDestinationsRef.current[pane] = destination
+      setVisibleDestinations((current) => current[pane]?.key === destination.key
+        ? current : { ...current, [pane]: destination })
       if (focusedPaneRef.current === pane) trackCurrentWorkspaceVisit()
     },
     [trackCurrentWorkspaceVisit]
@@ -915,6 +921,7 @@ export function App() {
         event.key.toLocaleLowerCase() === 'k'
       ) {
         event.preventDefault()
+        if (document.querySelector('.subagent-observatory')) return
         setShowCommandPalette((current) => !current)
         return
       }
@@ -1110,6 +1117,11 @@ export function App() {
         !session.archived &&
         (session.kind !== 'terminal' || openSessionIds.has(session.id))
     ) ?? null
+  const subagentSession = visibleCodexSession(project,
+    visibleDestinations[focusedPane === 'b' && splitOpen ? 'b' : 'a'], focusedSession?.id ?? null)
+  useEffect(() => {
+    setSubagentSessionId(null)
+  }, [subagentSession?.id, focusedPane])
 
   const refreshGitStatus = useCallback(async () => {
     const projectId = project?.id
@@ -2339,10 +2351,14 @@ export function App() {
           )}
         </div>
         <div className="top-actions">
-          <AppearanceControl
-            scale={appearanceScale}
-            onChange={setAppearanceScale}
-          />
+          <button
+            className={`icon-button ${subagentSessionId ? 'active' : ''}`}
+            aria-label="Sub-agents"
+            title={subagentSession ? 'Show this Codex terminal’s sub-agents' : 'Select a Codex terminal to view sub-agents'}
+            disabled={!subagentSession}
+            aria-expanded={Boolean(subagentSessionId)}
+            onClick={() => setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null)}
+          ><GitFork size={17} /></button>
           <SpeechControl />
           {project && (
             <button
@@ -3123,6 +3139,11 @@ export function App() {
           onTransfer={transferSessionToProject}
           onClose={() => setTransferTarget(null)}
         />
+      )}
+      {project && subagentSession && subagentSessionId === subagentSession.id && (
+        <SubagentOverlay key={`${subagentSession.id}:${subagentSession.providerSessionId}`} sessionId={subagentSession.id}
+          sessionName={subagentSession.name} projectName={project.name}
+          onClose={() => setSubagentSessionId(null)} />
       )}
       <CommandPalette
         open={showCommandPalette}

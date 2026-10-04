@@ -67,6 +67,7 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('git:commits', projectId, offset, limit)
   },
   terminals: {
+    subagents: (sessionId: string) => ipcRenderer.invoke('terminals:subagents', sessionId),
     start: (input: StartTerminalInput) => ipcRenderer.invoke('terminals:start', input),
     discover: (connectionId?: string) =>
       ipcRenderer.invoke('terminals:discover', connectionId),

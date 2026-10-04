@@ -4,7 +4,7 @@ import type { ProjectConsoleApi } from '../../shared/types'
 
 declare global {
   interface Window {
-    projectConsole: ProjectConsoleApi // Includes typed terminalDrops and files.importFiles bridges.
+    projectConsole: ProjectConsoleApi // Includes typed terminal drops, file imports, and Codex sub-agent snapshots.
   }
 }
 
