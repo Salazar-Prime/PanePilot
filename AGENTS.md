@@ -109,6 +109,8 @@ These are owner-approved decisions and should be treated as product invariants u
 
 74. Clicking a project or opening it in either pane preserves its saved sidebar collapse state, even when the workspace restores a default or remembered terminal. Restoring selection, switching pane focus, and reopening the sidebar must not implicitly expand terminal lists. Command/Control-arrow workspace switching also preserves collapse for every destination, including terminal history and project-terminal drill-down entries; it activates the selected session without expanding its sidebar project. Expansion is explicit through the chevron or other direct terminal/chat selection actions (including workspace terminal tabs and newly created sessions).
 
+75. A destination enters or moves to the front of Command/Control-arrow recent history only after five continuous seconds in the focused workspace pane while the application is focused and visible. Brief visits neither add new entries nor promote/remove existing ones; metadata refreshes do not restart the timer, and each uninterrupted visit is recorded once. Switching destinations, losing focus, hiding the document, opening the archive library, or unmounting cancels pending dwell without flushing it. The Current row is independent and remains immediately available. Previously saved history is retained, and sidebar project/terminal selection recency keeps its existing immediate semantics.
+
 ## Agent lifecycle semantics
 
 Agent state describes the current turn, not merely whether the terminal process exists.

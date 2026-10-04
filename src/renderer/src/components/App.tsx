@@ -2,6 +2,7 @@ import {
   type CSSProperties,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -117,6 +118,7 @@ import {
 } from '../lib/workspaceHistory'
 import { projectTypeRegistry } from '../projectTypeRegistry'
 import { WorkspaceSwitcherReleaseGuard } from '../lib/workspaceSwitcherRelease'
+import { WorkspaceVisitDwell } from '../lib/workspaceVisitDwell'
 import { commandPaletteSession, contextualCommands } from '../lib/commandPalette'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
 import { AppearanceControl } from './AppearanceControl'
@@ -306,6 +308,12 @@ export function App() {
     Record<WorkspacePane, WorkspaceDestination | null>
   >({ a: null, b: null })
   const focusedPaneRef = useRef<WorkspacePane>('a')
+  const workspaceVisitRef = useRef<WorkspaceVisitDwell | null>(null)
+  const workspaceVisitContextRef = useRef<{
+    projectId: string | null
+    sessionId: string | null
+    enabled: boolean
+  }>({ projectId: null, sessionId: null, enabled: false })
   const [workspaceSwitcher, setWorkspaceSwitcher] =
     useState<WorkspaceSwitcherState | null>(null)
   const workspaceSwitcherRef = useRef<WorkspaceSwitcherState | null>(null)
@@ -543,13 +551,23 @@ export function App() {
     },
     []
   )
+  if (!workspaceVisitRef.current) workspaceVisitRef.current = new WorkspaceVisitDwell(storeWorkspaceVisit)
+
+  const trackCurrentWorkspaceVisit = useCallback(() => {
+    const context = workspaceVisitContextRef.current
+    const destination = paneDestinationsRef.current[focusedPaneRef.current]
+    const eligible = context.enabled && document.hasFocus() && !document.hidden &&
+      destination?.projectId === context.projectId &&
+      (!destination.sessionId || destination.sessionId === context.sessionId)
+    workspaceVisitRef.current?.visit(eligible ? destination : null)
+  }, [])
 
   const handleWorkspaceDestination = useCallback(
     (pane: WorkspacePane, destination: WorkspaceDestination) => {
       paneDestinationsRef.current[pane] = destination
-      if (focusedPaneRef.current === pane) storeWorkspaceVisit(destination)
+      if (focusedPaneRef.current === pane) trackCurrentWorkspaceVisit()
     },
-    [storeWorkspaceVisit]
+    [trackCurrentWorkspaceVisit]
   )
 
   const handlePaneAWorkspaceDestination = useCallback(
@@ -564,11 +582,33 @@ export function App() {
     [handleWorkspaceDestination]
   )
 
+  useLayoutEffect(() => {
+    const pane = splitOpen ? focusedPane : 'a'
+    focusedPaneRef.current = pane
+    workspaceVisitContextRef.current = {
+      projectId: pane === 'b' ? paneBProjectId : selectedProjectId,
+      sessionId: pane === 'b' ? paneBSessionId : selectedSessionId,
+      enabled: !loading && !showArchivedProjects
+    }
+    // Cancel the old visit even if the new workspace has not reported its
+    // destination yet. Background panes never contribute dwell time.
+    trackCurrentWorkspaceVisit()
+  }, [focusedPane, splitOpen, selectedProjectId, selectedSessionId,
+    paneBProjectId, paneBSessionId, loading, showArchivedProjects, trackCurrentWorkspaceVisit])
+
   useEffect(() => {
-    focusedPaneRef.current = focusedPane
-    const destination = paneDestinationsRef.current[focusedPane]
-    if (destination) storeWorkspaceVisit(destination)
-  }, [focusedPane, storeWorkspaceVisit])
+    const cancel = () => workspaceVisitRef.current?.reset()
+    window.addEventListener('blur', cancel)
+    window.addEventListener('focus', trackCurrentWorkspaceVisit)
+    document.addEventListener('visibilitychange', trackCurrentWorkspaceVisit)
+    trackCurrentWorkspaceVisit()
+    return () => {
+      window.removeEventListener('blur', cancel)
+      window.removeEventListener('focus', trackCurrentWorkspaceVisit)
+      document.removeEventListener('visibilitychange', trackCurrentWorkspaceVisit)
+      cancel()
+    }
+  }, [trackCurrentWorkspaceVisit])
 
   function nextWorkspaceRequest(
     projectId: string,
@@ -1531,7 +1571,6 @@ export function App() {
     setShowArchivedProjects(false)
     applyPaneSelection(pane, destination.projectId, sessionId)
     paneDestinationsRef.current[pane] = destination
-    storeWorkspaceVisit(destination)
     if (sessionId) {
       openSession(sessionId)
       void acknowledgeSession(sessionId)
