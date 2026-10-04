@@ -1526,7 +1526,6 @@ export function App() {
 
     recordProjectSelection(destination.projectId)
     if (destination.sessionId) {
-      expandSidebarProject(destination.projectId)
       recordSessionSelection(destination.sessionId)
     }
     setShowArchivedProjects(false)

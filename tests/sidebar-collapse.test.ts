@@ -25,7 +25,16 @@ describe('sidebar collapse selection routing', () => {
   it('explicit terminal jumps still expand the exact owning project', () => {
     expect(between('  async function selectSession(', '  function activateWorkspaceDestination(')).toContain('expandSidebarProject(projectId)')
     expect(between('  async function openSessionInPane(', '  async function createProject(')).toContain('expandSidebarProject(projectId)')
-    expect(app).toContain('if (destination.sessionId) {\n      expandSidebarProject(destination.projectId)')
+  })
+
+  it('Command-arrow history switching preserves collapse while activating the exact terminal', () => {
+    const body = between('  function activateWorkspaceDestination(', '  async function reconnectSession(')
+    expect(body).not.toContain('expandSidebarProject(')
+    expect(body).not.toContain('toggleProjectCollapsed(')
+    expect(body).toContain('destination.sessionId ??')
+    expect(body).toContain('recordSessionSelection(destination.sessionId)')
+    expect(body).toContain('applyPaneSelection(pane, destination.projectId, sessionId)')
+    expect(body).toContain('openSession(sessionId)')
   })
 
   it('workspace user selections reveal terminals in either pane, not passive selection synchronization', () => {
