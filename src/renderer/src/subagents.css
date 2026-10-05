@@ -3,7 +3,7 @@
   inset: 0;
   z-index: 250;
   display: flex;
-  padding: clamp(16px, 3vw, 44px);
+  padding: 12px 16px;
   background: #090e19ba;
   color-scheme: dark;
   backdrop-filter: blur(24px) saturate(0.65);
@@ -22,21 +22,23 @@
   align-items: center;
   gap: 16px;
 }
-.subagent-heading { justify-content: space-between; margin-bottom: 22px; }
+.subagent-heading { justify-content: space-between; margin-bottom: 10px; flex-shrink: 0; }
 .subagent-title > svg { color: #a6b5ef; }
-.subagent-title h2 { margin: 0 0 4px; font-size: 23px; font-weight: 550; letter-spacing: -0.6px; }
-.subagent-title p { margin: 0; color: #b0b9cb; font-size: 12px; overflow-wrap: anywhere; }
+.subagent-title h2 { margin: 0 0 2px; font-size: 16px; font-weight: 550; letter-spacing: -0.3px; }
+.subagent-title p { margin: 0; color: #b0b9cb; font-size: 10px; overflow-wrap: anywhere; }
 .subagent-title p span { padding: 0 6px; color: #7886a1; }
 .subagent-heading-actions small { color: #b0b9cb; white-space: nowrap; }
+.subagent-pagination { display: flex; align-items: center; gap: 4px; }
+.subagent-pagination span { color: #b0b9cb; font: 10px "SFMono-Regular", monospace; white-space: nowrap; }
 .subagent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
-  grid-auto-rows: clamp(260px, 38vh, 420px);
-  gap: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 2px 4px 12px;
+  padding: 1px;
   align-content: stretch;
 }
 .subagent-grid:empty { display: none; }
@@ -45,37 +47,42 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   height: 100%;
   overflow: hidden;
-  background: #131b2ae8;
+  background: #090b10;
   border: 1px solid #a6b5ef30;
-  border-radius: 14px;
+  border-radius: 8px;
   box-shadow: 0 12px 32px #00000030, inset 0 1px #ffffff0d;
 }
-.subagent-window-heading { justify-content: space-between; padding: 15px 18px; border-bottom: 1px solid #a6b5ef20; }
+.subagent-window-heading { justify-content: space-between; gap: 6px; padding: 7px 9px; border-bottom: 1px solid #a6b5ef20; background: #131b2ae8; flex-shrink: 0; }
 .subagent-window-heading > div { min-width: 0; }
-.subagent-window-heading strong { display: block; font-size: 14px; font-weight: 600; }
-.subagent-window-heading small { display: block; margin-top: 5px; color: #97a5bf; font: 10px "SFMono-Regular", monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.subagent-state { display: flex; align-items: center; gap: 6px; flex-shrink: 0; color: #97a5bf; font-size: 10px; }
+.subagent-window-heading strong { display: block; font-size: 11px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subagent-window-heading small { display: block; margin-top: 2px; color: #97a5bf; font: 8px "SFMono-Regular", monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subagent-state { display: flex; align-items: center; gap: 4px; flex-shrink: 0; color: #97a5bf; font-size: 8px; }
 .subagent-state i { width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
 .subagent-state.working { color: #9bafff; }
 .subagent-state.finished { color: #86c5b0; }
 .subagent-state.stopped { color: #d9b17e; }
-.subagent-output { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 18px 24px; }
+.subagent-output { flex: 1; min-height: 0; min-width: 0; overflow: hidden; padding: 5px; }
+.subagent-terminal .xterm { height: 100%; }
+.subagent-terminal .xterm-viewport { overscroll-behavior: contain; }
+.subagent-terminal .xterm-cursor-layer { visibility: hidden; }
 .subagent-grid, .subagent-output { scrollbar-width: thin; scrollbar-color: #56617b transparent; }
 .subagent-output:focus-visible { outline: 1px solid #a6b5ef; outline-offset: -2px; }
-.subagent-entry { padding: 12px 0; border-bottom: 1px solid #a6b5ef12; }
-.subagent-entry > span { display: block; margin-bottom: 7px; color: #97a5bf; font-size: 9px; letter-spacing: 0.07em; text-transform: uppercase; }
-.subagent-entry pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.65 "SFMono-Regular", "Cascadia Code", monospace; color: #d8dbe4; }
-.subagent-entry.tool pre, .subagent-entry.result pre { color: #b0b9cb; font-size: 11px; }
-.subagent-output-note, .subagent-notice { color: #b0b9cb; font-size: 11px; line-height: 1.6; }
+.subagent-notice { color: #b0b9cb; font-size: 11px; line-height: 1.6; }
 .subagent-error { padding: 12px 16px; margin-bottom: 14px; color: #eac39a; background: #302820d9; border: 1px solid #d9b17e40; border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }
 .subagent-empty { margin: auto; padding: 48px 20px; text-align: center; max-width: 460px; }
 .subagent-empty > svg { color: #a6b5ef; }
 .subagent-empty h3 { font-size: 18px; font-weight: 500; }
 .subagent-empty p { color: #b0b9cb; font-size: 13px; line-height: 1.7; }
 .subagent-follow { position: absolute; bottom: 12px; right: 16px; padding: 7px 11px; color: #d8dbe4; background: #263754; border: 1px solid #a6b5ef55; border-radius: 16px; font-size: 11px; cursor: pointer; }
-.subagent-footer { padding-top: 12px; color: #97a5bf; font-size: 10px; line-height: 1.5; }
+.subagent-footer { padding-top: 7px; color: #97a5bf; font-size: 9px; line-height: 1.5; flex-shrink: 0; }
 @keyframes subagent-reveal { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .subagent-glass { animation: none; } }
-@media (max-width: 600px) { .subagent-heading-actions small { display: none; } .subagent-heading { gap: 8px; } }
+@media (max-width: 1000px) { .subagent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .subagent-heading-actions small { display: none; }
+  .subagent-heading { gap: 8px; }
+  .subagent-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: 200px; }
+}
