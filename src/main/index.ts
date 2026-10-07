@@ -232,6 +232,12 @@ function registerIpc(): void {
   )
 
   ipcMain.handle('terminals:start', (_event, input: StartTerminalInput) => terminals.start(input))
+  ipcMain.handle('terminals:preview', (event, sessionId: string) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame || typeof sessionId !== 'string') {
+      throw new Error('Invalid terminal preview request.')
+    }
+    return terminals.preview(sessionId)
+  })
   ipcMain.handle('terminals:subagents', async (event, sessionId: string) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) {
       throw new Error('Invalid sub-agent viewer sender.')

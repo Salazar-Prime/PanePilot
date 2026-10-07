@@ -550,6 +550,13 @@ export interface GoogleDrivePublicLinkResult {
   destination: string
 }
 
+export interface TerminalPreviewSnapshot {
+  output: string
+  cols: number
+  rows: number
+  source: 'tmux' | 'buffer'
+}
+
 export interface CodexSubagentOutput {
   kind: 'message' | 'tool' | 'result'
   text: string
@@ -604,6 +611,7 @@ export interface ProjectConsoleApi {
     commits(projectId: string, offset?: number, limit?: number): Promise<GitCommitPage>
   }
   terminals: {
+    preview(sessionId: string): Promise<TerminalPreviewSnapshot>
     subagents(sessionId: string): Promise<CodexSubagentSnapshot>
     start(input: StartTerminalInput): Promise<TerminalSession>
     discover(connectionId?: string): Promise<number>

@@ -37,6 +37,8 @@ import { ProjectMetadataService } from './project-metadata-service'
 import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import { acknowledgedAgentState, ScreenActivityDetector } from './screen-activity-detector'
 import { Store } from './store'
+import { captureTmuxPreview, TerminalPreviewReads } from './terminal-preview'
+import type { TerminalPreviewSnapshot } from '../shared/types'
 import {
   panePilotTmuxMetadata,
   parseTmuxSessionList,
@@ -1431,6 +1433,34 @@ export class TerminalManager {
       throw new Error('Terminal input is limited to 2 MB at a time.')
     }
     for (const chunk of terminalInputChunks(data)) runtime.pty.write(chunk)
+  }
+
+  private readonly previewReads = new TerminalPreviewReads()
+
+  async preview(sessionId: string): Promise<TerminalPreviewSnapshot> {
+    const session = this.requireSession(sessionId)
+    if (session.archived || (session.kind !== 'terminal' && session.kind !== 'latex-chat')) {
+      throw new Error('This session cannot be previewed.')
+    }
+    const project = this.store.getProjectForRuntime(session.projectId)
+    const connection = project && !project.archived ? this.store.getConnection(project.connectionId) : null
+    if (!connection) throw new Error('The terminal project is unavailable.')
+    return this.previewReads.read(sessionId, async () => {
+      if (session.backend === 'tmux' && session.tmuxName) {
+        const tmuxPath = connection.kind === 'local' ? this.tmuxPath :
+          this.remoteTmuxPaths.get(connection.id) ?? await resolveRemoteTmuxAsync(connection.sshAlias ?? connection.name)
+        if (!tmuxPath) throw new Error('Tmux is unavailable.')
+        if (connection.kind === 'ssh') this.remoteTmuxPaths.set(connection.id, tmuxPath)
+        return captureTmuxPreview(tmuxPath, session.tmuxName,
+          connection.kind === 'ssh' ? connection.sshAlias ?? connection.name : undefined)
+      }
+      const runtime = this.runtimes.get(sessionId)
+      if (!runtime) throw new Error('No screen snapshot is available for this detached terminal.')
+      const buffer = runtime.screen.buffer.active
+      const output = Array.from({ length: runtime.screen.rows }, (_, index) =>
+        buffer.getLine(buffer.baseY + index)?.translateToString(true) ?? '').join('\n')
+      return { output, cols: runtime.screen.cols, rows: runtime.screen.rows, source: 'buffer' }
+    })
   }
 
   async captureBuffer(sessionId: string): Promise<string> {

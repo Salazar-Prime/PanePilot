@@ -19,6 +19,8 @@ import type {
 } from '../lib/workspaceHistory'
 import { nextWorkspaceSwitcherMode, workspaceTerminalIndicator } from '../lib/workspaceHistory'
 import '../workspace-switcher.css'
+import { WorkspaceTerminalPreview } from './WorkspaceTerminalPreview'
+import { workspacePreviewDestination } from '../lib/workspaceTerminalPreview'
 
 interface WorkspaceSwitcherOverlayProps {
   destinations: WorkspaceDestination[]
@@ -107,6 +109,7 @@ export function WorkspaceSwitcherOverlay({
   onHoverKey
 }: WorkspaceSwitcherOverlayProps) {
   const listRef = useRef<HTMLDivElement>(null)
+  const preview = workspacePreviewDestination(destinations, selectedIndex, mode, removingKey)
   const overlayRef = useRef<HTMLDivElement>(null)
   const motionRef = useRef<HTMLDivElement>(null)
   const projectContextRef = useRef<HTMLDivElement>(null)
@@ -129,7 +132,7 @@ export function WorkspaceSwitcherOverlay({
   })
 
   return (
-    <div
+    <><div
       className={`workspace-switcher-overlay mode-${mode}`}
       role="presentation"
       data-testid="workspace-switcher"
@@ -263,5 +266,7 @@ export function WorkspaceSwitcherOverlay({
       </div>
       <div className="workspace-switcher-motion-layer" ref={motionRef} aria-hidden="true" />
     </div>
+    {preview && <WorkspaceTerminalPreview key={preview.sessionId} destination={preview} />}
+    </>
   )
 }
