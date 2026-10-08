@@ -2398,6 +2398,11 @@ export function App() {
           {project && (project.repositoryUrl || localRepository) && (
             <button
               className="secondary-button header-button repository-header-button"
+              aria-label={
+                localRepository
+                  ? `${gitPaneOpen ? 'Close' : 'Open'} Git pane`
+                  : 'Open repository'
+              }
               onClick={() => {
                 if (localRepository) {
                   setGitPaneOpen((current) => !current)
@@ -2416,8 +2421,7 @@ export function App() {
                     )
               }
             >
-              {localRepository ? <GitBranch size={15} /> : <Github size={15} />}{' '}
-              Repository
+              {localRepository ? <GitBranch size={15} /> : <Github size={15} />}
               {localRepository ? (
                 <span className="repository-visibility-badge local">
                   <Laptop size={10} /> Local
