@@ -10,7 +10,8 @@ export function workspacePreviewDestination(
     ? destination : null
 }
 
-export function previewScale(width: number, height: number, screenWidth: number, screenHeight: number): number {
-  if (screenWidth <= 0 || screenHeight <= 0) return 1
-  return Math.max(0.01, Math.min(1, width / screenWidth, height / screenHeight))
+export function previewFontSize(width: number, height: number, cols: number, rows: number): number {
+  if (cols <= 0 || rows <= 0) return 13
+  // Render native-size glyphs; never shrink a rasterized terminal using CSS scale.
+  return Math.max(1, Math.floor(Math.min(16, (width - 2) / (cols * 0.62), (height - 2) / (rows * 1.32))))
 }

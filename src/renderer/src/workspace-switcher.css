@@ -1,10 +1,10 @@
 .workspace-terminal-preview {
   position: fixed;
   z-index: 80;
-  top: 25vh;
+  top: 15vh;
   right: 18px;
-  width: calc(50vw - 30px);
-  height: 50vh;
+  width: min(64vw, calc(100vw - 300px));
+  height: 70vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -23,11 +23,11 @@
 .workspace-terminal-preview small { display: block; margin-top: 3px; font-size: 10px; color: #8991a3; }
 .workspace-terminal-preview header > span { font: 9px "SFMono-Regular", monospace; text-transform: uppercase; letter-spacing: .08em; }
 .workspace-preview-screen { position: relative; flex: 1; min-height: 0; overflow: hidden; margin: 8px; background: #090b10; border-radius: 5px; }
-.workspace-preview-surface { position: absolute; top: 50%; left: 50%; transform-origin: center; opacity: 0; }
+.workspace-preview-surface { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0; }
 .workspace-preview-surface .xterm-viewport { overflow: hidden !important; }
 .workspace-preview-surface .xterm-cursor-layer { visibility: hidden; }
-.workspace-preview-message { display: grid; flex: 1; place-content: center; padding: 18px; color: #8991a3; font-size: 12px; text-align: center; }
-.workspace-terminal-preview footer { padding: 0 14px 10px; color: #8991a3; font-size: 9px; }
+.workspace-preview-message { position: absolute; inset: 60px 8px 26px; display: grid; place-content: center; padding: 18px; color: #8991a3; font-size: 12px; text-align: center; }
+.workspace-terminal-preview footer { padding: 0 14px 10px; color: #8991a3; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (prefers-reduced-motion: reduce) { .workspace-terminal-preview { animation: none; } }
 
 .sidebar {

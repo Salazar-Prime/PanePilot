@@ -266,7 +266,7 @@ export function WorkspaceSwitcherOverlay({
       </div>
       <div className="workspace-switcher-motion-layer" ref={motionRef} aria-hidden="true" />
     </div>
-    {preview && <WorkspaceTerminalPreview key={preview.sessionId} destination={preview} />}
+    {preview && <WorkspaceTerminalPreview destination={preview} />}
     </>
   )
 }

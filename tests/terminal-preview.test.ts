@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { parseTerminalPreview, terminalPreviewArgs, TerminalPreviewReads } from '../src/main/terminal-preview'
-import { previewScale, workspacePreviewDestination } from '../src/renderer/src/lib/workspaceTerminalPreview'
+import { previewFontSize, workspacePreviewDestination } from '../src/renderer/src/lib/workspaceTerminalPreview'
 import type { WorkspaceDestination } from '../src/renderer/src/lib/workspaceHistory'
 
 const snapshot = { output: 'screen', cols: 80, rows: 24, source: 'tmux' as const }
@@ -22,10 +22,21 @@ describe('switcher preview selection', () => {
     expect(workspacePreviewDestination([], 0, 'recent', null)).toBeNull()
     expect(workspacePreviewDestination([terminal], 0, 'recent', terminal.key)).toBeNull()
   })
-  it('fits the whole screen without changing its aspect ratio or enlarging it', () => {
-    expect(previewScale(500, 300, 1000, 400)).toBe(0.5)
-    expect(previewScale(500, 300, 300, 600)).toBe(0.5)
-    expect(previewScale(500, 300, 100, 100)).toBe(1)
+  it('fits using native integer font sizes and grows text in a larger area', () => {
+    expect(previewFontSize(500, 300, 100, 30)).toBe(7)
+    expect(previewFontSize(850, 550, 100, 30)).toBe(13)
+    expect(previewFontSize(1800, 1200, 80, 24)).toBe(16)
+    expect(previewFontSize(10, 10, 600, 400)).toBe(1)
+  })
+  it('keeps the card and terminal surfaces mounted while switching snapshots', () => {
+    const overlay = readFileSync('src/renderer/src/components/WorkspaceSwitcherOverlay.tsx', 'utf8')
+    const view = readFileSync('src/renderer/src/components/WorkspaceTerminalPreview.tsx', 'utf8')
+    expect(overlay).toContain('<WorkspaceTerminalPreview destination={preview}')
+    expect(overlay).not.toContain('key={preview.sessionId}')
+    expect(view).toContain('}, [])')
+    expect(view).not.toContain('}, [snapshot])')
+    expect(view).toContain('generation !== version')
+    expect(view).toContain('showing ${shown.destination.sessionName}')
   })
 })
 
@@ -67,7 +78,7 @@ describe('read-only screen capture', () => {
     for (const method of ['attach(', 'resize(', 'acknowledge(', 'write(']) expect(renderer).not.toContain(`terminals.${method}`)
     expect(renderer).toContain('if (!disposed)')
     expect(renderer).toContain('clearTimeout(timer)')
-    expect(renderer).toContain('host.current.inert = true')
+    expect(renderer).toContain('.inert = true')
     const manager = readFileSync('src/main/terminal-manager.ts', 'utf8')
     const preview = manager.slice(manager.indexOf('  async preview('), manager.indexOf('  async captureBuffer('))
     expect(preview).not.toContain('this.attach(')
