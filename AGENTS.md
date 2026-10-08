@@ -123,6 +123,8 @@ These are owner-approved decisions and should be treated as product invariants u
 
 81. The bottom Working and Needs attention counts open an anchored compact popover with live project, machine, session, and state labels. Counts and lists use the same existing lifecycle filters, including unread response-ready sessions in attention, and exclude archived projects/sessions. Clicking a row dismisses the popover and navigates in the focused pane: ordinary terminals and writing chats use exact-session selection; Actions, project Q&A, quick chats, and inline-edit runners open their owning capability (with the exact Action/quick-chat target and inline history). Merely opening the list never acknowledges sessions or starts/stops backends. Escape, outside interaction, and window blur dismiss it; keyboard arrows navigate its list.
 
+82. In a focused writable macOS Codex terminal, Option-comma and Option-period are forwarded as the terminal Meta-comma/Meta-period sequences (`ESC ,` and `ESC .`) so Codex can handle its own reasoning shortcuts. Match physical punctuation codes even when macOS supplies ≤/≥. Consume the corresponding browser events and write once per keydown, never keyup/keypress, paste, or an unfocused/hidden/read-only terminal. Other profiles, Option combinations, Command/Control/Shift combinations, composition, and non-macOS keyboard handling remain unchanged.
+
 ## Agent lifecycle semantics
 
 Agent state describes the current turn, not merely whether the terminal process exists.

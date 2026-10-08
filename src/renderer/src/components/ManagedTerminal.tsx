@@ -27,6 +27,7 @@ import {
 } from '../lib/terminalClipboard'
 import { terminalAcceptsInput } from '../lib/terminalTransport'
 import { terminalTheme } from '../lib/terminalTheme'
+import { terminalReasoningShortcut } from '../lib/terminalReasoningShortcut'
 
 interface Props {
   session: TerminalSession
@@ -50,6 +51,8 @@ export function ManagedTerminal({
   const fitRef = useRef<FitAddon | null>(null)
   const activeRef = useRef(active)
   activeRef.current = active
+  const profileRef = useRef(session.profile)
+  profileRef.current = session.profile
   const writableRef = useRef(false)
   const replayingRef = useRef(true)
   const dimensionsRef = useRef({ cols: 100, rows: 30 })
@@ -240,6 +243,19 @@ export function ManagedTerminal({
       return true
     })
     terminal.attachCustomKeyEventHandler((event) => {
+      const reasoningKey = terminalReasoningShortcut(event, profileRef.current, /Mac/i.test(navigator.platform))
+      if (reasoningKey) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (event.type === 'keydown' && activeRef.current && writableRef.current &&
+          host.contains(document.activeElement)) {
+          void window.projectConsole.terminals.write(session.id, reasoningKey).catch(
+            (error) => console.error('Could not send reasoning shortcut.', error)
+          )
+          terminal.scrollToBottom()
+        }
+        return false
+      }
       const key = event.key.toLocaleLowerCase()
       const copyShortcut =
         (event.metaKey && key === 'c') ||
