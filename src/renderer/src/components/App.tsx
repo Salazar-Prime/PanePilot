@@ -138,7 +138,6 @@ import { ProjectIconMenu } from './ProjectIconMenu'
 import { ProjectSettingsDialog } from './ProjectSettingsDialog'
 import { RenameDialog } from './RenameDialog'
 import { SortMenu } from './SortMenu'
-import { SpeechControl } from './SpeechControl'
 import { StatusDot } from './StatusDot'
 import { TerminalProfileIcon } from './TerminalProfileIcon'
 import { TemporaryChatsPanel } from './TemporaryChatsPanel'
@@ -2359,7 +2358,6 @@ export function App() {
             aria-expanded={Boolean(subagentSessionId)}
             onClick={() => setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null)}
           ><GitFork size={17} /></button>
-          <SpeechControl />
           {project && (
             <button
               className={`icon-button temporary-chat-toolbar-button ${

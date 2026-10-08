@@ -26,7 +26,6 @@ import {
   terminalPastePayload
 } from '../lib/terminalClipboard'
 import { terminalAcceptsInput } from '../lib/terminalTransport'
-import { registerSpeechContent } from '../lib/speechContent'
 import { terminalTheme } from '../lib/terminalTheme'
 
 interface Props {
@@ -221,21 +220,6 @@ export function ManagedTerminal({
     fitRef.current = fit
     fit.fit()
     dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
-    const unregisterSpeechContent = registerSpeechContent(session.id, () => {
-      const buffer = terminal.buffer.active
-      const end = Math.min(buffer.length, buffer.viewportY + terminal.rows)
-      let visibleText = ''
-      for (let index = buffer.viewportY; index < end; index += 1) {
-        const line = buffer.getLine(index)
-        if (!line) continue
-        const content = line.translateToString(true)
-        visibleText += line.isWrapped ? content : `${visibleText ? '\n' : ''}${content}`
-      }
-      return {
-        selectedText: terminal.getSelection().trim(),
-        visibleText: visibleText.trim()
-      }
-    })
     const linkDisposable =
       projectFolder && onOpenFileRef.current
         ? terminal.registerLinkProvider(
@@ -374,7 +358,6 @@ export function ManagedTerminal({
     resizeObserver.observe(host)
 
     return () => {
-      unregisterSpeechContent()
       resizeObserver.disconnect()
       removeDataListener()
       removeTransportListener()
@@ -507,7 +490,6 @@ export function ManagedTerminal({
   return (
     <div
       className={`managed-terminal ${draggingFiles ? 'terminal-drop-target' : ''}`}
-      data-speech-terminal-id={session.id}
       data-terminal-session-id={session.id}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) dropFocusVersionRef.current++
