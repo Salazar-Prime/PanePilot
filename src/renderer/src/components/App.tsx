@@ -78,6 +78,10 @@ import {
 } from '../lib/projectSort'
 import { useProjectAttentionOrder } from '../lib/projectAttentionOrder'
 import { useCollapsedProjects } from '../lib/sidebarCollapse'
+import { trimSidebarTail } from '../lib/sidebarDisclosure'
+import { SidebarSessionTree } from './SidebarSessionTree'
+import { StatusSessionMenu } from './StatusSessionMenu'
+import { statusSessionTab } from '../lib/statusSessions'
 import { useSelectionRecency } from '../lib/selectionRecency'
 import { useSidebarProjectMotion } from '../lib/useSidebarProjectMotion'
 import { sidebarProjectTranslation } from '../lib/sidebarProjectMotion'
@@ -289,6 +293,7 @@ export function App() {
   const [temporaryChatPanel, setTemporaryChatPanel] = useState<{
     projectId: string
     createRequest: number | null
+    initialSessionId?: string
   } | null>(null)
   const temporaryChatRequestSequence = useRef(0)
   const [driveDialogRequest, setDriveDialogRequest] = useState<{
@@ -1046,15 +1051,19 @@ export function App() {
 
   useEffect(() => {
     if (!sidebarOpen || showArchivedProjects || !sidebarActiveSessionId) return
-    const frame = window.requestAnimationFrame(() => {
-      const scrollArea = sidebarScrollRef.current
-      if (!scrollArea) return
+    const scrollArea = sidebarScrollRef.current
+    if (!scrollArea) return
+    const reveal = () => {
       const activeRow = Array.from(
         scrollArea.querySelectorAll<HTMLElement>('[data-sidebar-session-id]')
       ).find(
         (row) => row.dataset.sidebarSessionId === sidebarActiveSessionId
       )
-      if (!activeRow) return
+      if (!activeRow || activeRow.closest('[data-expanded="false"]')) return
+      if (activeRow.closest('[data-disclosing]')) {
+        scrollArea.addEventListener('sidebar-disclosure-settled', reveal, { once: true })
+        return
+      }
       const scrollBounds = scrollArea.getBoundingClientRect()
       const rowBounds = activeRow.getBoundingClientRect()
       // Reveal the destination, not a transient position midway through sorting.
@@ -1066,10 +1075,13 @@ export function App() {
         rowBounds.bottom - translation
       )
       if (delta !== 0) scrollArea.scrollTop += delta
-    })
-    return () => window.cancelAnimationFrame(frame)
+    }
+    const frame = window.requestAnimationFrame(reveal)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      scrollArea.removeEventListener('sidebar-disclosure-settled', reveal)
+    }
   }, [
-    collapsedProjectIds,
     sidebarActiveSessionId,
     sidebarProjectOrder,
     sidebarOpen,
@@ -1676,25 +1688,29 @@ export function App() {
     })
   }
 
-  const workingCount = useMemo(
-    () =>
-      activeProjects
-        .flatMap((item) => item.sessions)
-        .filter(
-          (session) => !session.archived && session.state === 'running'
-        ).length,
-    [activeProjects]
-  )
-  const attentionCount = useMemo(
-    () =>
-      activeProjects
-        .flatMap((item) => item.sessions)
-        .filter(
-          (session) =>
-            !session.archived && isAttentionState(session.state)
-        ).length,
-    [activeProjects]
-  )
+  function openStatusSession(projectId: string, sessionId: string) {
+    const target = activeProjects.find((item) => item.id === projectId)
+    const session = target?.sessions.find((item) => item.id === sessionId && !item.archived)
+    if (!target || !session) return
+    const tab = statusSessionTab(session)
+    if (!tab && session.kind !== 'temporary-chat') {
+      void selectSession(projectId, sessionId).catch(showError)
+      return
+    }
+    // Capability navigation must not acknowledge an unrelated default terminal.
+    const pane = splitOpen && focusedPane === 'b' ? 'b' : 'a'
+    recordProjectSelection(projectId)
+    setShowArchivedProjects(false)
+    applyPaneSelection(pane, projectId, defaultSessionIdFor(target))
+    if (session.kind === 'temporary-chat') {
+      setTemporaryChatPanel({ projectId, createRequest: null, initialSessionId: sessionId })
+      return
+    }
+    if (tab) {
+      setWorkspaceTabRequest({ ...nextWorkspaceTabRequest(projectId, pane, tab), sessionId })
+    }
+  }
+
   const typeDefinition = project
     ? projectTypeRegistry[project.type]
     : projectTypeRegistry.terminal
@@ -1963,6 +1979,13 @@ export function App() {
               <TerminalSquare size={14} />
             ),
           action: () => selectProject(target.id)
+        },
+        {
+          id: 'sidebar-disclosure',
+          label: collapsedProjectIds.has(target.id) ? 'Expand project in sidebar' : 'Collapse project in sidebar',
+          icon: collapsedProjectIds.has(target.id) ? <ChevronRight size={14} /> : <ChevronDown size={14} />,
+          disabled: !target.sessions.some((session) => !session.archived && isSidebarSession(session)),
+          action: () => { setSidebarOpen(true); toggleProjectCollapsed(target.id) }
         },
         ...(splitOpen
           ? [
@@ -2505,7 +2528,7 @@ export function App() {
             <span>Agent workspace</span>
           </div>
         </div>
-        <div className="sidebar-scroll" ref={sidebarScrollRef}>
+        <div className="sidebar-scroll" ref={sidebarScrollRef} onScroll={(event) => trimSidebarTail(event.currentTarget)}>
           {sidebarConnectionGroups.map(
             ({
               connection: item,
@@ -2659,7 +2682,7 @@ export function App() {
                           <Pencil size={12} />
                         </button>
                       </div>
-                      {showSessions && (
+                      <SidebarSessionTree open={showSessions}>
                         <div className="session-tree">
                           {visibleSessions.map((session) => (
                             <div
@@ -2763,7 +2786,7 @@ export function App() {
                             </div>
                           ))}
                         </div>
-                      )}
+                      </SidebarSessionTree>
                       </div>
                     )
                   }
@@ -2780,6 +2803,7 @@ export function App() {
               )
             }
           )}
+          <div data-sidebar-scroll-tail aria-hidden="true" />
         </div>
         <div className="sidebar-footer-actions">
           <button
@@ -3053,17 +3077,8 @@ export function App() {
           )}
         </div>
         <TerminalDropStatus />
-        <div className="status-summary">
-          <span>
-            <span className="mini-dot running" />
-            {workingCount} working
-          </span>
-          <span>
-            <span className="mini-dot attention" />
-            {attentionCount} need{attentionCount === 1 ? 's' : ''} attention
-          </span>
-          <span className="project-total">{activeProjects.length} projects</span>
-        </div>
+        <StatusSessionMenu projects={activeProjects} connections={connections}
+          onSelect={openStatusSession} />
       </footer>
 
       {showNewProject && (
@@ -3129,6 +3144,7 @@ export function App() {
           key={temporaryChatProject.id}
           project={temporaryChatProject}
           createRequest={temporaryChatPanel.createRequest}
+          initialSessionId={temporaryChatPanel.initialSessionId}
           onChanged={() => refreshProject(temporaryChatProject.id)}
           onClose={() => setTemporaryChatPanel(null)}
         />

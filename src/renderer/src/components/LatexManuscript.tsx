@@ -142,6 +142,7 @@ interface Props {
   project: Project
   workspace: LatexWorkspace
   inlineEdits: LatexInlineEditHistory[]
+  inlineHistoryRequest?: number | null
   comments: LatexComment[]
   inlineRunning: boolean
   selectedSectionId: string | null
@@ -250,6 +251,7 @@ export function LatexManuscript({
   project,
   workspace,
   inlineEdits,
+  inlineHistoryRequest,
   comments,
   inlineRunning,
   selectedSectionId,
@@ -298,6 +300,9 @@ export function LatexManuscript({
     loadLatexManuscriptLayout(project.id)
   )
   const [showInlineHistory, setShowInlineHistory] = useState(false)
+  useEffect(() => {
+    if (inlineHistoryRequest != null) setShowInlineHistory(true)
+  }, [inlineHistoryRequest])
   const [expandedInlineEditId, setExpandedInlineEditId] = useState<string | null>(null)
   const [busyInlineEditId, setBusyInlineEditId] = useState<string | null>(null)
   const [inlineHistoryError, setInlineHistoryError] = useState('')

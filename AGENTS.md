@@ -119,6 +119,10 @@ These are owner-approved decisions and should be treated as product invariants u
 
 79. Read aloud has been removed. PanePilot has no speech controls or Google Cloud Text-to-Speech integration, and startup migration removes the obsolete local speech settings and usage counters.
 
+80. Command-K and the project context menu expose the focused/target project's state-aware Expand/Collapse project in sidebar action, using the same persisted disclosure state as its chevron without selecting or reordering the project. Disclosure animates actual terminal-list height over 380 ms so following projects move naturally. Collapse never triggers active-terminal scrolling; minimal trailing space prevents bottom-edge scroll clamping and is reclaimed as the user scrolls up or expands content. Expansion scrolls simultaneously only enough to reveal the full group when it fits; oversized groups retain their heading and remain scrollable. Rapid reversals continue from the current height, direct scrolling takes priority, and reduced-motion preferences finish immediately. Collapsing makes rows inert immediately and removes their DOM after the transition. Explicit terminal selection waits for expansion before revealing its exact row.
+
+81. The bottom Working and Needs attention counts open an anchored compact popover with live project, machine, session, and state labels. Counts and lists use the same existing lifecycle filters, including unread response-ready sessions in attention, and exclude archived projects/sessions. Clicking a row dismisses the popover and navigates in the focused pane: ordinary terminals and writing chats use exact-session selection; Actions, project Q&A, quick chats, and inline-edit runners open their owning capability (with the exact Action/quick-chat target and inline history). Merely opening the list never acknowledges sessions or starts/stops backends. Escape, outside interaction, and window blur dismiss it; keyboard arrows navigate its list.
+
 ## Agent lifecycle semantics
 
 Agent state describes the current turn, not merely whether the terminal process exists.

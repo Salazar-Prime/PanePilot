@@ -23,4 +23,13 @@ export function useSidebarProjectMotion(containerRef: RefObject<HTMLElement>, vi
     motionRef.current?.update(container, visible && !document.hidden &&
       !window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   }, [containerRef, visible, revision])
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const settled = () => motionRef.current?.update(container, visible && !document.hidden &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    container.addEventListener('sidebar-disclosure-settled', settled)
+    return () => container.removeEventListener('sidebar-disclosure-settled', settled)
+  }, [containerRef, visible])
 }

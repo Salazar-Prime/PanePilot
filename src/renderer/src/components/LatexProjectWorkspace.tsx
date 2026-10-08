@@ -133,6 +133,8 @@ export function LatexProjectWorkspace({
     useState<ProjectFileOpenRequest | null>(null)
   const [changes, setChanges] = useState<LatexChangeSet | null>(null)
   const [inlineEdits, setInlineEdits] = useState<LatexInlineEditHistory[]>([])
+  const [actionSessionRequest, setActionSessionRequest] = useState<{ id: number; sessionId: string } | null>(null)
+  const [inlineHistoryRequest, setInlineHistoryRequest] = useState<number | null>(null)
   const [comments, setComments] = useState<LatexComment[]>([])
   const [loading, setLoading] = useState(
     () => !latexWorkspaceCache.has(project.id)
@@ -426,6 +428,9 @@ export function LatexProjectWorkspace({
   useEffect(() => {
     if (!workspaceActive || workspaceTabRequest == null) return
     if (isLatexWorkspaceTab(workspaceTabRequest.tab)) {
+      if (workspaceTabRequest.tab === 'actions') setActionSessionRequest(workspaceTabRequest.sessionId
+        ? { id: workspaceTabRequest.id, sessionId: workspaceTabRequest.sessionId } : null)
+      if (workspaceTabRequest.tab === 'manuscript' && workspaceTabRequest.sessionId) setInlineHistoryRequest(workspaceTabRequest.id)
       selectWorkspaceTab(workspaceTabRequest.tab)
     }
     onWorkspaceTabRequestHandled(workspaceTabRequest.id)
@@ -744,6 +749,7 @@ export function LatexProjectWorkspace({
               project={project}
               workspace={workspace}
               inlineEdits={inlineEdits}
+              inlineHistoryRequest={inlineHistoryRequest}
               comments={comments}
               inlineRunning={inlineSession?.state === 'running'}
               selectedSectionId={selectedSectionId}
@@ -846,6 +852,7 @@ export function LatexProjectWorkspace({
       {tab === 'actions' && (
         <ActionsPanel
           project={project}
+          sessionRequest={actionSessionRequest}
           onChanged={onChanged}
           onOpenFile={openFile}
         />

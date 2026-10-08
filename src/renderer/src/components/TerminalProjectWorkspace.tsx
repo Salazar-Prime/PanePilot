@@ -111,6 +111,7 @@ export function TerminalProjectWorkspace({
   onChanged
 }: ProjectWorkspaceProps) {
   const [tab, setTab] = useState<WorkspaceTab>('terminal')
+  const [actionSessionRequest, setActionSessionRequest] = useState<{ id: number; sessionId: string } | null>(null)
   const [showLauncher, setShowLauncher] = useState(false)
   const [showArchivedSessions, setShowArchivedSessions] = useState(false)
   const [openFileRequest, setOpenFileRequest] =
@@ -335,6 +336,8 @@ export function TerminalProjectWorkspace({
   useEffect(() => {
     if (!workspaceActive || workspaceTabRequest == null) return
     if (isTerminalWorkspaceTab(workspaceTabRequest.tab)) {
+      if (workspaceTabRequest.tab === 'actions') setActionSessionRequest(workspaceTabRequest.sessionId
+        ? { id: workspaceTabRequest.id, sessionId: workspaceTabRequest.sessionId } : null)
       selectWorkspaceTab(workspaceTabRequest.tab)
     }
     onWorkspaceTabRequestHandled(workspaceTabRequest.id)
@@ -791,6 +794,7 @@ export function TerminalProjectWorkspace({
       {tab === 'actions' && (
         <ActionsPanel
           project={project}
+          sessionRequest={actionSessionRequest}
           onChanged={onChanged}
           onOpenFile={openFile}
         />

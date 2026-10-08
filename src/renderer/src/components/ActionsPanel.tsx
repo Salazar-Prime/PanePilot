@@ -17,13 +17,14 @@ import { useModalEscape } from '../lib/modalEscape'
 
 interface Props {
   project: Project
+  sessionRequest?: { id: number; sessionId: string } | null
   onChanged(): Promise<void>
   onOpenFile?(target: TerminalFileTarget): void
 }
 
-export function ActionsPanel({ project, onChanged, onOpenFile }: Props) {
+export function ActionsPanel({ project, sessionRequest, onChanged, onOpenFile }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(
-    project.actions[0]?.id ?? null
+    project.actions.find((action) => action.lastSessionId === sessionRequest?.sessionId)?.id ?? project.actions[0]?.id ?? null
   )
   const [editing, setEditing] = useState<ProjectAction | 'new' | null>(null)
   const [busy, setBusy] = useState(false)
@@ -44,6 +45,11 @@ export function ActionsPanel({ project, onChanged, onOpenFile }: Props) {
   )
   const running =
     session != null && !['completed', 'error'].includes(session.state)
+
+  useEffect(() => {
+    const action = project.actions.find((item) => item.lastSessionId === sessionRequest?.sessionId)
+    if (action) setSelectedId(action.id)
+  }, [sessionRequest?.id])
 
   useEffect(() => {
     if (selectedId && project.actions.some((action) => action.id === selectedId)) {

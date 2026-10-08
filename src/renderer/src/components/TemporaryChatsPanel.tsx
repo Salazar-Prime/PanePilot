@@ -15,6 +15,7 @@ import { StatusDot } from './StatusDot'
 interface Props {
   project: Project
   createRequest: number | null
+  initialSessionId?: string
   onChanged(): Promise<void>
   onClose(): void
 }
@@ -22,6 +23,7 @@ interface Props {
 export function TemporaryChatsPanel({
   project,
   createRequest,
+  initialSessionId,
   onChanged,
   onClose
 }: Props) {
@@ -32,7 +34,7 @@ export function TemporaryChatsPanel({
       ),
     [project.sessions]
   )
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(initialSessionId ?? null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -45,10 +47,10 @@ export function TemporaryChatsPanel({
   useModalEscape(onClose, true, busy)
 
   useEffect(() => {
-    setSelectedId(null)
+    setSelectedId(initialSessionId ?? null)
     setMessage('')
     setError('')
-  }, [project.id])
+  }, [project.id, initialSessionId])
 
   useEffect(() => {
     if (!selected || stopped) return

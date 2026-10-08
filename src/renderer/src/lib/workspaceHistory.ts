@@ -51,6 +51,7 @@ export function nextWorkspaceSwitcherMode(
 
 export interface WorkspaceTabRequest extends WorkspaceRequest {
   tab: WorkspaceTabId
+  sessionId?: string
 }
 
 const tabLabels: Record<WorkspaceTabId, string> = {
