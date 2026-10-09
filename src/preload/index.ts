@@ -22,6 +22,10 @@ import type {
 } from '../shared/types'
 
 const api: ProjectConsoleApi = {
+  quickNotes: {
+    get: () => ipcRenderer.invoke('quick-notes:get'),
+    save: (document) => ipcRenderer.invoke('quick-notes:save', document)
+  },
   terminalDrops: {
     drop: async (sessionId, files) => {
       const paths = files.map((file) => webUtils.getPathForFile(file))

@@ -20,7 +20,7 @@ describe('retired speech storage migration', () => {
     const database = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
     try {
       expect(database.prepare('PRAGMA user_version').get()).toMatchObject({
-        user_version: 18
+        user_version: 19
       })
       expect(database.prepare(`
         SELECT name FROM sqlite_master

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { statusSessions, statusSessionTab } from '../src/renderer/src/lib/statusSessions'
+import { statusSessions, statusSessionTab, statusSessionFilters } from '../src/renderer/src/lib/statusSessions'
 import type { Project, TerminalSession } from '../src/shared/types'
 
 const session = (id: string, state: TerminalSession['state'], overrides = {}) =>
@@ -12,9 +12,18 @@ describe('status-bar terminal jump lists', () => {
     const projects = [project('local', [session('one', 'running')]), project('remote', [session('two', 'running'), session('three', 'idle')])]
     expect(statusSessions(projects, 'working').map(({ project, session }) => [project.id, session.id])).toEqual([['local', 'one'], ['remote', 'two']])
   })
-  it('preserves existing attention semantics, including unread completed responses', () => {
+  it('separates needs-input, blocked, and unread responses without double-counting', () => {
     const projects = [project('p', [session('input', 'needs-input'), session('blocked', 'needs-attention'), session('ready', 'response-ready')])]
-    expect(statusSessions(projects, 'attention').map(({ session }) => session.id)).toEqual(['input', 'blocked', 'ready'])
+    expect(statusSessions(projects, 'attention').map(({ session }) => session.id)).toEqual(['ready'])
+    expect(statusSessions(projects, 'needs-input').map(({ session }) => session.id)).toEqual(['input'])
+    expect(statusSessions(projects, 'blocked').map(({ session }) => session.id)).toEqual(['blocked'])
+  })
+  it('hides empty input/blocked indicators and excludes archived rows', () => {
+    for (const id of ['needs-input', 'blocked'] as const) {
+      expect(statusSessionFilters.find((filter) => filter.id === id)?.hideEmpty).toBe(true)
+      const state = id === 'blocked' ? 'needs-attention' : 'needs-input'
+      expect(statusSessions([project('p', [session('archived', state, { archived: true })]), project('old', [session('active', state)], true)], id)).toEqual([])
+    }
   })
   it('omits archived projects/sessions and retains capability runners in existing counts', () => {
     const projects = [project('archived', [session('old', 'running')], true), project('p', [

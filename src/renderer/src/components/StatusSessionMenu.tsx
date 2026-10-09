@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { Connection, Project } from '@shared/types'
 import { useModalEscape } from '../lib/modalEscape'
-import { statusSessions, type StatusSessionFilter } from '../lib/statusSessions'
+import { statusSessions, statusSessionFilters, type StatusSessionFilter } from '../lib/statusSessions'
 import { stateLabels } from '../lib/status'
 import { StatusDot } from './StatusDot'
 
@@ -13,12 +13,15 @@ export function StatusSessionMenu({ projects, connections, onSelect }: {
   const root = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
   const trigger = useRef<HTMLButtonElement | null>(null)
-  const working = useMemo(() => statusSessions(projects, 'working'), [projects])
-  const attention = useMemo(() => statusSessions(projects, 'attention'), [projects])
-  const entries = filter === 'working' ? working : attention
+  const groups = useMemo(() => statusSessionFilters.map((item) => ({ ...item, entries: statusSessions(projects, item.id) })), [projects])
+  const selected = groups.find((item) => item.id === filter)
+  const entries = selected?.entries ?? []
   function close(restoreFocus = false) {
     setFilter(null)
-    if (restoreFocus) trigger.current?.focus({ preventScroll: true })
+    if (restoreFocus) {
+      const target = trigger.current?.isConnected ? trigger.current : root.current?.querySelector<HTMLButtonElement>('.status-summary-trigger')
+      target?.focus({ preventScroll: true })
+    }
   }
   useModalEscape(() => close(true), filter !== null)
   useEffect(() => {
@@ -40,15 +43,16 @@ export function StatusSessionMenu({ projects, connections, onSelect }: {
   }, [filter])
 
   return <div className="status-summary" ref={root}>
-    {(['working', 'attention'] as const).map((kind) => <button key={kind}
-      className="status-summary-trigger" aria-haspopup="dialog" aria-expanded={filter === kind}
-      aria-controls={filter === kind ? 'status-session-menu' : undefined}
-      onClick={(event) => { trigger.current = event.currentTarget; setFilter((current) => current === kind ? null : kind) }}>
-      <span className={`mini-dot ${kind === 'working' ? 'running' : 'attention'}`} />
-      {kind === 'working' ? `${working.length} working` : `${attention.length} need${attention.length === 1 ? 's' : ''} attention`}
+    {groups.filter((group) => !group.hideEmpty || group.entries.length > 0).map((group) => <button key={group.id}
+      data-status-filter={group.id}
+      className="status-summary-trigger" aria-haspopup="dialog" aria-expanded={filter === group.id}
+      aria-controls={filter === group.id ? 'status-session-menu' : undefined}
+      onClick={(event) => { trigger.current = event.currentTarget; setFilter((current) => current === group.id ? null : group.id) }}>
+      <span className={`mini-dot ${group.dot}`} />
+      {group.entries.length} {group.id === 'attention' && group.entries.length !== 1 ? 'responses ready' : group.label}
     </button>)}
     <span className="project-total">{projects.length} projects</span>
-    {filter && <div className="status-session-menu" role="dialog" aria-label={filter === 'working' ? 'Working terminals' : 'Terminals needing attention'}
+    {filter && <div className="status-session-menu" role="dialog" aria-label={selected?.title}
       id="status-session-menu" ref={panel} onKeyDown={(event) => {
         if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
         const rows = Array.from(panel.current!.querySelectorAll<HTMLButtonElement>('[data-status-session]'))
@@ -60,16 +64,16 @@ export function StatusSessionMenu({ projects, connections, onSelect }: {
         rows[next].focus({ preventScroll: true })
         rows[next].scrollIntoView({ block: 'nearest' })
       }}>
-      <header><strong>{filter === 'working' ? 'Working terminals' : 'Needs attention'}</strong><small>{entries.length}</small>
+      <header><strong>{selected?.title}</strong><small>{entries.length}</small>
         <button className="status-session-close" aria-label="Close terminal list" onClick={() => close(true)}><X size={13} /></button>
       </header>
       <div className="status-session-list">
-        {entries.length === 0 ? <p>No terminals {filter === 'working' ? 'are working right now.' : 'need attention right now.'}</p> :
+        {entries.length === 0 ? <p>No terminals in this state right now.</p> :
           entries.map(({ project, session }) => <button key={session.id} data-status-session={session.id}
             onClick={() => { close(); onSelect(project.id, session.id) }}>
             <StatusDot state={session.state} compact />
             <span className="status-session-copy"><strong>{session.name}</strong><small>{project.icon ? `${project.icon} ` : ''}{project.name} · {connections.find((connection) => connection.id === project.connectionId)?.name ?? 'Unknown machine'}</small></span>
-            <span className="status-session-state">{stateLabels[session.state]}</span>
+            <span className="status-session-state">{session.state === 'needs-attention' ? 'Blocked' : stateLabels[session.state]}</span>
           </button>)}
       </div>
     </div>}

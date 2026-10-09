@@ -129,6 +129,14 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('quick-notes:get', (event) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid quick notes sender.')
+    return store.getQuickNotes()
+  })
+  ipcMain.handle('quick-notes:save', (event, document: unknown) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid quick notes sender.')
+    return store.saveQuickNotes(document)
+  })
   ipcMain.handle('files:import', (event, projectId: string, parentPath: string, paths: string[]) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid file import sender.')
     return terminalDrops.copyToProject(projectId, parentPath, paths)

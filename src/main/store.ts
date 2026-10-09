@@ -24,6 +24,7 @@ import type {
   TerminalSessionKind
 } from '../shared/types'
 import { normalizeProjectIcon } from '../shared/project-icon'
+import { validateQuickNotes, type QuickNotesDocument } from '../shared/quickNotes'
 import type {
   PanePilotTmuxLatexMetadata,
   PanePilotTmuxMetadata
@@ -504,6 +505,12 @@ export class Store {
 
   private migrate(): void {
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS quick_notes (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        revision INTEGER NOT NULL DEFAULT 0,
+        content TEXT NOT NULL
+      );
+      INSERT OR IGNORE INTO quick_notes (id, revision, content) VALUES (1, 0, '{"thoughts":"","items":[]}');
       CREATE TABLE IF NOT EXISTS connections (
         id TEXT PRIMARY KEY,
         kind TEXT NOT NULL CHECK (kind IN ('local', 'ssh')),
@@ -810,9 +817,22 @@ export class Store {
       -- Read aloud was removed; discard its obsolete settings and usage counters.
       DROP TABLE IF EXISTS speech_usage;
       DROP TABLE IF EXISTS speech_settings;
-      PRAGMA user_version = 18;
+      PRAGMA user_version = 19;
     `)
     this.migrateLegacyTerminalOutput()
+  }
+
+  getQuickNotes(): QuickNotesDocument {
+    const row = this.db.prepare('SELECT revision, content FROM quick_notes WHERE id = 1').get() as { revision: number; content: string }
+    return validateQuickNotes({ ...JSON.parse(row.content), revision: row.revision })
+  }
+
+  saveQuickNotes(input: unknown): QuickNotesDocument {
+    const { thoughts, items, revision } = validateQuickNotes(input)
+    const result = this.db.prepare('UPDATE quick_notes SET content = ?, revision = revision + 1 WHERE id = 1 AND revision = ?')
+      .run(JSON.stringify({ thoughts, items }), revision)
+    if (result.changes !== 1) throw new Error('Quick notes changed in another window. Your unsaved text has been kept; copy it before reloading.')
+    return { thoughts, items, revision: revision + 1 }
   }
 
   private migrateLegacyTerminalOutput(): void {

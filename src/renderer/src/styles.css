@@ -675,6 +675,10 @@ select:focus-visible {
 .status-summary { position: relative; }
 .status-summary-trigger { display: flex; align-items: center; gap: 6px; padding: 3px 5px; color: inherit; background: transparent; border: 0; border-radius: 4px; font: inherit; }
 .status-summary-trigger:hover, .status-summary-trigger[aria-expanded="true"] { color: #d5d8df; background: #202638; }
+.status-summary .mini-dot.blocked { background: #f17d86; }
+.status-summary .mini-dot.response-ready { background: #7daeff; }
+.status-summary-trigger[data-status-filter="blocked"] { color: #f6a0a7; }
+.status-summary-trigger[data-status-filter="needs-input"] { color: #e9b776; }
 .status-session-menu { position: absolute; z-index: 90; right: 0; bottom: calc(100% + 10px); width: min(410px, calc(100vw - 24px)); overflow: hidden; color: #d5d8df; border: 1px solid #424b70; border-radius: 10px; background: #101521f5; backdrop-filter: blur(18px); box-shadow: 0 12px 40px #0008; white-space: normal; animation: status-session-enter 160ms ease-out; }
 .status-session-menu header { display: flex; align-items: center; gap: 8px; padding: 11px 12px; border-bottom: 1px solid #30394e; font-size: 12px; }
 .status-session-menu header small { color: #8991a3; }
@@ -723,7 +727,7 @@ select:focus-visible {
 }
 
 .status-summary {
-  gap: 16px;
+  gap: 8px;
 }
 
 .status-summary > span {

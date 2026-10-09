@@ -48,6 +48,7 @@ import {
   ShieldAlert,
   Sparkles,
   Square,
+  StickyNote,
   TerminalSquare,
   Trash2,
   Wifi,
@@ -127,6 +128,7 @@ import { WorkspaceVisitDwell } from '../lib/workspaceVisitDwell'
 import { commandPaletteSession, contextualCommands } from '../lib/commandPalette'
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
 import { SubagentOverlay } from './SubagentOverlay'
+import { QuickNotesDialog } from './QuickNotesDialog'
 import { visibleCodexSession } from '../lib/subagents'
 import {
   CommandPalette,
@@ -248,6 +250,7 @@ export function App() {
   const [, startBackgroundTransition] = useTransition()
   useAppearanceScale()
   const [subagentSessionId, setSubagentSessionId] = useState<string | null>(null)
+  const [showQuickNotes, setShowQuickNotes] = useState(false)
   const [visibleDestinations, setVisibleDestinations] = useState<Record<WorkspacePane, WorkspaceDestination | null>>({ a: null, b: null })
   const [connections, setConnections] = useState<Connection[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -925,7 +928,7 @@ export function App() {
         event.key.toLocaleLowerCase() === 'k'
       ) {
         event.preventDefault()
-        if (document.querySelector('.subagent-observatory')) return
+        if (document.querySelector('.subagent-observatory, .quick-notes-modal')) return
         setShowCommandPalette((current) => !current)
         return
       }
@@ -2381,6 +2384,9 @@ export function App() {
             aria-expanded={Boolean(subagentSessionId)}
             onClick={() => setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null)}
           ><GitFork size={17} /></button>
+          <button className={`icon-button quick-notes-toolbar ${showQuickNotes ? 'active' : ''}`}
+            aria-label="Quick Notes" title="Quick Notes" aria-haspopup="dialog" aria-expanded={showQuickNotes}
+            onClick={() => setShowQuickNotes(true)}><StickyNote size={17} /></button>
           {project && (
             <button
               className={`icon-button temporary-chat-toolbar-button ${
@@ -3169,6 +3175,7 @@ export function App() {
         onClose={() => setShowCommandPalette(false)}
         onError={showError}
       />
+      <QuickNotesDialog open={showQuickNotes} onClose={() => setShowQuickNotes(false)} />
       {projectSortMenu &&
         (() => {
           const targetConnection = connections.find(

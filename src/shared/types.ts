@@ -533,6 +533,10 @@ export interface CodexSubagentSnapshot {
 }
 
 export interface ProjectConsoleApi {
+  quickNotes: {
+    get(): Promise<import('./quickNotes').QuickNotesDocument>
+    save(document: import('./quickNotes').QuickNotesDocument): Promise<import('./quickNotes').QuickNotesDocument>
+  }
   terminalDrops: {
     drop(sessionId: string, files: File[]): Promise<import('./terminalDrops').TerminalDropResult>
     list(): Promise<import('./terminalDrops').TerminalDropProgress[]>
