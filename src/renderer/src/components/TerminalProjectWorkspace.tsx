@@ -29,6 +29,7 @@ import type {
   TerminalFileTarget
 } from '../lib/terminalFileLinks'
 import { useModalEscape } from '../lib/modalEscape'
+import { isAttentionState } from '../lib/status'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
 import {
   type ProjectShortcutAction,
@@ -556,7 +557,7 @@ export function TerminalProjectWorkspace({
                     tabDropTarget?.targetId === session.id
                       ? `drop-${tabDropTarget.edge}`
                       : ''
-                  }`}
+                  } ${isAttentionState(session.state) ? 'attention-state' : ''}`}
                   draggable
                   aria-grabbed={draggingTabId === session.id}
                   onDragStart={(event) => {

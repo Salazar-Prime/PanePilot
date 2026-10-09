@@ -1,4 +1,5 @@
 :root {
+  --attention-yellow: #f2c66d;
   color: #d8dbe4;
   background: #090b10;
   font-family:
@@ -549,10 +550,10 @@ select:focus-visible {
   width: 16px;
   height: 16px;
   place-items: center;
-  color: #ffd6b2;
-  border: 1px solid #8f542a;
+  color: #ffe2a8;
+  border: 1px solid #9b752d;
   border-radius: 50%;
-  background: #56351f;
+  background: #473719;
   font-size: 9px;
 }
 
@@ -694,10 +695,12 @@ select:focus-visible {
 .status-summary { position: relative; }
 .status-summary-trigger { display: flex; align-items: center; gap: 6px; padding: 3px 5px; color: inherit; background: transparent; border: 0; border-radius: 4px; font: inherit; }
 .status-summary-trigger:hover, .status-summary-trigger[aria-expanded="true"] { color: #d5d8df; background: #202638; }
-.status-summary .mini-dot.blocked { background: #f17d86; }
-.status-summary .mini-dot.response-ready { background: #7daeff; }
-.status-summary-trigger[data-status-filter="blocked"] { color: #f6a0a7; }
-.status-summary-trigger[data-status-filter="needs-input"] { color: #e9b776; }
+.status-summary .mini-dot.blocked,
+.status-summary .mini-dot.response-ready,
+.status-summary .mini-dot.attention { background: var(--attention-yellow); box-shadow: 0 0 7px #f2c66d66; }
+.status-summary-trigger[data-status-filter="attention"],
+.status-summary-trigger[data-status-filter="blocked"],
+.status-summary-trigger[data-status-filter="needs-input"] { color: var(--attention-yellow); }
 .status-session-menu { position: absolute; z-index: 90; right: 0; bottom: calc(100% + 10px); width: min(410px, calc(100vw - 24px)); overflow: hidden; color: #d5d8df; border: 1px solid #424b70; border-radius: 10px; background: #101521f5; backdrop-filter: blur(18px); box-shadow: 0 12px 40px #0008; white-space: normal; animation: status-session-enter 160ms ease-out; }
 .status-session-menu header { display: flex; align-items: center; gap: 8px; padding: 11px 12px; border-bottom: 1px solid #30394e; font-size: 12px; }
 .status-session-menu header small { color: #8991a3; }
@@ -931,6 +934,10 @@ select:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.terminal-tab.attention-state .terminal-tab-select > span:not(.status-chip) {
+  color: var(--attention-yellow);
 }
 
 .tab-menu-button,
@@ -1306,18 +1313,11 @@ select:focus-visible {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-.status-needs-attention .status-dot {
-  background: #f56e75;
-  box-shadow: 0 0 0 3px #f56e7518, 0 0 8px #f56e7544;
-}
-
-.status-needs-input .status-dot {
-  background: #e8a55c;
-  box-shadow: 0 0 0 3px #e8a55c18;
-}
-
+.status-needs-attention .status-dot,
+.status-needs-input .status-dot,
 .status-response-ready .status-dot {
-  background: #64a1ef;
+  background: var(--attention-yellow);
+  box-shadow: 0 0 0 3px #f2c66d20, 0 0 8px #f2c66d55;
 }
 
 .status-completed .status-dot {
@@ -3617,6 +3617,10 @@ select:focus-visible {
   white-space: nowrap;
 }
 
+.session-row.attention-state .sidebar-row-main > span:not(.status-chip) {
+  color: var(--attention-yellow);
+}
+
 .sidebar-hover-action {
   display: grid;
   width: 22px;
@@ -3681,11 +3685,11 @@ select:focus-visible {
   content: "";
 }
 
-.session-row.tab-closed .sidebar-row-main {
+.session-row.tab-closed:not(.attention-state) .sidebar-row-main {
   opacity: 0.45;
 }
 
-.session-row.tab-closed:hover .sidebar-row-main {
+.session-row.tab-closed:not(.attention-state):hover .sidebar-row-main {
   opacity: 0.75;
 }
 
@@ -6280,6 +6284,11 @@ button.type-switcher {
 .terminal-profile-icon {
   flex: 0 0 auto;
   color: #7f8ed7;
+}
+
+.session-row.attention-state .terminal-profile-icon,
+.terminal-tab.attention-state .terminal-profile-icon {
+  color: var(--attention-yellow);
 }
 
 .actions-panel {

@@ -2690,7 +2690,7 @@ export function App() {
                                 !openSessionIds.has(session.id)
                                   ? 'tab-closed'
                                   : 'tab-open'
-                              }`}
+                              } ${isAttentionState(session.state) ? 'attention-state' : ''}`}
                               title={
                                 session.kind !== 'terminal'
                                   ? undefined
