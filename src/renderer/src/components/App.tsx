@@ -2475,24 +2475,6 @@ export function App() {
               ) : null}
             </button>
           )}
-          {project && (
-            <GoogleDriveControl
-              key={project.id}
-              project={project}
-              openRequest={driveDialogRequest}
-            />
-          )}
-          <button
-            className={`icon-button ${splitOpen ? 'active' : ''}`}
-            aria-label={splitOpen ? 'Close split view' : 'Split viewing pane'}
-            title={splitOpen ? 'Close split view' : 'Split viewing pane'}
-            onClick={() => {
-              setSplitOpen(!splitOpen)
-              setFocusedPane(splitOpen ? 'a' : 'b')
-            }}
-          >
-            <Columns2 size={16} />
-          </button>
           <button
             className={`icon-button git-toolbar-button ${gitTone} ${
               gitPaneVisible ? 'active' : ''
@@ -2512,15 +2494,13 @@ export function App() {
               <span className="git-toolbar-dot" aria-hidden="true" />
             ) : null}
           </button>
-          <button
-            className="icon-button"
-            aria-label="Project settings"
-            title="Project settings"
-            disabled={!project}
-            onClick={() => setShowProjectSettings(true)}
-          >
-            <Settings size={16} />
-          </button>
+          {project && (
+            <GoogleDriveControl
+              key={project.id}
+              project={project}
+              openRequest={driveDialogRequest}
+            />
+          )}
         </div>
       </header>
 
