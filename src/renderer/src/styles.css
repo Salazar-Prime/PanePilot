@@ -545,18 +545,6 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-.attention-badge {
-  display: grid;
-  width: 16px;
-  height: 16px;
-  place-items: center;
-  color: #ffe2a8;
-  border: 1px solid #9b752d;
-  border-radius: 50%;
-  background: #473719;
-  font-size: 9px;
-}
-
 .sidebar-add {
   display: flex;
   align-items: center;
@@ -3665,6 +3653,11 @@ select:focus-visible {
   flex: 0 0 auto;
   color: #8fa1f2;
   transform: rotate(-18deg);
+}
+
+.session-row.attention-state .pinned-indicator,
+.terminal-tab.attention-state .pinned-indicator {
+  color: var(--attention-yellow);
 }
 
 /* Open terminals get an accent rail; closed ones dim back. Deliberately not a

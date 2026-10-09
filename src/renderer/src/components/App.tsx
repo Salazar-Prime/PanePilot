@@ -2724,9 +2724,6 @@ export function App() {
                                   <Pin className="pinned-indicator" size={10} />
                                 )}
                                 <span>{session.name}</span>
-                                {isAttentionState(session.state) && (
-                                  <small className="attention-badge">!</small>
-                                )}
                               </button>
                               {shouldOfferTmuxReconnect(
                                 candidate,
