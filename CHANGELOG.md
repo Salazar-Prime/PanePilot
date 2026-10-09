@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.11.0 — 2026-10-09
+
+This release makes parallel agent work easier to monitor and adds lightweight tools
+that stay out of project workflows:
+
+- Inspect descendant Codex sub-agents in a read-only terminal grid, preview exact
+  terminal screens while browsing workspace history or status lists, and navigate
+  directly from separate Working, Responses ready, Needs input, and Blocked counts.
+- Keep app-wide Thoughts and Checklist items in local-only Quick Notes, drop files
+  directly into local or SSH Files folders, and shorten the visible start of long LLM
+  Chats without changing provider archives or search indexing.
+- Refined sidebar, split, Git-pane, sorting, and disclosure motion; preserved collapsed
+  project state across keyboard navigation; and forwarded Codex Option reasoning
+  shortcuts. Read aloud and its Google Cloud Text-to-Speech integration were removed.
+
+The v0.11.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.10.0 — 2026-10-01
 
 This release makes common project actions searchable and adds guarded file drops for

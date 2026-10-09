@@ -84,6 +84,11 @@ or event spool. Claude Code continues to use terminal-output fallback tracking.
 Shell and Action terminals are excluded from agent-state detection, so ordinary
 terminal output cannot create a false working state.
 
+The bottom status bar separates **Working**, **Responses ready**, **Needs input**,
+and **Blocked**. Select a nonzero count to inspect matching sessions and preview their
+current read-only terminal screens; choosing a row opens its exact terminal or owning
+project capability without acknowledging or changing the session.
+
 Project and terminal metadata, saved output, and activity are stored in
 `~/Library/Application Support/project-console/project-console.sqlite` on macOS.
 
@@ -160,7 +165,7 @@ Each result names its target and reuses the same confirmations as the correspond
 context menu. A terminal hidden behind Files, Notes, or another capability is not
 treated as the current target.
 
-## Terminal file drops
+## File drops
 
 Drop disk-backed files onto an active, writable terminal to insert shell-quoted paths
 without submitting the command. Local-terminal drops keep files in their original
@@ -171,23 +176,40 @@ The status bar reports received bytes and file counts and keeps successful paths
 available to copy. Losing terminal focus suppresses automatic path insertion while
 allowing an in-progress upload to finish.
 
+Drop files anywhere in the Files workspace to copy them into the folder currently
+being browsed, locally or over SSH, without requiring a terminal. The source files
+remain untouched, existing destination entries are never overwritten, and folder
+drops are not supported. The destination is captured when the drop begins, and the
+listing refreshes without closing previews or discarding unsaved drafts.
+
 Each batch is limited to 20 regular files and 1 GB, at most two batches can run at
 once, and a transfer is stopped after 15 minutes. Folders, symlinks, path traversal,
 and overwriting an existing upload are rejected. Handled failures remove partial
-uploads, but an abrupt host or power loss can leave an incomplete upload directory.
-Completed remote files remain in the project until you explicitly delete them;
-PanePilot does not store additional SSH credentials or persist transfer progress.
+uploads, but an abrupt host or power loss can leave an incomplete upload directory or
+temporary `.panepilot-upload-*.part` file. Completed remote terminal drops remain in
+`.panepilot/dropped-assets/`, while Files imports remain in the chosen folder, until
+you explicitly delete them. PanePilot does not store additional SSH credentials or
+persist transfer progress.
 
-The message-plus button beside the audio control opens project-scoped **Quick Codex
-chats**. You can also open the collection or create a new chat from Command-K. These
+The message-plus toolbar button opens project-scoped **Quick Codex chats**. You can
+also open the collection or create a new chat from Command-K. These
 tmux-backed chats stay out of ordinary terminal tabs, survive restarts, and remain
 available until you choose **Clear**. Clearing removes PanePilot's session and saved
 output while leaving Codex's own conversation archive untouched.
 
-The **Aa** toolbar control changes the complete interface—including terminal and
-Monaco text—between Compact (90%), Standard (100%), Comfortable (110%), and Large
-(125%). The client-local choice survives restarts. Interface zoom has no keyboard
-shortcut; use this toolbar control to change it.
+The always-available **Quick Notes** toolbar button opens app-wide Thoughts and
+Checklist notes. They autosave only to PanePilot's local SQLite database, are not tied
+to a project or SSH host, and are not uploaded or synchronized across devices.
+
+For a visible Codex terminal or LaTeX writing chat, **Sub-agents** opens a read-only
+terminal-style grid for descendant Codex threads. PanePilot reads the matching Codex
+archives on the local or SSH project host only while the overlay is open and displays
+public assistant messages and tool I/O—not reasoning or inherited context. The viewer
+does not launch agents, send terminal input, or modify provider archives.
+
+In **LLM Chats**, use **Hide first** to omit a chosen number of rendered message cards
+from the start of the selected conversation. **Show all** restores them; the control
+does not alter the provider archive or search index.
 
 Press **Command/Control-Up or Down** to revisit recent work. PanePilot tints only the
 left sidebar and shows the current destination with up to seven prior destinations,
@@ -198,7 +220,8 @@ focused pane. While the switcher is open, Left or Right cycles between Recent wo
 Project tools, and Project terminals, and `D` removes a selected recent destination.
 Rows show the project glyph with a color-coded capability badge. Terminal rows also
 identify Working, Needs attention, and Flagged states without adding status noise to
-other tools.
+other tools. Highlighting a terminal also opens a read-only preview of its current
+screen without attaching, resizing, acknowledging, or sending input to the session.
 
 Hold **Control** and tap **?** three times to reveal the focused project's keyboard
 KeyTips. The first tap passes through to the focused terminal or editor; the second
