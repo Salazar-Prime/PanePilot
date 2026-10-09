@@ -38,6 +38,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   PanelRight,
+  PanelRightClose,
   Pencil,
   Pin,
   PinOff,
@@ -1434,6 +1435,12 @@ export function App() {
     setFocusedPane((current) => (current === 'a' ? 'b' : 'a'))
   }
 
+  function closeRightSplitPane() {
+    if (!splitOpen) return
+    setFocusedPane('a')
+    setSplitOpen(false)
+  }
+
   async function openSessionInPane(
     projectId: string,
     sessionId: string,
@@ -1789,6 +1796,15 @@ export function App() {
       keywords: ['split', 'projects'],
       icon: <PanelRight size={15} />,
       action: swapPanes
+    }] : []),
+    ...(splitOpen ? [{
+      id: 'action:close-right-split',
+      section: 'Actions',
+      label: 'Close right split pane',
+      detail: paneBProject?.name ?? 'Right workspace',
+      keywords: ['close', 'right', 'split', 'pane', 'unsplit', 'layout'],
+      icon: <PanelRightClose size={15} />,
+      action: closeRightSplitPane
     }] : []),
     {
       id: 'action:new-project',
