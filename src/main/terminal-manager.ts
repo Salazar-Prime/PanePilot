@@ -1439,7 +1439,7 @@ export class TerminalManager {
 
   async preview(sessionId: string): Promise<TerminalPreviewSnapshot> {
     const session = this.requireSession(sessionId)
-    if (session.archived || (session.kind !== 'terminal' && session.kind !== 'latex-chat')) {
+    if (session.archived) {
       throw new Error('This session cannot be previewed.')
     }
     const project = this.store.getProjectForRuntime(session.projectId)

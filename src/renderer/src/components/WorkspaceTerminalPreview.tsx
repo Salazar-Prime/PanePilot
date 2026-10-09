@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { Terminal } from '@xterm/xterm'
 import { TerminalSquare } from 'lucide-react'
 import type { TerminalPreviewSnapshot } from '@shared/types'
-import type { WorkspaceDestination } from '../lib/workspaceHistory'
 import { previewFontSize } from '../lib/workspaceTerminalPreview'
 import { terminalTheme } from '../lib/terminalTheme'
 import { safeTerminalText } from '../lib/subagentTerminal'
 
-interface LoadedPreview { snapshot: TerminalPreviewSnapshot; destination: WorkspaceDestination }
+interface PreviewDestination { sessionId: string | null; sessionName: string | null; projectName: string }
+interface LoadedPreview { snapshot: TerminalPreviewSnapshot; destination: PreviewDestination }
 
 function PreviewScreen({ preview, onReady }: { preview: LoadedPreview | null; onReady(preview: LoadedPreview): void }) {
   const frame = useRef<HTMLDivElement>(null)
@@ -95,7 +95,11 @@ function PreviewScreen({ preview, onReady }: { preview: LoadedPreview | null; on
   </div>
 }
 
-export function WorkspaceTerminalPreview({ destination }: { destination: WorkspaceDestination }) {
+export function WorkspaceTerminalPreview({ destination, variant = 'switcher', placement }: {
+  destination: PreviewDestination
+  variant?: 'switcher' | 'status'
+  placement?: CSSProperties
+}) {
   const [loaded, setLoaded] = useState<LoadedPreview | null>(null)
   const [shown, setShown] = useState<LoadedPreview | null>(null)
   const [failure, setFailure] = useState<{ sessionId: string; message: string } | null>(null)
@@ -126,12 +130,14 @@ export function WorkspaceTerminalPreview({ destination }: { destination: Workspa
   }, [destination.sessionId])
 
   return createPortal(
-    <section className="workspace-terminal-preview" aria-label={`Terminal preview: ${(shown?.destination ?? destination).sessionName}`}>
+    <section className={`workspace-terminal-preview${variant === 'status' ? ' status-terminal-preview' : ''}`}
+      style={placement} aria-label={`Terminal preview: ${(shown?.destination ?? destination).sessionName}`}>
       <header><TerminalSquare size={16} /><div><strong>{(shown?.destination ?? destination).sessionName}</strong><small>{(shown?.destination ?? destination).projectName}</small></div><span>Preview</span></header>
       <PreviewScreen preview={loaded?.destination.sessionId === destination.sessionId ? loaded : null} onReady={setShown} />
       {!shown && <div className="workspace-preview-message">{error || 'Reading terminal screen…'}</div>}
       <footer>{loadingNext && shown ? `${error ? 'Preview unavailable for' : 'Loading'} ${destination.sessionName} · showing ${shown.destination.sessionName}` :
-        error && shown ? 'Last snapshot · host currently unavailable' : shown?.snapshot.source === 'buffer' ? 'Buffered screen · read-only' : 'Screen snapshot · release modifier to switch'}</footer>
+        error && shown ? 'Last snapshot · host currently unavailable' : shown?.snapshot.source === 'buffer' ? 'Buffered screen · read-only' :
+        variant === 'status' ? 'Screen snapshot · click row to open' : 'Screen snapshot · release modifier to switch'}</footer>
     </section>, document.body
   )
 }

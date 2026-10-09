@@ -28,6 +28,7 @@
 .workspace-preview-surface .xterm-cursor-layer { visibility: hidden; }
 .workspace-preview-message { position: absolute; inset: 60px 8px 26px; display: grid; place-content: center; padding: 18px; color: #8991a3; font-size: 12px; text-align: center; }
 .workspace-terminal-preview footer { padding: 0 14px 10px; color: #8991a3; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.workspace-terminal-preview.status-terminal-preview { z-index: 100; }
 @media (prefers-reduced-motion: reduce) { .workspace-terminal-preview { animation: none; } }
 
 .sidebar {

@@ -683,7 +683,7 @@ select:focus-visible {
 .status-session-menu header { display: flex; align-items: center; gap: 8px; padding: 11px 12px; border-bottom: 1px solid #30394e; font-size: 12px; }
 .status-session-menu header small { color: #8991a3; }
 .status-session-close { display: grid; place-items: center; margin-left: auto; padding: 3px; color: #8991a3; background: transparent; border: 0; }
-.status-session-list { max-height: min(330px, 55vh); overflow-y: auto; padding: 5px; }
+.status-session-list { max-height: min(330px, 42vh); overflow-y: auto; padding: 5px; }
 .status-session-list > button { display: flex; align-items: center; width: 100%; gap: 9px; padding: 10px 8px; text-align: left; color: inherit; background: transparent; border: 0; border-radius: 6px; }
 .status-session-list > button:hover, .status-session-list > button:focus-visible { background: #252e46; }
 .status-session-copy { display: grid; gap: 4px; min-width: 0; flex: 1; }
