@@ -2287,75 +2287,77 @@ export function App() {
       }
     >
       <header className="top-bar">
-        <div className="traffic-spacer" />
-        <button
-          className="icon-button sidebar-toggle"
-          onClick={() => setSidebarOpen((value) => !value)}
-          aria-label="Toggle sidebar"
-        >
-          {sidebarOpen ? <PanelLeftClose size={17} /> : <Menu size={17} />}
-        </button>
-        <div className="type-switcher-wrap">
+        <div className="top-leading">
+          <div className="traffic-spacer" />
           <button
-            className="type-switcher"
-            onClick={() => setShowTypeMenu((current) => !current)}
-            aria-expanded={showTypeMenu}
+            className="icon-button sidebar-toggle"
+            onClick={() => setSidebarOpen((value) => !value)}
+            aria-label="Toggle sidebar"
           >
-            {showArchivedProjects ? (
-              <Archive size={15} />
-            ) : project?.type === 'latex' ? (
-              <FileText size={15} />
-            ) : (
-              <TerminalSquare size={15} />
-            )}
-            <span>{showArchivedProjects ? 'Archive' : typeDefinition.label}</span>
-            <ChevronDown size={13} />
+            {sidebarOpen ? <PanelLeftClose size={17} /> : <Menu size={17} />}
           </button>
-          {showTypeMenu && (
-            <div className="type-menu">
-              {Object.values(projectTypeRegistry).map((definition) => {
-                const first = activeProjects.find(
-                  (candidate) => candidate.type === definition.id
-                )
-                return (
-                  <button
-                    key={definition.id}
-                    className={project?.type === definition.id ? 'active' : ''}
-                    onClick={() => {
-                      setShowTypeMenu(false)
-                      if (first) {
-                        selectProject(first.id)
-                      } else {
-                        openNewProject(undefined, definition.id)
-                      }
-                    }}
-                  >
-                    {definition.id === 'latex' ? (
-                      <FileText size={15} />
-                    ) : (
-                      <TerminalSquare size={15} />
-                    )}
-                    <span>
-                      <strong>{definition.label}</strong>
-                      <small>
-                        {first
-                          ? `${activeProjects.filter((candidate) => candidate.type === definition.id).length} projects`
-                          : 'Create the first project'}
-                      </small>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
+          <div className="type-switcher-wrap">
+            <button
+              className="type-switcher"
+              onClick={() => setShowTypeMenu((current) => !current)}
+              aria-expanded={showTypeMenu}
+            >
+              {showArchivedProjects ? (
+                <Archive size={15} />
+              ) : project?.type === 'latex' ? (
+                <FileText size={15} />
+              ) : (
+                <TerminalSquare size={15} />
+              )}
+              <span>{showArchivedProjects ? 'Archive' : typeDefinition.label}</span>
+              <ChevronDown size={13} />
+            </button>
+            {showTypeMenu && (
+              <div className="type-menu">
+                {Object.values(projectTypeRegistry).map((definition) => {
+                  const first = activeProjects.find(
+                    (candidate) => candidate.type === definition.id
+                  )
+                  return (
+                    <button
+                      key={definition.id}
+                      className={project?.type === definition.id ? 'active' : ''}
+                      onClick={() => {
+                        setShowTypeMenu(false)
+                        if (first) {
+                          selectProject(first.id)
+                        } else {
+                          openNewProject(undefined, definition.id)
+                        }
+                      }}
+                    >
+                      {definition.id === 'latex' ? (
+                        <FileText size={15} />
+                      ) : (
+                        <TerminalSquare size={15} />
+                      )}
+                      <span>
+                        <strong>{definition.label}</strong>
+                        <small>
+                          {first
+                            ? `${activeProjects.filter((candidate) => candidate.type === definition.id).length} projects`
+                            : 'Create the first project'}
+                        </small>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          <div className="top-divider" />
         </div>
-        <div className="top-divider" />
         <div className="project-identity">
           {showArchivedProjects ? (
             <strong>Archived projects</strong>
           ) : project ? (
             <>
-              <strong>{project.name}</strong>
+              <strong title={project.name}>{project.name}</strong>
               <button
                 className={`project-path-copy ${
                   copiedPathProjectId === project.id ? 'copied' : ''
@@ -2365,7 +2367,7 @@ export function App() {
                 title={
                   copiedPathProjectId === project.id
                     ? 'Copied project path'
-                    : 'Copy project path'
+                    : `Copy project path: ${projectPath}`
                 }
               >
                 {projectPath}

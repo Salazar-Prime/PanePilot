@@ -62,7 +62,8 @@ select:focus-visible {
 
 .top-bar {
   grid-area: top;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, min(28vw, 380px)) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   padding: 0 14px;
@@ -70,6 +71,13 @@ select:focus-visible {
   background: #101219;
   -webkit-app-region: drag;
   z-index: 20;
+}
+
+.top-leading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
 }
 
 .top-bar button,
@@ -109,22 +117,32 @@ select:focus-visible {
 
 .project-identity {
   display: flex;
+  max-height: 100%;
   min-width: 0;
-  align-items: baseline;
-  gap: 9px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  overflow: hidden;
+  text-align: center;
 }
 
 .project-identity strong {
+  width: 100%;
+  overflow: hidden;
   color: #f0f1f5;
   font-size: 15px;
   font-weight: 680;
   letter-spacing: -0.015em;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-path-copy {
-  max-width: 430px;
+  max-width: 100%;
   overflow: hidden;
-  padding: 1px 0 2px;
+  padding: 0 0 1px;
   color: #717887;
   border: 0;
   border-bottom: 1px dotted #596273;
@@ -132,6 +150,7 @@ select:focus-visible {
   cursor: copy;
   font-family: "SFMono-Regular", "Cascadia Code", monospace;
   font-size: 10px;
+  line-height: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -145,8 +164,8 @@ select:focus-visible {
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-left: auto;
+  justify-self: end;
+  gap: 5px;
 }
 
 .sidebar {
@@ -3548,7 +3567,6 @@ select:focus-visible {
 }
 
 @media (max-width: 1080px) {
-  .project-path-copy,
   .header-button.secondary-button {
     display: none;
   }
