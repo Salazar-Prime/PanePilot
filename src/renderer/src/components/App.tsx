@@ -260,6 +260,7 @@ export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const [splitOpen, setSplitOpen] = useState(false)
+  const [splitPaneRendered, setSplitPaneRendered] = useState(false)
   const [focusedPane, setFocusedPane] = useState<'a' | 'b'>('a')
   const [paneBProjectId, setPaneBProjectId] = useState<string | null>(null)
   const [paneBSessionId, setPaneBSessionId] = useState<string | null>(null)
@@ -284,6 +285,7 @@ export function App() {
   const [showTypeMenu, setShowTypeMenu] = useState(false)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [gitPaneOpen, setGitPaneOpen] = useState(false)
+  const [gitPaneRendered, setGitPaneRendered] = useState(false)
   const [gitStatus, setGitStatus] = useState<GitRepositoryStatus | null>(null)
   const [gitStatusLoading, setGitStatusLoading] = useState(false)
   const [gitStatusError, setGitStatusError] = useState('')
@@ -1103,7 +1105,7 @@ export function App() {
     (item) => item.id === paneAProject?.connectionId
   )
   const paneBProject =
-    !showArchivedProjects && splitOpen
+    !showArchivedProjects && (splitOpen || splitPaneRendered)
       ? activeProjects.find((item) => item.id === paneBProjectId) ?? null
       : null
   const paneBConnection = connections.find(
@@ -1113,6 +1115,24 @@ export function App() {
   const projectSupportsGit = project
     ? projectTypeRegistry[project.type].capabilities.includes('git')
     : false
+  const gitPaneVisible =
+    gitPaneOpen && project != null && projectSupportsGit && !showArchivedProjects
+  useEffect(() => {
+    if (gitPaneVisible) {
+      setGitPaneRendered(true)
+      return
+    }
+    const timeout = window.setTimeout(() => setGitPaneRendered(false), 280)
+    return () => window.clearTimeout(timeout)
+  }, [gitPaneVisible])
+  useEffect(() => {
+    if (splitOpen) {
+      setSplitPaneRendered(true)
+      return
+    }
+    const timeout = window.setTimeout(() => setSplitPaneRendered(false), 280)
+    return () => window.clearTimeout(timeout)
+  }, [splitOpen])
   const connection = focusedPane === 'b' && splitOpen ? paneBConnection : paneAConnection
   const projectPath = project
     ? connection?.kind === 'ssh'
@@ -2269,8 +2289,6 @@ export function App() {
     )
   }
 
-  const gitPaneVisible =
-    gitPaneOpen && project != null && projectSupportsGit && !showArchivedProjects
   const gitTone = gitToolbarTone(gitStatus, gitStatusError)
   const gitBadge = gitToolbarBadge(gitStatus)
   const localRepository = isOriginlessGitRepository(gitStatus)
@@ -2289,13 +2307,16 @@ export function App() {
       <header className="top-bar">
         <div className="top-leading">
           <div className="traffic-spacer" />
-          <button
-            className="icon-button sidebar-toggle"
-            onClick={() => setSidebarOpen((value) => !value)}
-            aria-label="Toggle sidebar"
-          >
-            {sidebarOpen ? <PanelLeftClose size={17} /> : <Menu size={17} />}
-          </button>
+          {!sidebarOpen && (
+            <button
+              className="icon-button sidebar-toggle"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+            >
+              <Menu size={17} />
+            </button>
+          )}
           <div className="type-switcher-wrap">
             <button
               className="type-switcher"
@@ -2506,15 +2527,29 @@ export function App() {
         </div>
       </header>
 
-      <aside className="sidebar">
+      <aside className="sidebar" aria-hidden={!sidebarOpen}
+        ref={(element) => { if (element) element.inert = !sidebarOpen }}>
         <div className="sidebar-brand">
           <div className="brand-mark">
             <TerminalSquare size={19} />
           </div>
-          <div>
+          <div className="sidebar-brand-copy">
             <strong>PanePilot</strong>
             <span>Agent workspace</span>
           </div>
+          {sidebarOpen && (
+            <button
+              className="icon-button sidebar-toggle"
+              onClick={() => {
+                setShowTypeMenu(false)
+                setSidebarOpen(false)
+              }}
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose size={17} />
+            </button>
+          )}
         </div>
         <div className="sidebar-scroll" ref={sidebarScrollRef} onScroll={(event) => trimSidebarTail(event.currentTarget)}>
           {sidebarConnectionGroups.map(
@@ -2963,12 +2998,13 @@ export function App() {
                 </div>
               )}
             </div>
-            {splitOpen && (
-              <div
-                className={`workspace-pane ${focusedPane === 'b' ? 'focused' : ''}`}
-                onMouseDownCapture={() => setFocusedPane('b')}
-              >
-                {paneBProject ? (
+            <div
+              className={`workspace-pane ${splitOpen && focusedPane === 'b' ? 'focused' : ''}`}
+              aria-hidden={!splitOpen}
+              ref={(element) => { if (element) element.inert = !splitOpen }}
+              onMouseDownCapture={() => setFocusedPane('b')}
+            >
+              {(splitOpen || splitPaneRendered) && (paneBProject ? (
                   <PaneWorkspaceStack
                     activeProject={paneBProject}
                     projects={activeProjects}
@@ -3027,25 +3063,27 @@ export function App() {
                     <h1>Pick a project</h1>
                     <p>Choose a project or terminal from the sidebar to open it here.</p>
                   </div>
-                )}
-              </div>
-            )}
+                ))}
+            </div>
           </div>
         )}
       </main>
 
-      {gitPaneVisible && project && (
-        <GitPane
-          key={project.id}
-          projectId={project.id}
-          projectName={project.name}
-          status={gitStatus}
-          statusLoading={gitStatusLoading}
-          statusError={gitStatusError}
-          onRefreshStatus={refreshGitStatus}
-          onClose={() => setGitPaneOpen(false)}
-        />
-      )}
+      <div className="git-pane-motion" aria-hidden={!gitPaneVisible}
+        ref={(element) => { if (element) element.inert = !gitPaneVisible }}>
+        {gitPaneRendered && project && projectSupportsGit && !showArchivedProjects && (
+          <GitPane
+            key={project.id}
+            projectId={project.id}
+            projectName={project.name}
+            status={gitStatus}
+            statusLoading={gitStatusLoading}
+            statusError={gitStatusError}
+            onRefreshStatus={refreshGitStatus}
+            onClose={() => setGitPaneOpen(false)}
+          />
+        )}
+      </div>
 
       <footer className="status-bar">
         <div className="status-brand">

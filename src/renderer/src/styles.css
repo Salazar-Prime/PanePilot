@@ -41,6 +41,7 @@ select:focus-visible {
 .app-shell {
   --sidebar-preferred-width: 264px;
   --sidebar-width: var(--sidebar-preferred-width);
+  --git-pane-open-width: clamp(350px, 28vw, 410px);
   --git-pane-width: 0px;
   display: grid;
   grid-template:
@@ -51,10 +52,11 @@ select:focus-visible {
   height: 100%;
   color: #d8dbe4;
   background: #090b10;
+  transition: grid-template-columns 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .app-shell.git-pane-open {
-  --git-pane-width: clamp(350px, 28vw, 410px);
+  --git-pane-width: var(--git-pane-open-width);
 }
 
 .app-shell.sidebar-collapsed {
@@ -177,7 +179,7 @@ select:focus-visible {
   overflow: hidden;
   border-right: 1px solid #242832;
   background: #0d0f15;
-  transition: opacity 150ms ease;
+  transition: opacity 180ms ease;
 }
 
 .sidebar-collapsed .sidebar {
@@ -235,8 +237,20 @@ select:focus-visible {
   user-select: none !important;
 }
 
+.app-shell.sidebar-resizing {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .sidebar {
+    transition: none;
+  }
+}
+
 .sidebar-brand {
   display: flex;
+  width: var(--sidebar-preferred-width);
   align-items: center;
   gap: 10px;
   height: 59px;
@@ -244,19 +258,31 @@ select:focus-visible {
   border-bottom: 1px solid #1e222b;
 }
 
-.sidebar-brand > div:last-child {
+.sidebar-brand-copy {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-width: 0;
 }
 
-.sidebar-brand strong {
+.sidebar-brand-copy > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-brand .sidebar-toggle {
+  flex: 0 0 30px;
+  margin-right: 0;
+}
+
+.sidebar-brand-copy strong {
   color: #f3f4f7;
   font-size: 13px;
   letter-spacing: -0.01em;
 }
 
-.sidebar-brand span {
+.sidebar-brand-copy span {
   margin-top: 2px;
   color: #686f7d;
   font-size: 10px;
@@ -276,6 +302,7 @@ select:focus-visible {
 }
 
 .sidebar-scroll {
+  width: var(--sidebar-preferred-width);
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -602,6 +629,37 @@ select:focus-visible {
   flex: 1 1 50%;
   flex-direction: column;
   overflow: hidden;
+}
+
+.workspace-split > .workspace-pane:first-child {
+  flex: 1 1 100%;
+  transition: flex-basis 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.workspace-split > .workspace-pane:last-child:not(:first-child) {
+  flex: 0 0 0;
+  opacity: 0;
+  transform: translateX(18px);
+  transition:
+    flex-basis 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease,
+    transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.workspace-split.split > .workspace-pane:first-child,
+.workspace-split.split > .workspace-pane:last-child:not(:first-child) {
+  flex-basis: 50%;
+}
+
+.workspace-split.split > .workspace-pane:last-child:not(:first-child) {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-split > .workspace-pane {
+    transition: none !important;
+  }
 }
 
 .pane-workspace-stack,

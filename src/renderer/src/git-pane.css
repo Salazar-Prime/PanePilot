@@ -1,3 +1,17 @@
+.git-pane-motion {
+  position: relative;
+  grid-area: git;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.git-pane-motion > .git-pane {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: var(--git-pane-open-width);
+}
+
 .git-pane {
   grid-area: git;
   display: flex;
@@ -655,8 +669,8 @@
 }
 
 @media (max-width: 1180px) {
-  .app-shell.git-pane-open {
-    --git-pane-width: 330px;
+  .app-shell {
+    --git-pane-open-width: 330px;
   }
 }
 
