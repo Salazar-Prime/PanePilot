@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "actions": [
+    {
+      "id": "6614472a-c793-46cf-93a1-b320ffbecc28",
+      "name": "Install Android on OnePlus (CPH2767 only)",
+      "command": "node scripts/install-android-cph2767.mjs"
+    }
+  ]
+}
