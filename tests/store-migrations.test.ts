@@ -20,7 +20,7 @@ describe('retired feature storage migrations', () => {
     const database = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
     try {
       expect(database.prepare('PRAGMA user_version').get()).toMatchObject({
-        user_version: 20
+        user_version: 21
       })
       expect(database.prepare(`
         SELECT name FROM sqlite_master
@@ -38,6 +38,33 @@ describe('retired feature storage migrations', () => {
       store.close()
       expectCurrentSchema()
     }
+  })
+
+  it('adds durable reboot recovery to version 20 without changing saved terminals', () => {
+    const original = new Store(appDataPath)
+    original.syncConnections([])
+    const project = original.createProject({ type: 'terminal', name: 'Project',
+      connectionId: 'local', folder: appDataPath, repositoryUrl: null })
+    const session = original.createSession({ projectId: project.id,
+      name: 'Saved terminal', profile: 'shell', backend: 'tmux', tmuxName: 'Saved terminal',
+      providerSessionName: null, customCommand: null, dangerousMode: false })
+    original.replaceOutput(session.id, 'Preserved output')
+    original.close()
+    const legacy = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
+    legacy.exec('ALTER TABLE terminal_sessions DROP COLUMN reboot_recovery_pending; PRAGMA user_version = 20;')
+    legacy.close()
+    const migrated = new Store(appDataPath)
+    try {
+      expect(migrated.isSessionPendingRebootRecovery(session.id)).toBe(false)
+      expect(migrated.getSession(session.id)).toMatchObject({
+        id: session.id, name: session.name, state: 'idle', output: 'Preserved output'
+      })
+      migrated.deferSessionForRebootRecovery(session.id)
+      expect(migrated.isSessionPendingRebootRecovery(session.id)).toBe(true)
+    } finally {
+      migrated.close()
+    }
+    expectCurrentSchema()
   })
 
   it('removes legacy speech data while preserving projects, actions, and terminal output', () => {

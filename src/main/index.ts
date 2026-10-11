@@ -721,10 +721,10 @@ if (!ownsSingleInstanceLock) {
         remoteConversations,
         metadata
       )
-      const restoredLocalSessions = terminals.restoreLocalSessionsAfterReboot()
+      const restoredLocalSessions = terminals.prepareLocalSessionsAfterReboot()
       if (restoredLocalSessions > 0) {
         console.info(
-          `Restored ${restoredLocalSessions} local tmux session${restoredLocalSessions === 1 ? '' : 's'} after reboot.`
+          `Prepared ${restoredLocalSessions} local tmux session${restoredLocalSessions === 1 ? '' : 's'} for on-demand recovery after reboot.`
         )
       }
       latex = new LatexProjectService(store, terminals, metadata)

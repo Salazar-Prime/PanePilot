@@ -253,6 +253,7 @@ Do not put type-specific data into many nullable columns on `projects`. New proj
 - PanePilot-managed Codex launches mirror `activity`, `run-state`, and `task-progress` into the tmux pane title. Discovery reads that shared snapshot so another laptop can recover current Codex state without consuming events.
 - A provider session ID discovered after launch is mirrored into the live tmux metadata. The PanePilot terminal UUID remains the primary identity because provider IDs are not available at tmux creation time.
 - Closing/detaching the renderer does not kill a persistent tmux session.
+- After a local computer reboot, missing interactive tmux sessions wait durably in SQLite and resume only when their terminal surface is opened. Startup must never launch every saved agent. Recovery preserves the exact provider ID and per-terminal unsafe setting, survives app restarts and discovery, and rechecks tmux ownership before creating or attaching. Actions, custom commands, and one-shot inline edits remain stopped; existing live sessions and SSH behavior are preserved.
 - Action tmux sessions are intentionally ephemeral: they end when the command exits. PanePilot deletes the prior run row before rerunning so only the latest output is retained.
 - Action names, commands, and stable IDs are read from and written to `.panepilot/actions.json`. A client with legacy SQLite-only definitions exports them when the shared file does not yet exist.
 - A PTY fallback is used when tmux cannot be found or created.

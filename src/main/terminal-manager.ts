@@ -656,10 +656,14 @@ export class TerminalManager {
     return result
   }
 
-  restoreLocalSessionsAfterReboot(
+  prepareLocalSessionsAfterReboot(
     bootTimeMs = systemBootTimeMs()
   ): number {
     if (!this.tmuxPath || this.shuttingDown) return 0
+    // One bounded snapshot, without starting any terminal clients or agents.
+    const listed = this.listLocalTmuxSessions()
+    if (!listed) return 0
+    const liveByName = new Map(listed.map((session) => [session.name, session]))
     let restored = 0
 
     for (const project of this.store.listProjectsForRuntime()) {
@@ -674,18 +678,16 @@ export class TerminalManager {
           session.backend !== 'tmux' ||
           !session.tmuxName ||
           ['completed', 'error'].includes(session.state) ||
-          !sessionPredatesSystemBoot(session.updatedAt, bootTimeMs)
+          (!this.store.isSessionPendingRebootRecovery(session.id) &&
+            !sessionPredatesSystemBoot(session.updatedAt, bootTimeMs))
         ) {
           continue
         }
 
-        const liveTmuxSession = this.tmuxSessionExists(
-          connection,
-          session.tmuxName
-        )
+        const liveTmuxSession = liveByName.get(session.tmuxName)
         if (
           liveTmuxSession &&
-          this.localTmuxSessionOwner(session.tmuxName) !== session.id
+          liveTmuxSession.metadata?.terminalId !== session.id
         ) {
           this.store.setSessionState(
             session.id,
@@ -695,7 +697,7 @@ export class TerminalManager {
           continue
         }
 
-        if (session.kind === 'action' || session.profile === 'custom') {
+        if (session.kind === 'action' || session.profile === 'custom' || isLatexInlineEditSession(session)) {
           if (liveTmuxSession) {
             try {
               this.killTmuxSession(connection, session.tmuxName)
@@ -713,7 +715,7 @@ export class TerminalManager {
           this.store.setSessionState(
             session.id,
             'completed',
-            `${session.name} ended when the computer restarted. Rerun the Action when needed.`
+            `${session.name} ended when the computer restarted. Run it again when needed.`
           )
           continue
         }
@@ -735,17 +737,7 @@ export class TerminalManager {
         }
 
         try {
-          const prepared = this.store.prepareSessionForRebootRecovery(session.id)
-          this.launch(
-            prepared,
-            project.folder,
-            connection,
-            100,
-            30,
-            true,
-            AGENT_PROFILES.has(prepared.profile) &&
-              Boolean(prepared.providerSessionId)
-          )
+          this.store.deferSessionForRebootRecovery(session.id)
           restored += 1
         } catch (error) {
           const latest = this.store.getSessionWithoutOutput(session.id)
@@ -1112,6 +1104,7 @@ export class TerminalManager {
       if (!connection) continue
       for (const session of project.sessions) {
         if (this.shuttingDown) return
+        if (this.store.isSessionPendingRebootRecovery(session.id)) continue
         if (!AGENT_PROFILES.has(session.profile) || session.providerSessionId) continue
         try {
           await this.discoverProviderSession(session, project.folder, connection)
@@ -1270,6 +1263,7 @@ export class TerminalManager {
       const project = this.store.getProjectForRuntime(session.projectId)
       const connection = project ? this.store.getConnection(project.connectionId) : null
       if (!project || !connection) throw new Error('The terminal project is unavailable.')
+      if (project.archived || session.archived) throw new Error('This terminal is archived.')
       if (session.backend === 'pty') {
         this.changeState(
           session,
@@ -1277,15 +1271,19 @@ export class TerminalManager {
           `${session.name} could not be restored because it used a non-persistent PTY.`
         )
       } else {
-        if (
-          connection.kind === 'local' &&
-          AGENT_PROFILES.has(session.profile) &&
-          session.state !== 'idle' &&
-          session.state !== 'needs-input'
-        ) {
-          this.changeState(session, 'idle')
+        if (connection.kind === 'local' && this.store.isSessionPendingRebootRecovery(sessionId)) {
+          this.restoreLocalSessionOnAttach(session, project, connection, cols, rows)
+        } else {
+          if (
+            connection.kind === 'local' &&
+            AGENT_PROFILES.has(session.profile) &&
+            session.state !== 'idle' &&
+            session.state !== 'needs-input'
+          ) {
+            this.changeState(session, 'idle')
+          }
+          this.launch(session, project.folder, connection, cols, rows, false)
         }
-        this.launch(session, project.folder, connection, cols, rows, false)
       }
     }
     return {
@@ -1296,11 +1294,40 @@ export class TerminalManager {
     }
   }
 
+  private restoreLocalSessionOnAttach(
+    session: TerminalSession,
+    project: Project,
+    connection: Connection,
+    cols: number,
+    rows: number
+  ): void {
+    if (!this.tmuxPath || !session.tmuxName) {
+      throw new Error('Tmux is unavailable, so this terminal cannot resume yet.')
+    }
+    // Recheck ownership at selection time: another client may have restored it
+    // since startup. Never attach to an unrelated session that reused the name.
+    const listed = this.listLocalTmuxSessions()
+    if (!listed) throw new Error('Could not check tmux. Retry opening this terminal.')
+    const live = listed.find((candidate) => candidate.name === session.tmuxName)
+    if (live && live.metadata?.terminalId !== session.id) {
+      throw new Error(`Another tmux session is using the name “${session.name}”. PanePilot did not attach to it.`)
+    }
+    this.launch(
+      session, project.folder, connection, cols, rows, !live,
+      !live && AGENT_PROFILES.has(session.profile) && Boolean(session.providerSessionId)
+    )
+    this.store.prepareSessionForRebootRecovery(session.id, !live)
+  }
+
   async retryAttach(sessionId: string, cols: number, rows: number): Promise<void> {
     let session = this.requireSession(sessionId)
     const project = this.store.getProjectForRuntime(session.projectId)
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (!project || !connection) throw new Error('The terminal project is unavailable.')
+    if (connection.kind === 'local' && this.store.isSessionPendingRebootRecovery(sessionId)) {
+      this.attach(sessionId, cols, rows)
+      return
+    }
 
     if (
       ['completed', 'error'].includes(session.state) &&
@@ -1907,6 +1934,7 @@ export class TerminalManager {
         resumeProvider ? session.providerSessionId : null
       )
     const child = this.spawnTerminal(session, folder, connection, command, cols, rows, create)
+    this.store.clearSessionRebootRecovery(session.id)
     const screen = new HeadlessTerminal({
       cols,
       rows,
@@ -2658,7 +2686,7 @@ export class TerminalManager {
     if (result.error) return null
     if (result.status === 0) return parseTmuxSessionList(result.stdout)
     const detail = `${result.stdout}${result.stderr}`
-    return /no server running|failed to connect to server/i.test(detail)
+    return /no server running|failed to connect to server|error connecting to .*\((?:No such file or directory|Connection refused)\)/i.test(detail)
       ? []
       : null
   }
@@ -2930,6 +2958,7 @@ export class TerminalManager {
         metadata
       )
       if (!result) continue
+      this.store.clearSessionRebootRecovery(result.session.id)
       let changed = result.changed
       changed =
         this.applyCodexPaneSnapshot(result.session, listedSession) || changed
@@ -2984,6 +3013,7 @@ export class TerminalManager {
           continue
         }
         if (liveMetadataIds.has(session.id)) continue
+        if (connection.kind === 'local' && this.store.isSessionPendingRebootRecovery(session.id)) continue
         const nameMatch = liveByName.get(session.tmuxName)
         if (nameMatch && !nameMatch.metadata) {
           if (await this.syncSessionMetadata(session.id)) {
@@ -3043,17 +3073,6 @@ export class TerminalManager {
         }
       ).status === 0
     )
-  }
-
-  private localTmuxSessionOwner(name: string): string | null {
-    if (!this.tmuxPath) return null
-    const result = spawnSync(
-      this.tmuxPath,
-      ['show-options', '-qv', '-t', `=${name}:`, '@panepilot_terminal_id'],
-      { encoding: 'utf8', timeout: 2_000 }
-    )
-    if (result.status !== 0) return null
-    return result.stdout.trim() || null
   }
 
   private killTmuxSession(connection: Connection, name: string): void {

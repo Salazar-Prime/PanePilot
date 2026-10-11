@@ -767,6 +767,7 @@ export class Store {
       this.db.exec(`UPDATE activities SET message = content WHERE message = ''`)
     }
     this.ensureTemporaryChatSessionKind()
+    this.ensureColumn('terminal_sessions', 'reboot_recovery_pending', 'INTEGER NOT NULL DEFAULT 0')
 
     this.db.exec(`
       UPDATE terminal_sessions
@@ -834,7 +835,7 @@ export class Store {
         `)
       })
     }
-    this.db.exec('PRAGMA user_version = 20')
+    this.db.exec('PRAGMA user_version = 21')
   }
 
   getQuickNotes(): QuickNotesDocument {
@@ -2647,6 +2648,36 @@ export class Store {
     return result.changes > 0
   }
 
+  isSessionPendingRebootRecovery(id: string): boolean {
+    const row = this.db.prepare(
+      'SELECT reboot_recovery_pending AS pending FROM terminal_sessions WHERE id = ?'
+    ).get(id) as { pending: number } | undefined
+    return row?.pending === 1
+  }
+
+  clearSessionRebootRecovery(id: string): void {
+    this.db.prepare(
+      'UPDATE terminal_sessions SET reboot_recovery_pending = 0 WHERE id = ? AND reboot_recovery_pending = 1'
+    ).run(id)
+  }
+
+  deferSessionForRebootRecovery(id: string): void {
+    const session = this.requireSession(id)
+    if (this.isSessionPendingRebootRecovery(id)) return
+    if (session.backend !== 'tmux' || !session.tmuxName ||
+        ['completed', 'error'].includes(session.state)) {
+      throw new Error('Only an active tmux session can wait for reboot recovery.')
+    }
+    this.db.prepare(
+      "UPDATE terminal_sessions SET reboot_recovery_pending = 1, state = 'idle', updated_at = ? WHERE id = ?"
+    ).run(now(), id)
+    this.addActivity(
+      session.projectId, id, 'terminal-reboot-pending',
+      `${session.name} will resume when opened after the computer restarted.`
+    )
+    this.updateProjectState(session.projectId)
+  }
+
   prepareSessionForRebootRecovery(
     id: string,
     recreated = true
@@ -2662,7 +2693,7 @@ export class Store {
     const timestamp = now()
     this.db
       .prepare(
-        "UPDATE terminal_sessions SET state = 'idle', updated_at = ? WHERE id = ?"
+        "UPDATE terminal_sessions SET state = 'idle', reboot_recovery_pending = 0, updated_at = ? WHERE id = ?"
       )
       .run(timestamp, id)
     this.addActivity(
@@ -2756,6 +2787,7 @@ export class Store {
   }
 
   setSessionState(id: string, state: AgentState, message?: string): boolean {
+    if (state === 'completed' || state === 'error') this.clearSessionRebootRecovery(id)
     const session = this.getSessionWithoutOutput(id)
     if (!session || session.state === state) return false
     const timestamp = now()
