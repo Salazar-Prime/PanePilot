@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -152,6 +153,23 @@ import { TemporaryChatsPanel } from './TemporaryChatsPanel'
 import { TransferSessionDialog } from './TransferSessionDialog'
 import { WorkspaceSwitcherOverlay } from './WorkspaceSwitcherOverlay'
 import { TerminalDropStatus } from './TerminalDropStatus'
+import {
+  loadTopToolbarPins,
+  saveTopToolbarPins,
+  toggleTopToolbarPin,
+  type TopToolbarActionId
+} from '../lib/topToolbarPins'
+
+interface TopToolbarAction {
+  id: TopToolbarActionId
+  label: string
+  icon: ReactNode
+  group: 'general' | 'project' | 'create'
+  available: boolean
+  visibleInMenu: boolean
+  unavailableReason?: string
+  run: () => void
+}
 
 type SidebarContext =
   | { kind: 'connection'; connection: Connection; x: number; y: number }
@@ -286,6 +304,9 @@ export function App() {
   const [newProjectType, setNewProjectType] = useState<ProjectType>('terminal')
   const [showTypeMenu, setShowTypeMenu] = useState(false)
   const [showTopOverflow, setShowTopOverflow] = useState(false)
+  const [topToolbarPins, setTopToolbarPins] = useState(() =>
+    loadTopToolbarPins(window.localStorage)
+  )
   const topOverflowRef = useRef<HTMLDivElement>(null)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [gitPaneOpen, setGitPaneOpen] = useState(false)
@@ -361,6 +382,7 @@ export function App() {
       document.removeEventListener('keydown', closeOnEscape)
     }
   }, [showTopOverflow])
+  useEffect(() => saveTopToolbarPins(topToolbarPins, window.localStorage), [topToolbarPins])
   const [sidebarContext, setSidebarContext] = useState<SidebarContext | null>(null)
   const [projectSortMenu, setProjectSortMenu] = useState<{
     connectionId: string
@@ -2316,6 +2338,57 @@ export function App() {
   const gitTone = gitToolbarTone(gitStatus, gitStatusError)
   const gitBadge = gitToolbarBadge(gitStatus)
   const localRepository = isOriginlessGitRepository(gitStatus)
+  const topToolbarActions: TopToolbarAction[] = [
+    {
+      id: 'quick-notes', label: 'Quick Notes', icon: <StickyNote size={15} />,
+      group: 'general', available: true, visibleInMenu: true,
+      run: () => setShowQuickNotes(true)
+    },
+    {
+      id: 'quick-chats', label: 'Quick Codex chats', icon: <MessageSquarePlus size={15} />,
+      group: 'general', available: !!project, visibleInMenu: !!project,
+      unavailableReason: 'Select a project to open Quick Codex chats',
+      run: () => { if (project) openTemporaryChats(project) }
+    },
+    {
+      id: 'sub-agents', label: 'Sub-agents', icon: <GitFork size={15} />,
+      group: 'general', available: !!subagentSession, visibleInMenu: true,
+      unavailableReason: 'Select a Codex terminal to view sub-agents',
+      run: () => setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null)
+    },
+    {
+      id: 'google-drive', label: 'Google Drive connection', icon: <Cloud size={15} />,
+      group: 'project', available: !!project, visibleInMenu: !!project,
+      unavailableReason: 'Select a project to configure Google Drive',
+      run: () => {
+        if (project) setDriveDialogRequest((current) => ({
+          projectId: project.id, nonce: (current?.nonce ?? 0) + 1
+        }))
+      }
+    },
+    {
+      id: 'overleaf', label: 'Overleaf', icon: <ExternalLink size={15} />,
+      group: 'project', available: !!project?.latex?.overleafUrl,
+      visibleInMenu: !!project?.latex?.overleafUrl,
+      unavailableReason: 'No Overleaf link for this project',
+      run: () => {
+        if (project?.latex?.overleafUrl) {
+          void window.projectConsole.system.openExternal(project.latex.overleafUrl).catch(showError)
+        }
+      }
+    },
+    {
+      id: 'project-settings', label: 'Project settings', icon: <Settings size={15} />,
+      group: 'project', available: !!project, visibleInMenu: !!project,
+      unavailableReason: 'Select a project to open its settings',
+      run: () => setShowProjectSettings(true)
+    },
+    {
+      id: 'new-project', label: 'New project', icon: <Plus size={15} />,
+      group: 'create', available: true, visibleInMenu: true,
+      run: () => openNewProject()
+    }
+  ]
 
   return (
     <div
@@ -2499,6 +2572,15 @@ export function App() {
               hideWhenDisconnected
             />
           )}
+          {topToolbarPins.map((id) => {
+            const action = topToolbarActions.find((candidate) => candidate.id === id)
+            if (!action) return null
+            return <button key={id} className="icon-button top-pinned-action"
+              aria-label={action.label} title={action.available ? action.label : action.unavailableReason}
+              disabled={!action.available} onClick={action.run}>
+              {action.icon}
+            </button>
+          })}
           <div className="top-overflow-wrap" ref={topOverflowRef}>
             <button className="icon-button top-overflow-trigger"
               aria-label="More toolbar actions" aria-haspopup="menu"
@@ -2510,7 +2592,7 @@ export function App() {
             {showTopOverflow && <div className="top-overflow-menu" id="top-overflow-menu" role="menu"
               onKeyDown={(event) => {
                 if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
-                const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)'))
+                const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role^="menuitem"]:not(:disabled)'))
                 if (!items.length) return
                 event.preventDefault()
                 const current = items.indexOf(document.activeElement as HTMLButtonElement)
@@ -2518,35 +2600,31 @@ export function App() {
                   : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
                 items[next].focus()
               }}>
-              <button role="menuitem" onClick={() => { setShowTopOverflow(false); setShowQuickNotes(true) }}>
-                <StickyNote size={15} /> Quick Notes
-              </button>
-              {project && <button role="menuitem" onClick={() => { setShowTopOverflow(false); openTemporaryChats(project) }}>
-                <MessageSquarePlus size={15} /> Quick Codex chats
-              </button>}
-              <button role="menuitem" disabled={!subagentSession}
-                title={subagentSession ? 'Show this Codex terminal’s sub-agents' : 'Select a Codex terminal to view sub-agents'}
-                onClick={() => { setShowTopOverflow(false); setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null) }}>
-                <GitFork size={15} /> Sub-agents
-              </button>
-              {project && <>
-                <div className="top-overflow-divider" role="separator" />
-                <button role="menuitem" onClick={() => {
-                  setShowTopOverflow(false)
-                  setDriveDialogRequest((current) => ({ projectId: project.id, nonce: (current?.nonce ?? 0) + 1 }))
-                }}><Cloud size={15} /> Google Drive connection</button>
-                {project.latex?.overleafUrl && <button role="menuitem" onClick={() => {
-                  setShowTopOverflow(false)
-                  void window.projectConsole.system.openExternal(project.latex!.overleafUrl!)
-                }}><ExternalLink size={15} /> Overleaf</button>}
-                <button role="menuitem" onClick={() => { setShowTopOverflow(false); setShowProjectSettings(true) }}>
-                  <Settings size={15} /> Project settings
-                </button>
-              </>}
-              <div className="top-overflow-divider" role="separator" />
-              <button role="menuitem" onClick={() => { setShowTopOverflow(false); openNewProject() }}>
-                <Plus size={15} /> New project
-              </button>
+              {(['general', 'project', 'create'] as const).map((group, index) => {
+                const actions = topToolbarActions.filter((action) =>
+                  action.group === group && (action.visibleInMenu || topToolbarPins.includes(action.id)))
+                if (!actions.length) return null
+                return <div className="top-overflow-group" key={group} role="group">
+                  {index > 0 && <div className="top-overflow-divider" role="separator" />}
+                  {actions.map((action) => {
+                    const pinned = topToolbarPins.includes(action.id)
+                    return <div className="top-overflow-row" key={action.id}>
+                      <button role="menuitem" disabled={!action.available}
+                        title={action.available ? undefined : action.unavailableReason}
+                        onClick={() => { setShowTopOverflow(false); action.run() }}>
+                        {action.icon}<span>{action.label}</span>
+                      </button>
+                      <button className="top-pin-toggle" role="menuitemcheckbox"
+                        aria-checked={pinned}
+                        aria-label={`${pinned ? 'Unpin' : 'Pin'} ${action.label} ${pinned ? 'from' : 'to'} top toolbar`}
+                        title={`${pinned ? 'Unpin' : 'Pin'} ${action.label}`}
+                        onClick={() => setTopToolbarPins((current) => toggleTopToolbarPin(current, action.id))}>
+                        {pinned ? <PinOff size={13} /> : <Pin size={13} />}
+                      </button>
+                    </div>
+                  })}
+                </div>
+              })}
             </div>}
           </div>
         </div>
@@ -3125,9 +3203,11 @@ export function App() {
           )}
         </div>
         <div id="status-workspace-nav" className="status-workspace-nav" />
-        <TerminalDropStatus />
-        <StatusSessionMenu projects={activeProjects} connections={connections}
-          onSelect={openStatusSession} />
+        <div className="status-right">
+          <TerminalDropStatus />
+          <StatusSessionMenu projects={activeProjects} connections={connections}
+            onSelect={openStatusSession} />
+        </div>
       </footer>
 
       {showNewProject && (

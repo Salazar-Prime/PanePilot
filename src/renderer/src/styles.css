@@ -66,7 +66,7 @@ select:focus-visible {
 .top-bar {
   grid-area: top;
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) minmax(0, 2fr) minmax(170px, 1fr);
+  grid-template-columns: minmax(170px, 1fr) minmax(0, 2fr) minmax(max-content, 1fr);
   align-items: center;
   gap: 8px;
   padding: 0 14px;
@@ -169,6 +169,13 @@ select:focus-visible {
   align-items: center;
   justify-self: end;
   gap: 4px;
+}
+
+.top-pinned-action {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  color: #a8b3c9;
 }
 
 .sidebar {
@@ -694,7 +701,8 @@ select:focus-visible {
 
 .status-bar {
   grid-area: status;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, max-content) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   padding: 0 9px;
@@ -736,7 +744,15 @@ select:focus-visible {
   border-radius: 3px;
   font-size: 9px;
 }
-.status-bar > .status-summary { flex-shrink: 0; white-space: nowrap; }
+.status-right {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  justify-self: end;
+}
+
+.status-right > .status-summary { flex-shrink: 0; white-space: nowrap; }
 
 .status-summary { position: relative; }
 .status-summary-trigger { display: flex; align-items: center; gap: 6px; padding: 3px 5px; color: inherit; background: transparent; border: 0; border-radius: 4px; font: inherit; }
@@ -770,15 +786,26 @@ select:focus-visible {
 }
 
 .status-brand {
-  flex: 0 0 auto;
+  justify-self: start;
 }
 
 .status-brand:empty { display: none; }
 
 .status-workspace-nav {
   min-width: 0;
-  flex: 1 1 auto;
+  width: max-content;
+  max-width: 100%;
+  justify-self: center;
   overflow: hidden;
+}
+
+@media (max-width: 1080px) {
+  .status-bar { display: flex; }
+  .status-workspace-nav {
+    width: auto;
+    flex: 1 1 auto;
+  }
+  .status-right { flex: 0 0 auto; }
 }
 
 .status-workspace-nav .workspace-tabs {
@@ -2678,7 +2705,7 @@ select:focus-visible {
   z-index: 100;
   top: calc(100% + 8px);
   right: 0;
-  width: 208px;
+  width: 238px;
   padding: 5px;
   border: 1px solid #384257;
   border-radius: 9px;
@@ -2702,6 +2729,18 @@ select:focus-visible {
 .top-overflow-menu button:hover:not(:disabled) { color: #fff; background: #273247; }
 .top-overflow-menu button:disabled { opacity: .42; }
 .top-overflow-divider { height: 1px; margin: 4px; background: #30394a; }
+.top-overflow-row { display: flex; align-items: center; gap: 2px; }
+.top-overflow-row > button[role="menuitem"] { min-width: 0; flex: 1 1 auto; }
+.top-overflow-row > button[role="menuitem"] span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-overflow-row > .top-pin-toggle {
+  width: 26px;
+  height: 27px;
+  flex: 0 0 26px;
+  justify-content: center;
+  padding: 0;
+  color: #858fa6;
+}
+.top-overflow-row > .top-pin-toggle[aria-checked="true"] { color: #b8c6ff; }
 
 .repository-visibility-badge {
   display: inline-flex;
