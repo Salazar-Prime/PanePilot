@@ -13,6 +13,7 @@ import {
   sameRemoteProjectPath,
   TMUX_FIELD_SEPARATOR,
   tmuxMetadataShellCommand,
+  tmuxSessionListArgs,
   tmuxSessionListFormat,
   type PanePilotTmuxMetadata
 } from '../src/main/tmux-metadata'
@@ -59,6 +60,37 @@ function tmuxListLine(
 }
 
 describe('PanePilot tmux metadata', () => {
+  it.skipIf(spawnSync('tmux', ['-V']).status !== 0)(
+    'preserves emoji names and pane titles when launched without a UTF-8 locale',
+    () => {
+      const socket = `panepilot-unicode-test-${randomUUID()}`
+      const env: NodeJS.ProcessEnv = { ...process.env, LANG: 'C', LC_ALL: 'C', LC_CTYPE: 'C' }
+      delete env.TMUX
+      delete env.TMUX_PANE
+      const run = (args: string[]) => {
+        const result = spawnSync('tmux', ['-L', socket, ...args], {
+          encoding: 'utf8', env, timeout: 3_000
+        })
+        expect(result.status, result.stderr).toBe(0)
+        return result.stdout
+      }
+      const name = '🛠️ Fix 🐞 中文'
+      const paneTitle = '🚀 Ready'
+      try {
+        const id = run(['-u', '-f', '/dev/null', 'new-session', '-d', '-P', '-F', '#{session_id}', '-s', name, 'sleep 30']).trim()
+        run(['select-pane', '-t', `${id}:`, '-T', paneTitle])
+        for (const [key, value] of Object.entries(encodePanePilotTmuxMetadata(metadata()))) {
+          if (value !== null) run(['set-option', '-t', id, key, value])
+        }
+        expect(parseTmuxSessionList(run(tmuxSessionListArgs()))).toEqual([
+          expect.objectContaining({ name, paneTitle, metadata: metadata() })
+        ])
+      } finally {
+        spawnSync('tmux', ['-L', socket, 'kill-server'], { env, timeout: 3_000 })
+      }
+    }
+  )
+
   it('round-trips stable terminal, project, provider, and LaTeX identities', () => {
     const value = metadata({
       dangerousMode: true,
@@ -243,6 +275,31 @@ describe('tmux discovery persistence', () => {
   afterEach(() => {
     if (appDataPath) rmSync(appDataPath, { recursive: true, force: true })
     appDataPath = null
+  })
+
+  it('repairs an underscore-substituted name without replacing the session or its state', () => {
+    appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-unicode-store-'))
+    const store = new Store(appDataPath)
+    try {
+      store.syncConnections([])
+      const project = store.createProject({
+        type: 'terminal', name: 'Project', connectionId: 'local',
+        folder: '/srv/papers/example', repositoryUrl: null
+      })
+      store.upsertDiscoveredTmuxSession(project.id, '__ Fix bugs', metadata())
+      store.setSessionState(TERMINAL_ID, 'needs-input')
+
+      const repaired = store.upsertDiscoveredTmuxSession(project.id, '🐞 Fix bugs', metadata())
+      expect(repaired?.changed).toBe(true)
+      expect(store.getSession(TERMINAL_ID)).toMatchObject({
+        id: TERMINAL_ID, name: '🐞 Fix bugs', tmuxName: '🐞 Fix bugs',
+        state: 'needs-input', providerSessionId: 'provider-session-123'
+      })
+      expect(store.getProjectForRenderer(project.id)?.sessions).toHaveLength(1)
+      expect(store.upsertDiscoveredTmuxSession(project.id, '🐞 Fix bugs', metadata())?.changed).toBe(false)
+    } finally {
+      store.close()
+    }
   })
 
   it('imports a foreign live session and reactivates the same stable UUID', () => {

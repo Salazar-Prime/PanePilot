@@ -268,6 +268,13 @@ export function tmuxSessionListFormat(): string {
   ].join(TMUX_FORMAT_FIELD_SEPARATOR)
 }
 
+export function tmuxSessionListArgs(): string[] {
+  // Finder launches and noninteractive SSH shells may have no UTF-8 locale.
+  // Without -u, tmux replaces Unicode in names/titles with underscores before
+  // Node receives it, and discovery then persists those lossy names.
+  return ['-u', 'list-sessions', '-F', tmuxSessionListFormat()]
+}
+
 function parseMetadata(values: Map<string, string>): PanePilotTmuxMetadata | null {
   if (
     values.get(TMUX_METADATA_KEYS.managed) !== '1' ||

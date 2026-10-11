@@ -44,7 +44,7 @@ import {
   parseTmuxSessionList,
   sameRemoteProjectPath,
   tmuxMetadataShellCommand,
-  tmuxSessionListFormat,
+  tmuxSessionListArgs,
   type ListedTmuxSession,
   type PanePilotTmuxMetadata
 } from './tmux-metadata'
@@ -2641,10 +2641,9 @@ export class TerminalManager {
   private async listRemoteTmuxSessions(
     connection: Connection
   ): Promise<ListedTmuxSession[] | null> {
-    const format = tmuxSessionListFormat()
     const remoteCommand =
       `${remoteTmuxResolutionCommand()}; ` +
-      `panepilot_output=$("$panepilot_tmux" list-sessions -F ${quote(format)} 2>&1); ` +
+      `panepilot_output=$("$panepilot_tmux" ${tmuxSessionListArgs().map(quote).join(' ')} 2>&1); ` +
       `panepilot_code=$?; ` +
       `if [ "$panepilot_code" -eq 0 ]; then ` +
       `printf '%s\\n' "$panepilot_output"; exit 0; fi; ` +
@@ -2681,7 +2680,7 @@ export class TerminalManager {
     if (!this.tmuxPath) return null
     const result = spawnSync(
       this.tmuxPath,
-      ['list-sessions', '-F', tmuxSessionListFormat()],
+      tmuxSessionListArgs(),
       {
         encoding: 'utf8',
         timeout: 4_000,

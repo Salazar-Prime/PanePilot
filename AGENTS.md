@@ -41,7 +41,7 @@ These are owner-approved decisions and should be treated as product invariants u
 14. File-looking terminal output should be clickable. Files can also be browsed and previewed in the UI.
 15. A GitHub repository action is available when a Git remote can be discovered.
 16. Remote Codex lifecycle recovery uses the tmux pane title configured with `activity`, `run-state`, and `task-progress`. Tmux is the shared current-state snapshot across laptops; PanePilot does not maintain a remote lifecycle spool.
-17. A persistent terminal's PanePilot name and tmux session name are identical. Names must be tmux-safe and unique on that connection.
+17. A persistent terminal's PanePilot name and tmux session name are identical. Names must be tmux-safe and unique on that connection. Local and SSH discovery must invoke tmux with `-u` so emoji and other Unicode names survive launches without a UTF-8 locale; discovery repairs previously substituted names from the live session matched by stable terminal UUID.
 18. Terminal pinning is persisted. In the main terminal strip, pinned tabs always form the leftmost group; within the pinned and unpinned groups, tab order is renderer-local, persisted per project, and changed by direct drag-and-drop rather than a sort menu.
 19. Confirmed project archiving stops every exact live terminal and capability-chat backend first, including detached or hidden tmux sessions, while preserving terminal records, saved output, and provider archives. The project is archived only after every stop succeeds. Archived projects have a separate library view and do not contribute to live status counts.
 20. SSH port forwards are explicit, bind to `127.0.0.1`, use `ExitOnForwardFailure`, and stop when PanePilot exits.
