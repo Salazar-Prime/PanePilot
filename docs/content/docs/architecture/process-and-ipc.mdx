@@ -11,11 +11,13 @@ After Electron becomes ready, the main process:
 1. Opens the SQLite store under Electron's user-data directory and runs migrations.
 2. Parses SSH aliases and synchronizes connection records.
 3. Creates local and remote conversation indexers.
-4. Creates the terminal manager with both indexers.
-5. Creates the port-forward manager.
+4. Creates the terminal manager with both indexers and prepares eligible local tmux
+   sessions for on-demand reboot recovery.
+5. Creates the LaTeX, Git, Google Drive, file-drop, and port-forward services.
 6. Registers IPC handlers.
 7. Creates the BrowserWindow.
-8. Reconciles provider session IDs for existing unlinked Codex terminals.
+8. Reconciles live tmux metadata and provider session IDs without attaching every
+   terminal.
 
 The BrowserWindow loads the Vite development URL in development and the built renderer
 HTML in packaged or preview mode.
@@ -45,10 +47,10 @@ The preload contract is organized by capability:
 
 | Group | Representative operations |
 | --- | --- |
-| `connections` | List and test |
-| `projects` | List, create, rename, archive, restore, choose folder, open repository |
-| `terminals` | Start, attach, write, resize, acknowledge, resume Codex, rename, pin, stop, archive, restore, delete |
-| `files` | List, preview, save |
+| `connections` | List, refresh, and test |
+| `projects` | List, create, rename, archive, restore, permanently remove, choose folder, open repository |
+| `terminals` | Start, attach, write, resize, acknowledge, resume/reload, rename, pin/flag, detach, transfer, delete |
+| `files` | List, preview, save, create, rename, download, and import drops |
 | `remoteFolders` | Browse directories on an SSH connection |
 | `conversations` | List and read local or SSH-host provider archives |
 | `portForwards` | List, create/start, stop, delete, subscribe to changes |
@@ -74,13 +76,11 @@ paths, validate ports and names, and enforce lifecycle guards.
 
 ## Refresh model
 
-The renderer currently reloads complete project aggregates through `projects:list`
-after most mutations. Live terminal events patch visible state more quickly, then
-periodic or mutation-driven refreshes reconcile the full project tree.
-
-Each returned `Project` is hydrated with all of its terminal sessions and its 100 most
-recent activities. This model keeps renderer state straightforward at the cost of
-larger list payloads as the number of projects and sessions grows.
+Project and terminal switching uses targeted renderer updates rather than reloading
+the complete project collection. Terminal lifecycle events patch local state directly;
+metadata events coalesce one project-scoped refresh. Project hydration omits saved
+terminal output, which is requested only when the exact terminal surface first
+attaches.
 
 ## Development consequence
 

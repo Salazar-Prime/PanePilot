@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.12.0 — 2026-10-11
+
+This release streamlines the workspace and makes terminal recovery more deliberate:
+
+- Project tools now sit in the centered status bar, secondary commands live in one
+  compact overflow menu, and frequently used actions can be pinned back to the top
+  toolbar on this PanePilot client.
+- Local persistent terminals and chats recover on demand after a computer restart,
+  packaged builds consistently load their bundled interface, and tmux discovery
+  preserves and repairs Unicode terminal names.
+- Project Q&A and the separate terminal archive have been retired. Upgrading stops
+  and removes PanePilot's legacy Q&A session records and saved output while preserving
+  provider-owned Codex archives; deleting an ordinary terminal still requires
+  confirmation and preserves provider archives.
+
+The v0.12.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.11.0 — 2026-10-09
 
 This release makes parallel agent work easier to monitor and adds lightweight tools

@@ -25,7 +25,7 @@ Connection context actions include:
 Every project has:
 
 - A stable UUID.
-- A type. Only `terminal` is currently supported.
+- A `terminal` or `latex` type.
 - A display name.
 - One connection and one folder on that connection.
 - Optional repository URL metadata.
@@ -63,19 +63,20 @@ Depending on connection and repository metadata, a project menu can:
 
 - Open the project.
 - Rename it.
-- Start a terminal.
+- Open its capabilities or start a terminal.
 - Open its local folder in Finder.
-- Open its repository URL.
+- Open its repository URL or read-only Git pane.
 - Copy its local path or `<ssh-alias>:<remote-path>`.
 - Archive it.
 
-Remote repository discovery is not currently implemented. The Repository action appears
-only when a URL was discovered for a local project at creation time.
+Git status and history work for local and SSH project folders. A GitHub `origin` can
+also show Public, Private, Internal, or Unknown visibility without changing the remote.
 
 ## Archiving projects
 
-A project can be archived only when every terminal is `completed` or `error`. This
-guard prevents a live workspace from silently disappearing from normal navigation.
+Archiving first stops every exact live terminal and capability-chat backend, including
+detached or hidden tmux sessions. The project is archived only after every stop
+succeeds.
 
 Archiving:
 
@@ -84,5 +85,6 @@ Archiving:
 - Excludes it and its terminals from live status counts.
 - Preserves terminals, output, activity, files, and provider-owned archives.
 
-Restoring returns the project to normal navigation. There is no project-deletion
-workflow in the current implementation.
+Restoring returns the project to normal navigation. **Remove permanently** can then
+delete the archived project's local SQLite workspace records after confirmation. It
+never deletes the project folder, `.panepilot` metadata, or provider archives.

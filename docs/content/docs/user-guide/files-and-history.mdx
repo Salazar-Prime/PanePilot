@@ -15,11 +15,14 @@ File access is constrained to the project's canonical folder:
 - Local paths are resolved with real paths and rejected if they escape the project root.
 - Remote operations perform the same canonical-root check on the SSH host.
 - Symlinks that resolve outside the project folder are not exposed.
-- Only existing files can be saved; the UI does not create, rename, or delete files.
+- The UI can create empty files/folders and rename existing entries without
+  overwriting. It does not delete project files.
 
 Previews read at most 1 MB. A larger file is marked truncated and cannot be edited.
 Files containing a null byte are treated as binary and are not rendered as text.
-Explicitly choose **Edit** before changing a file, then **Save** to write it.
+Explicitly choose **Edit** before changing a file, then **Save** to write it. Markdown
+opens in a sanitized GitHub-style Preview and can switch to Source; Preview renders
+the current unsaved draft.
 Folder navigation, the selected preview, editor scroll position, and unsaved draft stay
 mounted while switching to another project tab. This state lasts only for the current
 PanePilot renderer lifetime.
@@ -53,7 +56,7 @@ Search covers:
 - Complete user and assistant message text.
 
 Results show a matching snippet and match count; the selected transcript highlights
-matches and displays a shortened provider session ID. Local parsed files are cached by
+matches and offers a visible copy action for the exact provider session ID. Local parsed files are cached by
 path, modification time, and size, then rescanned when those values change. Remote
 normalized scans use a separate five-second cache.
 
@@ -68,7 +71,7 @@ The Activity tab shows up to the 100 most recent events for the project. Events 
 - Terminal creation and launch profile.
 - Action creation, edits, runs, and deletion.
 - Terminal state changes and exits.
-- Terminal rename, pin, unpin, archive, restore, and deletion.
+- Terminal rename, pin, unpin, detach, transfer, reboot recovery, and deletion.
 - Whether an agent was launched with permission checks disabled.
 
 The activity log is PanePilot metadata, separate from provider transcripts and raw
@@ -76,6 +79,8 @@ terminal output.
 
 ## Repository shortcut
 
-At local project creation, PanePilot reads Git's `remote.origin.url`. When it can
-normalize a web URL, the project header and context menu offer **Repository**.
-The application only opens `http` or `https` URLs externally.
+PanePilot reads Git status, history, and remotes for the focused local or SSH project.
+A repository without `origin` shows **Local** and opens the read-only Git pane. A
+GitHub origin shows Public, Private, Internal, or Unknown based on the local GitHub CLI
+and public API visibility checks. External repository links are limited to validated
+`http` or `https` URLs.

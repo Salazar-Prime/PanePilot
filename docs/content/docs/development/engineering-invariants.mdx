@@ -15,7 +15,8 @@ needs an explicit product decision, not an incidental refactor.
 - Projects are grouped by connection.
 - Subprojects are not part of the product; legacy parent IDs remain flattened.
 - Archived projects do not contribute to live status counts.
-- All terminals must be stopped before a project can be archived.
+- Project archiving stops every exact live terminal and capability backend before the
+  project becomes archived.
 
 ## Terminals
 
@@ -30,6 +31,8 @@ needs an explicit product decision, not an incidental refactor.
 - Raw PTY output must remain byte-for-byte intact.
 - Replayed output must not activate xterm input forwarding.
 - Pinned terminals remain ahead of the selected sort order.
+- Local persistent sessions recover on demand after reboot; startup must not launch
+  every terminal client or provider process.
 
 ## Agent state
 
@@ -37,8 +40,8 @@ needs an explicit product decision, not an incidental refactor.
 - New Codex and Claude terminals start Ready, not Working.
 - Shell terminals and Action runs never create LLM Working state.
 - An Action retains at most one run and one saved output buffer.
-- Each project has at most one project Q&A session, rendered outside ordinary terminal
-  navigation.
+- Project Q&A is retired; legacy metadata is recognized only for bounded cleanup and
+  must not be rediscovered as a current capability.
 - Completed means the terminal ended, not that an answer finished.
 - When structured provider events are implemented, direct questions and permission
   prompts must produce sticky Needs input.
@@ -49,9 +52,9 @@ that distinction in code and documentation.
 
 ## Destructive actions
 
-- Dangerous permission bypass is per terminal, off by default, confirmed, visible, and
-  recorded.
-- Only stopped or errored terminals can be archived or deleted.
+- Dangerous permission bypass is per terminal, off by default, visible, and recorded.
+- Detaching an ordinary terminal leaves its tmux session running. Deletion stops the
+  exact live backend when necessary and removes PanePilot's local session data.
 - Deletion requires confirmation and does not delete provider archives.
 - Project archiving is reversible and does not delete terminals, activity, files, or
   provider archives.

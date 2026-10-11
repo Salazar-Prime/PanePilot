@@ -89,6 +89,18 @@ and **Blocked**. Select a nonzero count to inspect matching sessions and preview
 current read-only terminal screens; choosing a row opens its exact terminal or owning
 project capability without acknowledging or changing the session.
 
+The focused project's tool navigation is centered in that same status bar. Secondary
+global and project actions live in the top overflow menu; use the pin beside an action
+to keep it in the top toolbar on this PanePilot client.
+
+After the computer restarts, eligible local tmux-backed terminals and chats are
+recovered only when you open their exact tab. Detaching an ordinary terminal leaves
+its tmux session running. **Delete terminal** closes the exact live session when
+necessary and removes PanePilot's saved output, but never deletes the provider's Codex
+or Claude conversation archive. PanePilot no longer has a separate terminal archive
+or Project Q&A workspace; upgrading removes its legacy Q&A session records and saved
+output while preserving provider-owned archives.
+
 Project and terminal metadata, saved output, and activity are stored in
 `~/Library/Application Support/project-console/project-console.sqlite` on macOS.
 
@@ -227,7 +239,8 @@ Hold **Control** and tap **?** three times to reveal the focused project's keybo
 KeyTips. The first tap passes through to the focused terminal or editor; the second
 and third are consumed, so completing the gesture sends only one Control-? input to
 the terminal. While KeyTips are visible, use `T` for terminals, `A` for Actions, `Q`
-for project Q&A, `N` for Notes, `F` for Files, `C` for chat history, and `H` for Activity.
+for Quick Codex chats, `N` for Notes, `F` for Files, `C` for chat history, and `H` for
+Activity.
 LaTeX projects also use `M` for Manuscript and `P` for PDF. Number keys select the
 shown terminal or chat tabs. Without opening KeyTips, **Command/Control-1–9** jumps
 directly to a tab and **Command/Control-Shift-[ / ]** cycles tabs. Only the focused

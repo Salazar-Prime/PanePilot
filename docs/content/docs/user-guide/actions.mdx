@@ -1,0 +1,33 @@
+---
+title: Actions
+description: Run reusable project commands and retain the latest result.
+icon: Play
+---
+
+An Action is an editable project-scoped name and shell command. Actions live in the
+top-level **Actions** workspace instead of ordinary terminal tabs.
+
+Each run:
+
+1. Starts from the project folder.
+2. Uses a fresh ephemeral tmux session. PanePilot reports an error if tmux is
+   unavailable on the project connection.
+3. Streams output into the embedded terminal.
+4. Accepts terminal input while the command is running, for commands that prompt.
+5. Finishes when the command exits.
+6. Replaces the prior saved run and its output.
+
+Use **Run again** to invoke the current definition in another fresh session. Editing an
+Action changes future runs; it does not alter a command that is already executing.
+Deleting an Action also deletes its latest saved run output.
+
+Action definitions are shared through `.panepilot/actions.json`. SQLite mirrors the
+definitions on each PanePilot client and owns that client's latest run, saved output,
+and lifecycle state. Do not place secrets directly in a command; reference protected
+environment variables or credential files instead.
+
+Project Q&A is retired. Use **Quick Codex chats** for persistent project-scoped
+conversations. An upgrade stops and removes legacy PanePilot Q&A session records and
+saved output, while leaving Codex's provider-owned conversation archive untouched. If
+an SSH host is unavailable, PanePilot keeps the exact legacy record and retries cleanup
+on a later launch.

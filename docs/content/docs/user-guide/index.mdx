@@ -11,7 +11,7 @@ Connection
 └── Project
     ├── Terminal session
     ├── Actions
-    ├── Project Q&A
+    ├── Quick Codex chats
     ├── Files
     ├── Local or remote LLM chat archives
     └── Activity
@@ -19,19 +19,20 @@ Connection
 
 A **connection** identifies where work runs. A **project** gives a stable identity to a
 folder on that connection. A **terminal session** is one shell or coding agent in the
-project. **Actions** are editable commands with one retained run, while **Project Q&A**
-is the project’s single dedicated Codex chat. Files, archive search, and activity
-provide context around those capabilities.
+project. **Actions** are editable commands with one retained run. Project-scoped Quick
+Codex chats stay outside ordinary terminal navigation. LaTeX projects add Manuscript, PDF
+Preview, proof comments, and scoped writing chats. Files, provider-archive search, and
+activity provide context around those capabilities.
 
 ## The application shell
 
-- The top bar shows the current project type and project identity.
+- The top bar shows the current project type and identity, repository state, pinned
+  actions, and a secondary-action overflow menu.
 - The sidebar groups projects by connection and lists live terminals beneath each
   project.
-- The main workspace switches between Terminals, Actions, Project Q&A, Files, LLM
-  Chats, and Activity.
-- The status bar counts active projects, terminals marked Working, and terminals in an
-  attention state.
+- The main workspace switches between type-specific capabilities.
+- The status bar centers the focused project's tools and shows cross-project Working,
+  Responses ready, Needs input, and Blocked counts.
 
 Right-click connection, project, and terminal rows to reveal actions that belong to
 that object. Common actions are also available beside the selected project or terminal.
@@ -52,9 +53,9 @@ that object. Common actions are also available beside the selected project or te
     icon="SquareTerminal"
   />
   <Card
-    title="Actions and project Q&A"
-    description="Run reusable commands and ask Codex about a project."
-    href="/docs/user-guide/actions-and-project-qna"
+    title="Actions"
+    description="Define reusable project commands and keep one latest run."
+    href="/docs/user-guide/actions"
     icon="Play"
   />
   <Card

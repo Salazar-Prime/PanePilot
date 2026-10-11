@@ -43,8 +43,8 @@ run without it, so the narrow preload surface remains an important trust boundar
 ## Main-process services
 
 - `Store` owns schema migration, persistence, activities, and aggregate project state.
-- `TerminalManager` owns PTYs, tmux creation and attachment, session names, saved
-  output, screen-based agent tracking, and process exit handling.
+- `TerminalManager` owns PTYs, tmux creation and attachment, session names, bounded
+  replay state, screen-based agent tracking, and process exit handling.
 - `ConversationIndexer` discovers and normalizes local Codex and Claude JSONL archives.
 - `RemoteConversationIndexer` runs bounded read-only normalization on SSH hosts and
   discovers remote Codex provider session IDs.
@@ -73,7 +73,7 @@ the base persistence model still assume that every project has a connection and 
 
 ```text
 PTY output
-  ├─► SQLite capped output
+  ├─► bounded replay (SQLite where durable; memory-only for Codex)
   ├─► renderer IPC event ─► xterm
   └─► headless xterm ─► screen activity detector ─► state update
 ```

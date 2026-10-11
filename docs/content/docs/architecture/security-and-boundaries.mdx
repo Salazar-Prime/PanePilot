@@ -89,7 +89,6 @@ Permission bypass is:
 
 - Off by default.
 - Chosen for one agent terminal at a time.
-- Confirmed immediately before launch.
 - Persistently marked as `unsafe`.
 - Recorded in activity.
 
@@ -97,9 +96,9 @@ It must never become a silent application-wide preference.
 
 ## Destructive operations
 
-Archiving is the preferred reversible action. Permanent terminal deletion:
+Permanent terminal deletion:
 
-- Is allowed only for `completed` or `error` sessions.
+- Stops the exact live backend when necessary.
 - Requires UI confirmation.
 - Removes PanePilot's saved output and linked events.
 - Does not touch provider archives.
@@ -107,8 +106,9 @@ Archiving is the preferred reversible action. Permanent terminal deletion:
 The stored Codex provider ID is immutable after linking. This prevents an existing
 terminal from being silently redirected to a different provider conversation.
 
-Project archiving requires all of its terminals to be stopped. Project deletion is not
-currently exposed.
+Project archiving stops all exact live terminal and capability backends before changing
+state. An archived project can be removed from PanePilot after confirmation without
+deleting its folder, `.panepilot` metadata, or provider archives.
 
 ## Sensitive data
 

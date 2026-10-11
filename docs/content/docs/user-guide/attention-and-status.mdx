@@ -38,8 +38,8 @@ current rendered terminal viewport after output settles:
 ```
 
 Shell terminals and Action runs are excluded, so ordinary command output cannot create
-an agent Working state. The project Q&A session is a Codex agent and participates in
-normal lifecycle and attention counts.
+an agent Working state. Codex terminals, Quick Codex chats, and LaTeX writing chats
+participate in normal lifecycle and attention counts.
 
 Remote PanePilot-managed Codex sessions additionally mirror `activity`, `run-state`,
 and `task-progress` into their tmux pane title. Every laptop reads the same current
@@ -56,7 +56,7 @@ Codex plan update; `run-state` remains the liveness signal.
 
 ## Project aggregation
 
-The project state is the highest-priority state among non-archived sessions:
+The project state is the highest-priority state among its visible sessions:
 
 ```text
 needs-input
@@ -68,8 +68,7 @@ error
 completed
 ```
 
-This ordering prioritizes actionable live work over passive or ended sessions. Archived
-terminals do not participate in the project aggregate.
+This ordering prioritizes actionable live work over passive or ended sessions.
 
 ## Important limitation
 

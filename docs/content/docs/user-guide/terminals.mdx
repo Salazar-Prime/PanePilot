@@ -17,9 +17,9 @@ PanePilot supports three user-created terminal profiles:
 The interactive login shell for remote agent profiles helps the remote host load the
 environment that makes commands such as `codex` and `claude` available.
 
-Each profile has its own icon in terminal tabs, sidebar rows, LaTeX chat switchers, and
-archived-terminal lists. Custom commands are managed as project
-[Actions](./actions-and-project-qna.mdx), rather than ordinary terminal profiles.
+Each profile has its own icon in terminal tabs, sidebar rows, and LaTeX chat switchers.
+Custom commands are managed as project [Actions](./actions.mdx), rather than ordinary
+terminal profiles.
 
 ## tmux and PTY backends
 
@@ -30,6 +30,7 @@ When tmux is available:
 
 - The session persists after its renderer view detaches.
 - The PanePilot terminal name and tmux session name are identical.
+- Local tmux commands use UTF-8 mode so Unicode and emoji names survive discovery.
 - Reopening the terminal attaches to the existing tmux session.
 - PanePilot-owned sessions carry a stable terminal UUID and project metadata in tmux
   user options.
@@ -44,6 +45,12 @@ records that it was non-persistent.
 Remote clients reconnect automatically after SSH loss or laptop wake. PanePilot shows
 Reconnecting or Offline above the terminal, pauses input, and verifies the exact tmux
 identity before attaching again.
+
+After a computer restart, eligible local tmux-backed terminals and chats remain idle
+until their exact tab is opened. PanePilot attaches to a matching live tmux session or
+recreates the provider chat with its exact stored Codex or Claude ID. Action runs,
+one-shot inline-edit runners, plain PTYs, stopped/error sessions, archived projects,
+and SSH sessions are not recreated by this local reboot path.
 
 ## Naming and rename
 
@@ -61,16 +68,10 @@ The rename is rejected if another tmux session already uses the target name.
 
 ## Pinning and sorting
 
-Pinning is persisted in SQLite. Pinned terminals remain first; unpinned terminals follow
-the selected sort mode:
-
-- Newest first.
-- Oldest first.
-- Name A–Z.
-- Needs attention, using the system state priority.
-
-The sort preference is stored in renderer `localStorage` and applies consistently to
-workspace tabs and sidebar terminal rows.
+Pinning is persisted in SQLite. Pinned terminal tabs remain in the leftmost group.
+Within the pinned and unpinned groups, drag tabs to set their client-local manual order.
+Sidebar terminal entries use this client's session-selection recency and then creation
+time as a fallback; that ordering does not rewrite the workspace tab order.
 
 ## Codex session identity and resume
 
@@ -85,7 +86,7 @@ silently replaced by a different one. For a live tmux terminal, the link is also
 in session-scoped tmux metadata so another PanePilot laptop can import it. The terminal
 menu can copy the ID.
 
-A stopped or errored, non-archived Codex terminal with a provider ID offers **Resume
+A stopped or errored Codex terminal with a provider ID offers **Resume
 Codex chat** or **Resume Claude chat**. If no persistent tmux process remains,
 PanePilot starts the corresponding provider resume command:
 
@@ -95,32 +96,28 @@ claude --resume <exact-provider-session-id>
 ```
 
 It does so in the terminal's original project folder and original local or SSH
-connection. If dangerous mode was enabled for the terminal, PanePilot requires a fresh
-confirmation before launching the resumed provider.
+connection. The terminal's visible, per-session dangerous-mode setting is preserved.
 
 ## Saved output
 
-Raw PTY data is sent to xterm and appended to SQLite. PanePilot keeps the most recent
-512 KiB per terminal. When a renderer attaches, it replays saved output before it starts
-forwarding xterm input to the PTY. This replay guard prevents terminal protocol replies
-from being written back as user input.
+Raw PTY data is sent to xterm. For profiles with durable replay, PanePilot also keeps
+the most recent 512 KiB per terminal in SQLite. Codex raw output uses only a bounded
+application-lifetime buffer; restart recovery uses the exact provider ID and Codex's
+own archive. When a renderer attaches, it replays the available buffer before it starts
+forwarding xterm input. This replay guard prevents terminal protocol replies from being
+written back as user input.
 
-## Stop, archive, and delete
+## Detach and delete
 
-Stopping a tmux terminal asks tmux to kill the session; stopping a PTY kills its child
-process. PanePilot then marks the session `completed`.
+**Detach** closes PanePilot's client for an ordinary terminal without killing its tmux
+session. A plain PTY remains available only while PanePilot is open. Capability-owned
+Action and chat sessions use their own stop, clear, or reload workflows.
 
-Only `completed` or `error` sessions can be archived or deleted:
-
-- **Archive** hides the session from normal tabs and sidebar lists while preserving
-  output and activity.
-- **Restore** makes an archived terminal visible again.
-- **Delete** permanently removes PanePilot's saved session row, saved output, and linked
-  agent-event rows.
-
-Permanent deletion requires confirmation in the UI. It does not remove provider-owned
-Codex or Claude archive files. Deleting a linked Codex terminal therefore removes
-PanePilot's link, not the resumable provider conversation itself.
+PanePilot no longer has a per-terminal archive. **Delete terminal** requires
+confirmation, stops the exact live backend when necessary, and permanently removes
+PanePilot's session row, saved output, and linked agent-event rows. It does not remove
+provider-owned Codex or Claude archive files, so deleting a linked terminal removes
+PanePilot's link rather than the provider conversation.
 
 ## Dangerous agent mode
 
@@ -129,8 +126,9 @@ For agent profiles, **Disable permission checks** adds:
 - Codex: `--dangerously-bypass-approvals-and-sandbox`
 - Claude Code: `--dangerously-skip-permissions`
 
-The option is off for every launch, available only for Codex and Claude, and confirmed
-immediately before launch. An `unsafe` badge remains visible on the terminal, and the
-activity timeline records that permission checks were disabled.
+The option is off for every new launch and available only for Codex and Claude. It is
+scoped to one terminal and never becomes a global default. An `unsafe` badge remains
+visible on the terminal, and the activity timeline records that permission checks were
+disabled.
 
 Use it only in an isolated or disposable environment.

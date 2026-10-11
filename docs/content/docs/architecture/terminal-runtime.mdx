@@ -43,14 +43,18 @@ Codex session ID whose working directory and start time match the terminal. A
 For a tmux-backed local session, PanePilot creates:
 
 ```text
-tmux new-session -s <name> -c <project-folder> <launch-command>
+tmux -u new-session -s <name> -c <project-folder> <launch-command>
 ```
 
 Reattachment uses an exact session target:
 
 ```text
-tmux attach-session -t =<name>
+tmux -u attach-session -t =<name>
 ```
+
+Discovery also invokes tmux in UTF-8 mode. If an older locale substituted characters
+in a session name, PanePilot matches the stable terminal UUID and repairs the stored
+name from the live session.
 
 Without tmux, shell profiles spawn the configured shell with `-l`; other profiles use
 the configured shell with `-lc`.
@@ -112,13 +116,13 @@ SQLite, and only then removes the ephemeral tmux session. If the final pane capt
 empty, PanePilot keeps the output already streamed to SQLite. The saved run remains
 visible until rerun or deletion.
 
-## Project Q&A
+## Retired Project Q&A sessions
 
-The partial SQLite uniqueness constraint permits one `project-qna` session per
-project. It requires tmux and uses the normal Codex launch, provider-ID discovery,
-lifecycle tracking, persistence, and exact resume behavior, but renderer workspaces
-expose it through the top-level Project Q&A tab instead of ordinary terminal
-navigation.
+`project-qna` remains a legacy schema and tmux-metadata value only. On upgrade,
+PanePilot stops its exact backend and removes the PanePilot session record and saved
+output. It never deletes the Codex provider archive. If an SSH host is unavailable,
+cleanup retains the legacy record for retry; discovery refuses to import a retired Q&A
+session as a current capability.
 
 ## Exact Codex resume
 
@@ -128,7 +132,7 @@ tmux persistence and provider resume solve different problems:
 - Provider resume starts a new Codex process for a stopped or errored terminal with
   `codex resume <provider-session-id>`.
 
-Resume is limited to linked Codex terminals that are not archived. PanePilot uses the
+Resume is limited to linked Codex terminals. PanePilot uses the
 same project folder, connection, dangerous-mode setting, and terminal identity. It
 attaches instead if the named tmux session still exists.
 
@@ -143,11 +147,15 @@ its exact resumable provider identity.
 
 ## Output and rendering
 
-Each PTY data chunk is handled in three independent paths:
+Each non-Codex PTY data chunk is handled in three independent paths:
 
 1. Append the raw bytes to the capped SQLite output.
 2. Send a `terminal:data` event to the active BrowserWindow.
 3. Write the data to headless xterm and schedule a screen scan.
+
+Codex raw output instead uses a bounded application-lifetime replay buffer; reboot and
+restart recovery rely on the exact provider thread ID and Codex's own archive rather
+than continuously saving Codex output in SQLite.
 
 The renderer creates its own xterm with a 5,000-line scrollback and a fit addon. It
 subscribes to live data, attaches the session, replays saved output, then enables
@@ -172,6 +180,13 @@ action-required restores `needs-input`, and Ready after Working becomes
 
 A detached PTY backend cannot be recovered. PanePilot marks it completed with an
 activity explaining why.
+
+At startup after a computer reboot, PanePilot takes one bounded local tmux snapshot but
+does not attach every client or relaunch every provider. Eligible local persistent
+sessions are marked for on-demand recovery. Opening the exact tab adopts its matching
+tmux UUID or recreates the chat from its stored provider ID and previous dangerous-mode
+setting. Action runs, one-shot inline edits, PTYs, archived projects, SSH sessions, and
+already stopped/error sessions are excluded.
 
 ## Exit and shutdown
 

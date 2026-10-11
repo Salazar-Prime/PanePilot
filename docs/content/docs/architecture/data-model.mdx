@@ -63,20 +63,22 @@ Stores:
 - `tmux` or `pty` backend and optional tmux name.
 - Tmux metadata schema version used for safe live-session reconciliation.
 - Current lifecycle state.
-- Dangerous-mode, archive, and pinned flags.
-- Capped raw terminal output.
+- Dangerous-mode, legacy archive, pinned, flagged, and reboot-recovery flags.
+- Capped raw terminal output for profiles that retain it.
 - Created and updated timestamps.
 
-The output column retains only the latest 512 KiB. `provider_session_id` is separate
-from both the PanePilot session ID and tmux name.
+The output column retains only the latest 512 KiB where durable replay is enabled.
+Codex raw output is application-lifetime state and is not continuously saved there.
+`provider_session_id` is separate from both the PanePilot session ID and tmux name.
 
-`session_kind` separates ordinary terminals, Action runs, project Q&A, and LaTeX chats
-without overloading the launch profile. The internal `custom` profile remains only as
-the execution mechanism for an Action run.
+`session_kind` separates ordinary terminals, Action runs, Quick Codex chats, and LaTeX
+chats without overloading the launch profile. The retired `project-qna` value remains
+only for migration cleanup. The internal `custom` profile remains only as the execution
+mechanism for an Action run.
 
 For a live remote terminal, tmux is authoritative for whether the process still
 exists. SQLite is a durable local materialized view: it retains projects, stopped and
-archived terminals, output, type-specific attachments, activities, and provider links
+terminal records, retained output, type-specific attachments, activities, and provider links
 after tmux metadata disappears. A foreign tagged session can recreate its local row
 using the stable terminal UUID; no database file is synchronized between laptops.
 
@@ -112,8 +114,8 @@ Live process state and errors are in memory and are intentionally absent from SQ
 
 ## Aggregate project state
 
-Whenever a terminal state, archive flag, or deletion changes, the store recalculates
-the project state from non-archived terminals. It chooses the first visible state in
+Whenever terminal state or ownership changes, the store recalculates the project state
+from visible sessions. It chooses the first visible state in
 this priority list:
 
 ```ts
@@ -145,5 +147,6 @@ SQLite owns PanePilot metadata, not provider archives or project files. Terminal
 deletion removes its session and linked `agent_events`; foreign-key cascade removes
 session-owned activity. PanePilot then adds a project-level deletion activity.
 
-Project deletion is not implemented. Archiving is the reversible project-level cleanup
-mechanism.
+An archived project can be removed permanently from PanePilot after confirmation. That
+deletes its local SQLite workspace records, but never its project folder,
+`.panepilot` metadata, or provider archives.

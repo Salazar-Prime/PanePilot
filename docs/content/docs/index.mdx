@@ -37,9 +37,9 @@ The package is still named `project-console`, but the product name is PanePilot.
 
 ## What exists today
 
-The current application supports one project type: a **terminal project** tied to one
-folder and one connection. A connection is either the local machine or a concrete SSH
-alias read from `~/.ssh/config`.
+The current application supports **terminal projects** and section-aware **LaTeX
+projects**. Each project is tied to one folder and one local or SSH connection. SSH
+connections come from concrete aliases in `~/.ssh/config`.
 
 Within a project, PanePilot provides:
 
@@ -47,26 +47,25 @@ Within a project, PanePilot provides:
   profiles.
 - Editable Actions for reusable commands, with fresh ephemeral runs and latest-output
   retention.
-- One persistent Codex Q&A session per project in its own top-level workspace tab.
+- Project-scoped Quick Codex chats and, for LaTeX projects, scoped writing chats.
 - tmux-backed persistence when tmux is available, with a plain PTY fallback.
 - Direct terminal jumps from both the sidebar and workspace tabs.
-- Pinning, sorting, rename, stop, archive, restore, and permanent deletion workflows.
+- Pinning, manual tab ordering, rename, detach, reload, transfer, and permanent
+  deletion workflows.
 - Exact Codex conversation identity and restart through `codex resume <session-id>`.
-- Local and remote file browsing, 1 MB previews, and explicit Monaco-based editing.
+- Local and remote file browsing, Markdown preview, file/folder creation, rename,
+  download, and explicit Monaco-based editing.
 - Read-only search across local and remote Codex and Claude conversation archives.
-- A project activity timeline and cross-project attention counts.
-- Local Git remote discovery and a repository shortcut.
+- A project activity timeline, read-only Git pane, and cross-project attention counts.
+- LaTeX manuscript mapping, source editing, proof comments, PDF preview, compile, and
+  native macOS PDF printing.
 - SSH connection tests and loopback-only SSH port forwards.
 
 ## Current release boundary
 
-> This documentation describes the code in commit `817a705` as reviewed on July 23,
-> 2026. It distinguishes implemented behavior from target architecture.
-
-In particular, the current code tracks Codex and Claude turns by observing the rendered
-terminal marker `esc to interrupt`. Structured provider hooks are a target direction,
-not part of this checkout. Writing projects, project deletion, path-aware terminal
-links, and remote repository discovery are also not implemented.
+This documentation describes the v0.12.0 source. PanePilot uses tmux pane-title
+metadata for current remote Codex state and screen-based detection as a fallback.
+Provider archives remain provider-owned and are indexed read-only.
 
 ## Product shape
 
@@ -74,13 +73,13 @@ PanePilot is intentionally a single desktop UI:
 
 | Region | Responsibility |
 | --- | --- |
-| Top bar | Project type, selected project identity, repository action, and settings |
+| Top bar | Project type, selected project identity, repository state, pinned actions, and overflow |
 | Left sidebar | Connections, projects, terminals, state, and direct navigation |
-| Main workspace | Type-specific tools: Terminals, Files, LLM Chats, and Activity |
-| Bottom status bar | Live project, working-agent, and attention totals |
+| Main workspace | Type-specific tools including Terminals or Manuscript, Files, chats, and Activity |
+| Bottom status bar | Focused-project tools plus cross-project agent and attention totals |
 
 The application is not a general terminal multiplexer. It uses terminal sessions as a
-project capability and adds project identity, agent-oriented state, archives, files,
+project capability and adds project identity, agent-oriented state, provider archives, files,
 and remote operations around them.
 
 ## Start reading

@@ -72,8 +72,9 @@ when that tmux name already exists on the connection.
 
 Use the project’s **Actions** tab for reusable custom shell commands. Actions are
 editable, run in fresh ephemeral tmux sessions, and keep only the latest run output.
-The separate **Project Q&A** tab creates one persistent Codex question-and-answer
-session for the project.
+Use **Quick Codex chats** for persistent project-scoped conversations that stay out of
+ordinary terminal tabs. LaTeX projects also provide writing chats scoped to the whole
+manuscript or a selected structure.
 
 ## Add an SSH project
 
@@ -87,7 +88,7 @@ Host buildbox
   IdentityFile ~/.ssh/id_ed25519
 ```
 
-Restart PanePilot after changing SSH config, then:
+Refresh the SSH connection list after changing SSH config, then:
 
 1. Choose **New project**.
 2. Select `buildbox`.
