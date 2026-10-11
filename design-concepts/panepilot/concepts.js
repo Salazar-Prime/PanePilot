@@ -30,7 +30,11 @@ const concepts = {
   harbor: { number: '02', name: 'Harbor', previous: '01-compass.html', next: '03-orbit.html' },
   orbit: { number: '03', name: 'Orbit', previous: '02-harbor.html', next: '04-ledger.html' },
   ledger: { number: '04', name: 'Ledger', previous: '03-orbit.html', next: '05-quiet.html' },
-  quiet: { number: '05', name: 'Quiet', previous: '04-ledger.html', next: '01-compass.html' }
+  quiet: { number: '05', name: 'Quiet', previous: '04-ledger.html', next: '06-quiet-menu.html' },
+  'quiet-menu': { number: '06', name: 'Quiet / Menus', previous: '05-quiet.html', next: '07-quiet-dock.html' },
+  'quiet-dock': { number: '07', name: 'Quiet / Dock', previous: '06-quiet-menu.html', next: '08-quiet-drawer.html' },
+  'quiet-drawer': { number: '08', name: 'Quiet / Drawer', previous: '07-quiet-dock.html', next: '09-quiet-palette.html' },
+  'quiet-palette': { number: '09', name: 'Quiet / Palette', previous: '08-quiet-drawer.html', next: '01-compass.html' }
 }
 
 const sessions = [
@@ -139,7 +143,7 @@ function toggleStatus(kind) {
   if (open) { popover.hidden = true; return }
   const matching = sessions.filter((session) => session.state === kind)
   popover.dataset.kind = kind
-  popover.innerHTML = `<div class="popover-title">${kind === 'ready' ? 'Responses ready' : kind === 'blocked' ? 'Needs input' : 'Working now'}<span>${matching.length}</span></div>${matching.map((session) => `<button data-jump-session="${session.id}"><i class="state-dot ${session.state}"></i><span><strong>${session.name}</strong><small>${session.summary}</small></span>${icon('arrow', 14)}</button>`).join('')}`
+  popover.innerHTML = `<div class="popover-title">${button.querySelector('span').textContent}<span>${matching.length}</span></div>${matching.map((session) => `<button data-jump-session="${session.id}"><i class="state-dot ${session.state}"></i><span><strong>${session.name}</strong><small>${session.summary}</small></span>${icon('arrow', 14)}</button>`).join('')}`
   popover.hidden = false
   button.setAttribute('aria-expanded', 'true')
 }

@@ -37,6 +37,12 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--focus,#83a9e6);outl
 .preview-ledger b{left:36%}.preview-ledger em{left:43%;width:44%}.preview-ledger i{left:31%;top:25%;width:9%;height:60%;background:#284c53}
 .preview-quiet{--preview-bg:#080b11;--preview-side:#141923;--preview-top:#0d121a;--preview-accent:#d4a58c;--preview-status:#171d29}
 .preview-quiet b{opacity:.4}.preview-quiet em{border:0;background:#06090f}
+.preview-quiet-menu,.preview-quiet-dock,.preview-quiet-drawer,.preview-quiet-palette{--preview-bg:#090d13;--preview-side:#141923;--preview-top:#111821;--preview-accent:#d3b4a3;--preview-status:#19232c}
+.preview-quiet-menu b{top:20%;left:32%;width:16%;height:6%;background:#d3b4a3}.preview-quiet-menu em{top:34%;height:53%;background:#070b10}
+.preview-quiet-dock{--preview-accent:#9ec5b9}.preview-quiet-dock i{background:#5e817a}.preview-quiet-dock em{top:25%;height:58%;background:#070b10}.preview-quiet-dock strong{bottom:8%;left:27%;width:73%;height:9%;background:#263b39}
+.preview-quiet-drawer{--preview-accent:#aaa8cf}.preview-quiet-drawer em{top:24%;height:64%;width:42%;background:#070b10}.preview-quiet-drawer strong{top:17%;right:0;bottom:auto;left:auto;width:30%;height:73%;background:#2b3042}
+.preview-quiet-palette{--preview-accent:#a8c7dd}.preview-quiet-palette em{top:25%;height:60%;background:#070b10}.preview-quiet-palette strong{top:28%;right:17%;bottom:auto;left:auto;width:41%;height:46%;border:1px solid #637f8d;background:#1b2b38}
+.gallery-followup{max-width:810px;margin:70px 0 27px}.gallery-followup>span{color:#5b7788;font-size:10px;font-weight:800;letter-spacing:.17em}.gallery-followup h2{margin:9px 0 7px;color:#152431;font-family:"Avenir Next",Avenir,-apple-system,sans-serif;font-size:clamp(28px,3vw,43px);letter-spacing:-.05em}.gallery-followup p{margin:0;color:#536677;font-size:14px;line-height:1.6}
 .gallery-card h2{margin:0;color:#1a2935;font-family:"Avenir Next",Avenir,-apple-system,sans-serif;font-size:25px;letter-spacing:-.04em}
 .gallery-card p{margin:8px 0 17px;color:#61727e;font-size:13px;line-height:1.55}
 .gallery-card-link{margin-top:auto;color:#266b84;font-size:12px;font-weight:750}
