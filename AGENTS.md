@@ -514,6 +514,8 @@ git diff --check
 
 When main-process code changes, stop and restart `npm run dev`; Vite hot reload alone does not restart Electron's main process. Newly injected tmux environment variables only apply to newly created sessions.
 
+Packaged builds must always load the bundled renderer, even when `ELECTRON_RENDERER_URL` is inherited from a development terminal. Use that URL only when `!app.isPackaged`. Verify an installed build's rendered window with the dev server stopped; a running process alone does not establish a successful launch.
+
 ## Change checklist
 
 For any change:

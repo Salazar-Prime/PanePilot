@@ -121,7 +121,7 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) {
+  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
     void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
