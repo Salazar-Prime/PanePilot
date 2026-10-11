@@ -8,7 +8,6 @@ import {
   FileType2,
   Flag,
   History,
-  MessageCircleQuestion,
   MessageSquareText,
   Play,
   TerminalSquare
@@ -39,7 +38,6 @@ function DestinationIcon({ tab }: { tab: WorkspaceTabId }) {
   if (tab === 'manuscript') return <FileType2 size={11} />
   if (tab === 'pdf') return <FileText size={11} />
   if (tab === 'actions') return <Play size={11} />
-  if (tab === 'qna') return <MessageCircleQuestion size={11} />
   if (tab === 'notes') return <FileText size={11} />
   if (tab === 'files') return <Files size={11} />
   if (tab === 'chats') return <MessageSquareText size={11} />

@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Store } from '../src/main/store'
 
-describe('retired speech storage migration', () => {
+describe('retired feature storage migrations', () => {
   let appDataPath: string
 
   beforeEach(() => {
@@ -20,7 +20,7 @@ describe('retired speech storage migration', () => {
     const database = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
     try {
       expect(database.prepare('PRAGMA user_version').get()).toMatchObject({
-        user_version: 19
+        user_version: 20
       })
       expect(database.prepare(`
         SELECT name FROM sqlite_master
@@ -119,5 +119,43 @@ describe('retired speech storage migration', () => {
       }
       expectCurrentSchema()
     }
+  })
+
+  it('deletes only archived terminal records and output, not archived projects', () => {
+    const original = new Store(appDataPath)
+    original.syncConnections([])
+    const project = original.createProject({
+      type: 'terminal', name: 'Preserved project', connectionId: 'local',
+      folder: appDataPath, repositoryUrl: null
+    })
+    const archived = original.createSession({
+      projectId: project.id, name: 'Old terminal', profile: 'shell',
+      providerSessionName: null, customCommand: null, backend: 'pty',
+      tmuxName: null, dangerousMode: false
+    })
+    const retained = original.createSession({
+      projectId: project.id, name: 'Kept terminal', profile: 'shell',
+      providerSessionName: null, customCommand: null, backend: 'pty',
+      tmuxName: null, dangerousMode: false
+    })
+    original.replaceOutput(archived.id, 'Archived output')
+    original.replaceOutput(retained.id, 'Kept output')
+    original.close()
+
+    const legacy = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
+    legacy.prepare('UPDATE terminal_sessions SET archived = 1 WHERE id = ?').run(archived.id)
+    legacy.prepare('UPDATE projects SET archived = 1 WHERE id = ?').run(project.id)
+    legacy.exec('PRAGMA user_version = 19')
+    legacy.close()
+
+    const migrated = new Store(appDataPath)
+    try {
+      expect(migrated.getSession(archived.id)).toBeNull()
+      expect(migrated.getSession(retained.id)?.output).toBe('Kept output')
+      expect(migrated.getProject(project.id)?.archived).toBe(true)
+    } finally {
+      migrated.close()
+    }
+    expectCurrentSchema()
   })
 })

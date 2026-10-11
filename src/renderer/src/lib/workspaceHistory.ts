@@ -11,7 +11,6 @@ export type WorkspaceTabId =
   | 'manuscript'
   | 'pdf'
   | 'actions'
-  | 'qna'
   | 'notes'
   | 'files'
   | 'chats'
@@ -59,7 +58,6 @@ const tabLabels: Record<WorkspaceTabId, string> = {
   manuscript: 'Manuscript',
   pdf: 'PDF preview',
   actions: 'Actions',
-  qna: 'Project Q&A',
   notes: 'Notes',
   files: 'Files',
   chats: 'LLM Chats',
@@ -69,7 +67,6 @@ const tabLabels: Record<WorkspaceTabId, string> = {
 const terminalTabs = new Set<WorkspaceTabId>([
   'terminal',
   'actions',
-  'qna',
   'notes',
   'files',
   'chats',
@@ -80,7 +77,6 @@ const latexTabs = new Set<WorkspaceTabId>([
   'manuscript',
   'pdf',
   'actions',
-  'qna',
   'notes',
   'files',
   'chats',
@@ -258,13 +254,12 @@ export function projectCapabilityDestinations(
           'manuscript',
           'pdf',
           'actions',
-          'qna',
           'notes',
           'files',
           'chats',
           'activity'
         ]
-      : ['actions', 'qna', 'notes', 'files', 'chats', 'activity']
+      : ['actions', 'notes', 'files', 'chats', 'activity']
   return tabs.map((tab) => createWorkspaceDestination({ project, tab }))
 }
 

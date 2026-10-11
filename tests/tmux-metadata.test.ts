@@ -547,7 +547,7 @@ describe('tmux discovery persistence', () => {
     }
   })
 
-  it('persists temporary chats without colliding with the project Q&A slot', () => {
+  it('persists multiple temporary chats for a project', () => {
     appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-temporary-chats-'))
     const store = new Store(appDataPath)
     try {
@@ -588,7 +588,7 @@ describe('tmux discovery persistence', () => {
           expect.objectContaining({ id: second.id, kind: 'temporary-chat' })
         ])
       )
-      expect(store.getProjectQnaSession(project.id)).toBeNull()
+      expect(store.listLegacyProjectQnaSessions()).toEqual([])
     } finally {
       store.close()
     }

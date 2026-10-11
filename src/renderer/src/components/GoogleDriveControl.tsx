@@ -17,9 +17,10 @@ import { useModalEscape } from '../lib/modalEscape'
 interface Props {
   project: Project
   openRequest?: { projectId: string; nonce: number } | null
+  hideWhenDisconnected?: boolean
 }
 
-export function GoogleDriveControl({ project, openRequest = null }: Props) {
+export function GoogleDriveControl({ project, openRequest = null, hideWhenDisconnected = false }: Props) {
   const [status, setStatus] = useState<GoogleDriveStatus | null>(null)
   const [remotes, setRemotes] = useState<string[]>([])
   const [remoteName, setRemoteName] = useState('')
@@ -149,7 +150,7 @@ export function GoogleDriveControl({ project, openRequest = null }: Props) {
 
   return (
     <>
-      <button
+      {(!hideWhenDisconnected || status?.connected) && <button
         className={`secondary-button header-button drive-header-button ${
           status?.connected ? 'connected' : ''
         }`}
@@ -163,7 +164,7 @@ export function GoogleDriveControl({ project, openRequest = null }: Props) {
         <Cloud size={15} />
         {status?.connected ? 'Drive' : 'Connect Drive'}
         {status?.connected && <i aria-label="Connected" />}
-      </button>
+      </button>}
 
       {open && (
         <div

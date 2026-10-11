@@ -32,7 +32,6 @@ describe('project archiving', () => {
     const kinds: TerminalSessionKind[] = [
       'terminal',
       'action',
-      'project-qna',
       'temporary-chat',
       'latex-chat'
     ]

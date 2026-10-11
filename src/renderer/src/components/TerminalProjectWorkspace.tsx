@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Archive,
   Clipboard,
   FileText,
   Files,
   Flag,
   FolderInput,
   History,
-  MessageCircleQuestion,
   MessageSquareText,
   MoreHorizontal,
   Pencil,
@@ -28,7 +26,6 @@ import type {
   ProjectFileOpenRequest,
   TerminalFileTarget
 } from '../lib/terminalFileLinks'
-import { useModalEscape } from '../lib/modalEscape'
 import { isAttentionState } from '../lib/status'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
 import {
@@ -52,23 +49,21 @@ import { FilesPanel } from './FilesPanel'
 import { HistoryPanel } from './HistoryPanel'
 import { ManagedTerminal } from './ManagedTerminal'
 import { NotesPanel } from './NotesPanel'
-import { ProjectQnaPane } from './ProjectQnaPane'
 import {
   ProjectShortcutGuide,
   ShortcutKeytip
 } from './ProjectShortcutGuide'
 import { RenameDialog } from './RenameDialog'
 import { StatusDot } from './StatusDot'
+import { StatusWorkspaceNav } from './StatusWorkspaceNav'
 import { TerminalLauncher } from './TerminalLauncher'
 import {
-  TerminalProfileIcon,
-  terminalProfileLabel
+  TerminalProfileIcon
 } from './TerminalProfileIcon'
 
 type WorkspaceTab =
   | 'terminal'
   | 'actions'
-  | 'qna'
   | 'notes'
   | 'files'
   | 'chats'
@@ -77,7 +72,6 @@ type WorkspaceTab =
 const terminalWorkspaceTabs = new Set<WorkspaceTab>([
   'terminal',
   'actions',
-  'qna',
   'notes',
   'files',
   'chats',
@@ -92,6 +86,7 @@ export function TerminalProjectWorkspace({
   project,
   connection,
   workspaceActive = true,
+  workspaceFocused = true,
   terminalSurfaceCache,
   selectedSessionId,
   launchTerminalRequest,
@@ -114,7 +109,6 @@ export function TerminalProjectWorkspace({
   const [tab, setTab] = useState<WorkspaceTab>('terminal')
   const [actionSessionRequest, setActionSessionRequest] = useState<{ id: number; sessionId: string } | null>(null)
   const [showLauncher, setShowLauncher] = useState(false)
-  const [showArchivedSessions, setShowArchivedSessions] = useState(false)
   const [openFileRequest, setOpenFileRequest] =
     useState<ProjectFileOpenRequest | null>(null)
   const [renameTarget, setRenameTarget] = useState<TerminalSession | null>(null)
@@ -154,13 +148,6 @@ export function TerminalProjectWorkspace({
     () => allSessions.filter((session) => !openSessionIds.has(session.id)),
     [allSessions, openSessionIds]
   )
-  const archivedSessions = useMemo(
-    () =>
-      project.sessions.filter(
-        (session) => session.archived && session.kind === 'terminal'
-      ),
-    [project.sessions]
-  )
   const activeSession =
     openTabs.find((session) => session.id === selectedSessionId) ?? openTabs[0]
 
@@ -179,12 +166,6 @@ export function TerminalProjectWorkspace({
       label: 'Actions',
       active: tab === 'actions',
       run: () => selectWorkspaceTab('actions')
-    },
-    {
-      key: 'q',
-      label: 'Q&A',
-      active: tab === 'qna',
-      run: () => selectWorkspaceTab('qna')
     },
     {
       key: 'n',
@@ -225,10 +206,6 @@ export function TerminalProjectWorkspace({
     activeSessionId: activeSession?.id ?? null,
     onSelectSession: (id) => selectSession(id, false)
   })
-  useModalEscape(
-    () => setShowArchivedSessions(false),
-    showArchivedSessions
-  )
   const renderedTerminalViews = useMemo(() => {
     const currentSessions = new Map(
       project.sessions.map((session) => [session.id, session])
@@ -442,12 +419,6 @@ export function TerminalProjectWorkspace({
     await onChanged()
   }
 
-  async function archive(session: TerminalSession) {
-    setMenu(null)
-    await window.projectConsole.terminals.archive(session.id)
-    await onChanged()
-  }
-
   async function resumeAgent(session: TerminalSession) {
     setMenu(null)
     await window.projectConsole.terminals.resumeAgent(session.id)
@@ -462,15 +433,6 @@ export function TerminalProjectWorkspace({
     setMenu(null)
     await window.projectConsole.terminals.forceReloadAgent(session.id)
     selectWorkspaceTab('terminal')
-    onSessionSelected(session.id)
-    onOpenSession(session.id)
-    onSelectSession(session.id)
-    await onChanged()
-  }
-
-  async function restore(session: TerminalSession) {
-    await window.projectConsole.terminals.restore(session.id)
-    if (archivedSessions.length === 1) setShowArchivedSessions(false)
     onSessionSelected(session.id)
     onOpenSession(session.id)
     onSelectSession(session.id)
@@ -496,6 +458,7 @@ export function TerminalProjectWorkspace({
 
   return (
     <div className="project-workspace" ref={projectShortcuts.rootRef}>
+      <StatusWorkspaceNav active={workspaceActive && workspaceFocused}>
       <nav className="workspace-tabs" aria-label="Project tools">
         <button className={tab === 'terminal' ? 'active' : ''} onClick={() => selectWorkspaceTab('terminal')}>
           <TerminalSquare size={15} />
@@ -506,11 +469,6 @@ export function TerminalProjectWorkspace({
           <Play size={15} />
           Actions
           <ShortcutKeytip value="A" open={projectShortcuts.open} />
-        </button>
-        <button className={tab === 'qna' ? 'active' : ''} onClick={() => selectWorkspaceTab('qna')}>
-          <MessageCircleQuestion size={15} />
-          Project Q&amp;A
-          <ShortcutKeytip value="Q" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'notes' ? 'active' : ''} onClick={() => selectWorkspaceTab('notes')}>
           <FileText size={15} />
@@ -533,6 +491,7 @@ export function TerminalProjectWorkspace({
           <ShortcutKeytip value="H" open={projectShortcuts.open} />
         </button>
       </nav>
+      </StatusWorkspaceNav>
 
       <ProjectShortcutGuide
         open={projectShortcuts.open}
@@ -691,16 +650,6 @@ export function TerminalProjectWorkspace({
                 </div>
               ))}
             </div>
-            {archivedSessions.length > 0 && (
-              <button
-                className="session-archive-button"
-                onClick={() => setShowArchivedSessions(true)}
-                title="Archived terminals"
-              >
-                <Archive size={14} />
-                <span>{archivedSessions.length}</span>
-              </button>
-            )}
           </div>
 
           {activeSession ? (
@@ -769,25 +718,6 @@ export function TerminalProjectWorkspace({
               <button className="primary-button" onClick={() => setShowLauncher(true)}>
                 <Plus size={16} /> New terminal
               </button>
-              {archivedSessions.length > 0 && (
-                <div className="archived-list">
-                  <span>{archivedSessions.length} archived</span>
-                  {archivedSessions.map((session) => (
-                    <div key={session.id}>
-                      <span>{session.name}</span>
-                      <button onClick={() => run(restore(session))}>
-                        <RotateCcw size={13} /> Restore
-                      </button>
-                      <button
-                        className="danger-text"
-                        onClick={() => run(permanentlyDelete(session))}
-                      >
-                        <Trash2 size={13} /> Delete
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
         </section>
@@ -796,13 +726,6 @@ export function TerminalProjectWorkspace({
         <ActionsPanel
           project={project}
           sessionRequest={actionSessionRequest}
-          onChanged={onChanged}
-          onOpenFile={openFile}
-        />
-      )}
-      {tab === 'qna' && (
-        <ProjectQnaPane
-          project={project}
           onChanged={onChanged}
           onOpenFile={openFile}
         />
@@ -912,9 +835,6 @@ export function TerminalProjectWorkspace({
                           {session.profile === 'claude' ? 'Claude' : 'Codex'} chat
                         </button>
                       )}
-                      <button onClick={() => run(archive(session))}>
-                        <Archive size={14} /> Archive
-                      </button>
                     </>
                   )}
                   <button
@@ -947,65 +867,6 @@ export function TerminalProjectWorkspace({
           onClose={() => setRenameTarget(null)}
           onRename={applyRename}
         />
-      )}
-      {showArchivedSessions && (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onMouseDown={() => setShowArchivedSessions(false)}
-        >
-          <section
-            className="modal archived-sessions-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="archived-sessions-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="modal-heading">
-              <div>
-                <span className="eyebrow">SAVED TERMINALS</span>
-                <h2 id="archived-sessions-title">Archived terminals</h2>
-              </div>
-              <button
-                className="secondary-button"
-                onClick={() => setShowArchivedSessions(false)}
-              >
-                Close
-              </button>
-            </div>
-            <div className="archived-session-rows">
-              {archivedSessions.map((session) => (
-                <div key={session.id}>
-                  <StatusDot state={session.state} compact />
-                  <TerminalProfileIcon
-                    profile={session.profile}
-                    className="terminal-profile-icon"
-                  />
-                  <div>
-                    <strong>{session.name}</strong>
-                    <span>
-                      {terminalProfileLabel(session.profile)} · {session.backend}
-                      {session.providerSessionId &&
-                        ` · ${session.providerSessionId.slice(0, 18)}…`}
-                    </span>
-                  </div>
-                  <button onClick={() => run(rename(session))}>
-                    <Pencil size={13} /> Rename
-                  </button>
-                  <button onClick={() => run(restore(session))}>
-                    <RotateCcw size={13} /> Restore
-                  </button>
-                  <button
-                    className="danger-text"
-                    onClick={() => run(permanentlyDelete(session))}
-                  >
-                    <Trash2 size={13} /> Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
       )}
     </div>
   )

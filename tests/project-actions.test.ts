@@ -10,14 +10,16 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Connection } from '../src/shared/types'
+import type { ListedTmuxSession } from '../src/main/tmux-metadata'
 import { ConversationIndexer } from '../src/main/conversation-indexer'
 import { ProjectMetadataService } from '../src/main/project-metadata-service'
 import { RemoteConversationIndexer } from '../src/main/remote-conversation-indexer'
 import { Store } from '../src/main/store'
 import { TerminalManager } from '../src/main/terminal-manager'
 
-describe('project actions and Q&A persistence', () => {
+describe('project actions persistence', () => {
   let appDataPath: string | null = null
 
   afterEach(() => {
@@ -156,41 +158,7 @@ describe('project actions and Q&A persistence', () => {
     }
   })
 
-  it('enforces one project Q&A terminal while keeping it out of Actions', () => {
-    const { store, project } = createStoreAndProject()
-    try {
-      const qna = store.createSession({
-        projectId: project.id,
-        kind: 'project-qna',
-        name: 'Q&A · Project',
-        profile: 'codex',
-        providerSessionName: null,
-        customCommand: null,
-        backend: 'tmux',
-        tmuxName: 'Q&A · Project',
-        dangerousMode: false
-      })
-      expect(store.getProjectQnaSession(project.id)?.id).toBe(qna.id)
-      expect(store.getProject(project.id)?.actions).toEqual([])
-      expect(() =>
-        store.createSession({
-          projectId: project.id,
-          kind: 'project-qna',
-          name: 'Second Q&A',
-          profile: 'codex',
-          providerSessionName: null,
-          customCommand: null,
-          backend: 'tmux',
-          tmuxName: 'Second Q&A',
-          dangerousMode: false
-        })
-      ).toThrow()
-    } finally {
-      store.close()
-    }
-  })
-
-  it('resets a stopped project Q&A attachment without touching provider archives', () => {
+  it('removes a stopped legacy Q&A attachment without touching provider archives', async () => {
     const { store, project } = createStoreAndProject()
     const manager = new TerminalManager(
       store,
@@ -211,11 +179,68 @@ describe('project actions and Q&A persistence', () => {
         dangerousMode: false
       })
       store.setSessionState(qna.id, 'error')
+      expect(store.getProjectForRenderer(project.id)?.sessions).toEqual([])
 
-      manager.resetProjectQna(project.id)
+      expect(await manager.removeLegacyProjectQnaSessions()).toBe(1)
 
-      expect(store.getProjectQnaSession(project.id)).toBeNull()
+      expect(store.listLegacyProjectQnaSessions()).toEqual([])
       expect(store.getSession(qna.id)).toBeNull()
+    } finally {
+      manager.shutdown()
+      store.close()
+    }
+  })
+
+  it('stops only a verified legacy Q&A tmux session before deleting its record', async () => {
+    const { store, project } = createStoreAndProject()
+    const manager = new TerminalManager(
+      store, () => null, new ConversationIndexer(), new RemoteConversationIndexer()
+    )
+    try {
+      const qna = store.createSession({
+        projectId: project.id, kind: 'project-qna', name: 'Q&A · Project',
+        profile: 'codex', providerSessionName: null, customCommand: null,
+        backend: 'tmux', tmuxName: 'Q&A · Project', dangerousMode: false
+      })
+      const internals = manager as unknown as {
+        listTmuxSessions(connection: Connection): Promise<ListedTmuxSession[] | null>
+        killTmuxSession(connection: Connection, name: string): void
+      }
+      const listed = {
+        name: qna.tmuxName,
+        metadata: { terminalId: qna.id }
+      } as ListedTmuxSession
+      vi.spyOn(internals, 'listTmuxSessions')
+        .mockResolvedValueOnce([listed])
+        .mockResolvedValueOnce([])
+      const kill = vi.spyOn(internals, 'killTmuxSession').mockImplementation(() => {})
+
+      expect(await manager.removeLegacyProjectQnaSessions()).toBe(1)
+      expect(kill).toHaveBeenCalledWith(expect.objectContaining({ id: 'local' }), qna.tmuxName)
+      expect(store.getSession(qna.id)).toBeNull()
+    } finally {
+      manager.shutdown()
+      store.close()
+    }
+  })
+
+  it('retains a legacy Q&A record when its tmux host cannot be verified', async () => {
+    const { store, project } = createStoreAndProject()
+    const manager = new TerminalManager(
+      store, () => null, new ConversationIndexer(), new RemoteConversationIndexer()
+    )
+    try {
+      const qna = store.createSession({
+        projectId: project.id, kind: 'project-qna', name: 'Q&A · Offline',
+        profile: 'codex', providerSessionName: null, customCommand: null,
+        backend: 'tmux', tmuxName: 'Q&A · Offline', dangerousMode: false
+      })
+      const internals = manager as unknown as {
+        listTmuxSessions(connection: Connection): Promise<ListedTmuxSession[] | null>
+      }
+      vi.spyOn(internals, 'listTmuxSessions').mockResolvedValue(null)
+      expect(await manager.removeLegacyProjectQnaSessions()).toBe(0)
+      expect(store.getSession(qna.id)).not.toBeNull()
     } finally {
       manager.shutdown()
       store.close()
@@ -239,7 +264,7 @@ describe('project actions and Q&A persistence', () => {
     const databasePath = join(appDataPath!, 'project-console.sqlite')
     const database = new DatabaseSync(databasePath)
     database.exec(`
-      DROP INDEX terminal_sessions_project_qna_idx;
+      DROP INDEX IF EXISTS terminal_sessions_project_qna_idx;
       DROP TABLE project_actions;
       ALTER TABLE terminal_sessions DROP COLUMN session_kind;
       PRAGMA user_version = 6;

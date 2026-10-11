@@ -45,7 +45,7 @@ select:focus-visible {
   --git-pane-width: 0px;
   display: grid;
   grid-template:
-    "top top top" 52px
+    "top top top" 42px
     "sidebar main git" minmax(0, 1fr)
     "status status status" 26px / var(--sidebar-width) minmax(0, 1fr) var(--git-pane-width);
   width: 100%;
@@ -66,9 +66,9 @@ select:focus-visible {
 .top-bar {
   grid-area: top;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, min(28vw, 380px)) minmax(0, 1fr);
+  grid-template-columns: minmax(170px, 1fr) minmax(0, 2fr) minmax(170px, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 0 14px;
   border-bottom: 1px solid #242832;
   background: #101219;
@@ -101,7 +101,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 7px;
-  height: 30px;
+  height: 28px;
   padding: 0 9px;
   color: #bcc1cd;
   border: 1px solid #2a2f3a;
@@ -113,7 +113,7 @@ select:focus-visible {
 
 .top-divider {
   width: 1px;
-  height: 22px;
+  height: 18px;
   margin: 0 2px;
   background: #2a2e38;
 }
@@ -122,16 +122,16 @@ select:focus-visible {
   display: flex;
   max-height: 100%;
   min-width: 0;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
+  gap: 8px;
   overflow: hidden;
   text-align: center;
 }
 
 .project-identity strong {
-  width: 100%;
+  flex: 0 1 auto;
+  max-width: 50%;
   overflow: hidden;
   color: #f0f1f5;
   font-size: 15px;
@@ -143,7 +143,7 @@ select:focus-visible {
 }
 
 .project-path-copy {
-  max-width: 100%;
+  max-width: 50%;
   overflow: hidden;
   padding: 0 0 1px;
   color: #717887;
@@ -168,7 +168,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-self: end;
-  gap: 5px;
+  gap: 4px;
 }
 
 .sidebar {
@@ -696,8 +696,8 @@ select:focus-visible {
   grid-area: status;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
+  gap: 8px;
+  padding: 0 9px;
   color: #626a79;
   border-top: 1px solid #242832;
   background: #0d0f15;
@@ -770,8 +770,52 @@ select:focus-visible {
 }
 
 .status-brand {
-  gap: 6px;
+  flex: 0 0 auto;
 }
+
+.status-brand:empty { display: none; }
+
+.status-workspace-nav {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.status-workspace-nav .workspace-tabs {
+  height: 25px;
+  min-width: 0;
+  flex-basis: auto;
+  align-items: center;
+  gap: 1px;
+  padding: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border: 0;
+  background: transparent;
+}
+
+.status-workspace-nav .workspace-tabs::-webkit-scrollbar { display: none; }
+
+.status-workspace-nav .workspace-tabs button {
+  height: 22px;
+  gap: 4px;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.status-workspace-nav .workspace-tabs button svg { width: 12px; height: 12px; }
+.status-workspace-nav .workspace-tabs button:hover { background: #1b2130; }
+.status-workspace-nav .workspace-tabs button.active { color: #b8c6ff; background: #202946; }
+.status-workspace-nav .workspace-tabs button.active::after { display: none; }
+.status-workspace-nav .latex-tab-meta {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  padding-bottom: 0;
+}
+.status-workspace-nav .latex-tab-meta > span { max-width: 95px; }
+.status-workspace-nav .latex-tab-meta > button { height: 20px !important; margin-left: 1px; }
 
 /* Replaces the per-tab "unsafe" badge: the warning only concerns the terminal
    currently in focus, so it is shown once here instead of on every tab. */
@@ -2597,8 +2641,67 @@ select:focus-visible {
 }
 
 .repository-header-button {
-  gap: 6px;
+  position: relative;
+  width: 30px;
+  padding: 0;
+  justify-content: center;
 }
+
+.repository-header-button:has(.repository-visibility-badge.local) {
+  width: auto;
+  padding: 0 7px;
+}
+
+.repository-visibility-mark {
+  position: absolute;
+  right: -5px;
+  bottom: -3px;
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  border: 2px solid #101219;
+  border-radius: 50%;
+  background: #222b38;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.repository-visibility-mark.public { color: #a5f0c6; background: #164c32; }
+.repository-visibility-mark.private { color: #ffe09d; background: #634313; }
+.repository-visibility-mark.internal { color: #c0ccff; background: #39416d; }
+.repository-visibility-mark.unknown { color: #a5afc0; background: #31394a; }
+
+.top-overflow-wrap { position: relative; -webkit-app-region: no-drag; }
+.top-overflow-menu {
+  position: absolute;
+  z-index: 100;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 208px;
+  padding: 5px;
+  border: 1px solid #384257;
+  border-radius: 9px;
+  background: #151a25f5;
+  box-shadow: 0 14px 40px #0009;
+  backdrop-filter: blur(18px);
+}
+.top-overflow-menu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  color: #c8cfdd;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+}
+.top-overflow-menu button:hover:not(:disabled) { color: #fff; background: #273247; }
+.top-overflow-menu button:disabled { opacity: .42; }
+.top-overflow-divider { height: 1px; margin: 4px; background: #30394a; }
 
 .repository-visibility-badge {
   display: inline-flex;
@@ -3808,83 +3911,6 @@ select:focus-visible {
 .new-project-actions .refresh-connections-button:hover {
   color: #cbd0dc;
   background: #13161d;
-}
-
-.session-archive-button {
-  display: flex;
-  height: 100%;
-  align-items: center;
-  gap: 4px;
-  padding: 0 8px;
-  color: #717a88;
-  border: 0;
-  border-left: 1px solid #1e222a;
-  background: #0f1117;
-  font-size: 9px;
-}
-
-.session-archive-button:hover {
-  color: #c7ccd5;
-  background: #171a22;
-}
-
-.archived-sessions-modal {
-  width: min(680px, 100%);
-}
-
-.archived-session-rows {
-  max-height: 390px;
-  overflow-y: auto;
-  border: 1px solid #292f39;
-  border-radius: 8px;
-  background: #0c0e13;
-}
-
-.archived-session-rows > div {
-  display: flex;
-  min-height: 48px;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-}
-
-.archived-session-rows > div + div {
-  border-top: 1px solid #232832;
-}
-
-.archived-session-rows > div > div {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.archived-session-rows strong {
-  color: #bdc2cc;
-  font-size: 10px;
-}
-
-.archived-session-rows span {
-  color: #5f6875;
-  font-size: 8px;
-}
-
-.archived-session-rows button {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 6px;
-  color: #838c99;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  font-size: 8px;
-}
-
-.archived-session-rows button:hover {
-  color: #d1d5dc;
-  background: #222731;
 }
 
 .context-menu {
@@ -5903,52 +5929,6 @@ button.type-switcher {
   gap: 5px;
 }
 
-.latex-archived-chats {
-  flex: 0 0 auto;
-  padding: 7px;
-  border-bottom: 1px solid #2a303a;
-  background: #11151c;
-}
-
-.latex-archived-chats > strong {
-  display: block;
-  margin: 2px 3px 6px;
-  color: #7c8491;
-  font-size: 7px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.latex-archived-chats > div {
-  display: flex;
-  min-height: 27px;
-  align-items: center;
-  gap: 6px;
-  color: #808895;
-  font-size: 8px;
-}
-
-.latex-archived-chats > div > span {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.latex-archived-chats button {
-  display: flex;
-  height: 22px;
-  align-items: center;
-  gap: 3px;
-  padding: 0 5px;
-  color: #929aa7;
-  border: 1px solid #303743;
-  border-radius: 4px;
-  background: #171b22;
-  font-size: 7px;
-}
-
 .latex-chat-context-bar {
   display: flex;
   min-height: 50px;
@@ -6330,7 +6310,7 @@ button.type-switcher {
   height: 100%;
 }
 
-/* Project actions and Q&A */
+/* Project actions */
 
 .terminal-profile-icon {
   flex: 0 0 auto;
@@ -6361,8 +6341,7 @@ button.type-switcher {
 }
 
 .actions-list > header,
-.action-runner-heading,
-.project-qna-pane > header {
+.action-runner-heading {
   display: flex;
   min-height: 58px;
   align-items: center;
@@ -6469,8 +6448,7 @@ button.type-switcher {
   line-height: 1.5;
 }
 
-.action-runner,
-.project-qna-pane {
+.action-runner {
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -6492,8 +6470,7 @@ button.type-switcher {
   white-space: nowrap;
 }
 
-.action-terminal,
-.project-qna-terminal {
+.action-terminal {
   min-height: 0;
   flex: 1;
   padding: 9px 5px 5px 11px;
@@ -6532,93 +6509,6 @@ button.type-switcher {
   margin: -5px 0 0;
   color: #646d7a;
   font-size: 9px;
-}
-
-.project-qna-empty {
-  height: 100%;
-  padding: 40px;
-}
-
-.project-qna-empty p {
-  max-width: 460px;
-}
-
-.project-qna-pane {
-  min-height: 0;
-  flex: 1;
-  background: #090b10;
-}
-
-.project-qna-pane > header > div {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 9px;
-}
-
-.project-qna-pane > header > .project-qna-heading-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 7px;
-}
-
-.project-qna-heading-actions .primary-button,
-.project-qna-heading-actions .secondary-button {
-  height: 29px;
-  padding: 0 10px;
-  font-size: 9px;
-}
-
-.project-qna-pane > header span {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.project-qna-pane > header strong {
-  color: #d7dbe4;
-  font-size: 11px;
-}
-
-.project-qna-pane > header small {
-  color: #697280;
-  font-size: 8px;
-}
-
-.project-qna-composer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 10px 12px;
-  border-top: 1px solid #252a34;
-  background: #0d1016;
-}
-
-.project-qna-composer textarea {
-  min-height: 60px;
-  padding: 9px 10px;
-  resize: none;
-  color: #d8dce5;
-  border: 1px solid #303743;
-  border-radius: 7px;
-  outline: none;
-  background: #090b10;
-  font-size: 10px;
-  line-height: 1.45;
-}
-
-.project-qna-composer textarea:focus {
-  border-color: #5262a7;
-}
-
-.project-qna-composer .primary-button {
-  align-self: end;
-}
-
-.project-qna-composer > small {
-  color: #58616e;
-  font-size: 8px;
 }
 
 @media (max-width: 1190px) {

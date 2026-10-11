@@ -98,8 +98,6 @@ const api: ProjectConsoleApi = {
     setFlagged: (sessionId: string, flagged: boolean) =>
       ipcRenderer.invoke('terminals:set-flagged', sessionId, flagged),
     stop: (sessionId: string) => ipcRenderer.invoke('terminals:stop', sessionId),
-    archive: (sessionId: string) => ipcRenderer.invoke('terminals:archive', sessionId),
-    restore: (sessionId: string) => ipcRenderer.invoke('terminals:restore', sessionId),
     delete: (sessionId: string) => ipcRenderer.invoke('terminals:delete', sessionId),
     onData: (listener: (event: TerminalDataEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: TerminalDataEvent): void =>
@@ -139,12 +137,6 @@ const api: ProjectConsoleApi = {
     run: (actionId: string) => ipcRenderer.invoke('actions:run', actionId),
     stop: (actionId: string) => ipcRenderer.invoke('actions:stop', actionId),
     delete: (actionId: string) => ipcRenderer.invoke('actions:delete', actionId)
-  },
-  projectQna: {
-    start: (projectId: string) => ipcRenderer.invoke('project-qna:start', projectId),
-    reset: (projectId: string) => ipcRenderer.invoke('project-qna:reset', projectId),
-    sendPrompt: (sessionId: string, prompt: string) =>
-      ipcRenderer.invoke('project-qna:send-prompt', sessionId, prompt)
   },
   temporaryChats: {
     start: (projectId: string) =>

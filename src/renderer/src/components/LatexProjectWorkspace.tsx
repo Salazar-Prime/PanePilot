@@ -20,7 +20,6 @@ import {
   FileType2,
   FileText,
   LoaderCircle,
-  MessageCircleQuestion,
   MessageSquareText,
   PanelRightOpen,
   Play
@@ -61,7 +60,7 @@ import { LatexAgentPane } from './LatexAgentPane'
 import { LatexChatLauncher } from './LatexChatLauncher'
 import { LatexManuscript } from './LatexManuscript'
 import { NotesPanel } from './NotesPanel'
-import { ProjectQnaPane } from './ProjectQnaPane'
+import { StatusWorkspaceNav } from './StatusWorkspaceNav'
 import {
   ProjectShortcutGuide,
   ShortcutKeytip
@@ -76,7 +75,6 @@ type WorkspaceTab =
   | 'manuscript'
   | 'pdf'
   | 'actions'
-  | 'qna'
   | 'notes'
   | 'files'
   | 'chats'
@@ -86,7 +84,6 @@ const latexWorkspaceTabIds = new Set<WorkspaceTab>([
   'manuscript',
   'pdf',
   'actions',
-  'qna',
   'notes',
   'files',
   'chats',
@@ -104,6 +101,7 @@ const latexWorkspaceCache = new Map<string, LatexWorkspace>()
 export function LatexProjectWorkspace({
   project,
   workspaceActive = true,
+  workspaceFocused = true,
   selectedSessionId,
   launchTerminalRequest,
   openSessionRequest,
@@ -158,16 +156,6 @@ export function LatexProjectWorkspace({
       project.sessions.filter(
         (session) =>
           !session.archived &&
-          session.kind === 'latex-chat' &&
-          session.latexChat?.purpose === 'writing'
-      ),
-    [project.sessions]
-  )
-  const archivedSessions = useMemo(
-    () =>
-      project.sessions.filter(
-        (session) =>
-          session.archived &&
           session.kind === 'latex-chat' &&
           session.latexChat?.purpose === 'writing'
       ),
@@ -235,12 +223,6 @@ export function LatexProjectWorkspace({
       label: 'Actions',
       active: tab === 'actions',
       run: () => selectWorkspaceTab('actions')
-    },
-    {
-      key: 'q',
-      label: 'Q&A',
-      active: tab === 'qna',
-      run: () => selectWorkspaceTab('qna')
     },
     {
       key: 'n',
@@ -644,6 +626,7 @@ export function LatexProjectWorkspace({
       className="project-workspace latex-project-workspace"
       ref={projectShortcuts.rootRef}
     >
+      <StatusWorkspaceNav active={workspaceActive && workspaceFocused}>
       <nav className="workspace-tabs" aria-label="LaTeX project tools">
         <button
           className={tab === 'manuscript' ? 'active' : ''}
@@ -662,10 +645,6 @@ export function LatexProjectWorkspace({
         <button className={tab === 'actions' ? 'active' : ''} onClick={() => selectWorkspaceTab('actions')}>
           <Play size={15} /> Actions
           <ShortcutKeytip value="A" open={projectShortcuts.open} />
-        </button>
-        <button className={tab === 'qna' ? 'active' : ''} onClick={() => selectWorkspaceTab('qna')}>
-          <MessageCircleQuestion size={15} /> Project Q&amp;A
-          <ShortcutKeytip value="Q" open={projectShortcuts.open} />
         </button>
         <button className={tab === 'notes' ? 'active' : ''} onClick={() => selectWorkspaceTab('notes')}>
           <FileText size={15} /> Notes
@@ -714,6 +693,7 @@ export function LatexProjectWorkspace({
           )}
         </div>
       </nav>
+      </StatusWorkspaceNav>
 
       <ProjectShortcutGuide
         open={projectShortcuts.open}
@@ -808,7 +788,6 @@ export function LatexProjectWorkspace({
         <LatexAgentPane
           key={project.id}
           sessions={sessions}
-          archivedSessions={archivedSessions}
           sections={workspace.sections}
           projectFolder={project.folder}
           activeSessionId={activeSession?.id ?? null}
@@ -853,13 +832,6 @@ export function LatexProjectWorkspace({
         <ActionsPanel
           project={project}
           sessionRequest={actionSessionRequest}
-          onChanged={onChanged}
-          onOpenFile={openFile}
-        />
-      )}
-      {tab === 'qna' && (
-        <ProjectQnaPane
-          project={project}
           onChanged={onChanged}
           onOpenFile={openFile}
         />

@@ -670,6 +670,7 @@ export class TerminalManager {
       for (const session of project.sessions) {
         if (
           session.archived ||
+          session.kind === 'project-qna' ||
           session.backend !== 'tmux' ||
           !session.tmuxName ||
           ['completed', 'error'].includes(session.state) ||
@@ -826,79 +827,58 @@ export class TerminalManager {
     this.metadata.deleteAction(actionId)
   }
 
-  async startProjectQna(projectId: string): Promise<TerminalSession> {
-    let existing = this.store.getProjectQnaSession(projectId)
-    const project = this.store.getProjectForRuntime(projectId)
-    if (!project || project.archived) throw new Error('Choose an active project.')
-    const connection = this.store.getConnection(project.connectionId)
-    if (!connection) throw new Error('Project connection not found.')
-    this.requireProjectTmux(projectId, 'Project Q&A')
-
-    if (existing) {
-      if (!['completed', 'error'].includes(existing.state)) return existing
-      if (!existing.providerSessionId) {
-        try {
-          await this.discoverProviderSession(existing, project.folder, connection)
-        } catch {
-          // A failed first launch has no provider thread to resume. The fresh
-          // Q&A session below replaces that unusable local record.
+  /** Retire exact legacy Q&A backends without blocking the first window paint. */
+  async removeLegacyProjectQnaSessions(): Promise<number> {
+    if (this.shuttingDown) return 0
+    let removed = 0
+    for (const session of this.store.listLegacyProjectQnaSessions()) {
+      if (this.shuttingDown) break
+      try {
+        if (session.backend === 'tmux' && session.tmuxName) {
+          const project = this.store.getProjectForRuntime(session.projectId)
+          const connection = project ? this.store.getConnection(project.connectionId) : null
+          if (!connection) throw new Error('The project connection is unavailable.')
+          const listed = await this.listTmuxSessions(connection)
+          if (this.shuttingDown) break
+          if (!listed) throw new Error('Could not verify the tmux host.')
+          const exact = listed.find((item) => item.name === session.tmuxName)
+          if (exact && exact.metadata?.terminalId !== session.id) {
+            throw new Error('The tmux name now belongs to another or unverified session.')
+          }
+          if (exact) {
+            if (connection.kind === 'local') {
+              this.killTmuxSession(connection, session.tmuxName)
+            } else {
+              const remoteCommand =
+                `${remoteTmuxResolutionCommand()}; ` +
+                `"$panepilot_tmux" kill-session -t ${quote(`=${session.tmuxName}`)}`
+              await execFileAsync('ssh', [
+                '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5',
+                connection.sshAlias ?? connection.name, remoteCommand
+              ], { encoding: 'utf8', timeout: 8_000, maxBuffer: 64 * 1024 })
+            }
+            const after = await this.listTmuxSessions(connection)
+            if (this.shuttingDown) break
+            if (!after || after.some((item) => item.metadata?.terminalId === session.id)) {
+              throw new Error('Could not verify that the exact tmux session stopped.')
+            }
+          }
         }
-        existing = this.store.getSessionWithoutOutput(existing.id)
-      }
-      if (existing?.providerSessionId) {
-        this.resumeAgent(existing.id)
-        return this.requireSession(existing.id)
-      }
-      if (
-        existing?.backend === 'tmux' &&
-        existing.tmuxName &&
-        this.tmuxSessionExists(connection, existing.tmuxName)
-      ) {
-        this.changeState(
-          existing,
-          'idle',
-          `Reattached the existing project Q&A session.`
-        )
-        const latest = this.requireSession(existing.id)
-        this.launch(latest, project.folder, connection, 100, 30, false)
-        return this.requireSession(existing.id)
-      }
-      if (existing) {
-        this.discardPendingOutput(existing.id)
-        this.store.deleteSession(existing.id)
+        if (!['completed', 'error'].includes(session.state)) {
+          this.store.setSessionState(session.id, 'completed')
+        }
+        this.store.deleteSession(session.id)
+        this.getWindow()?.webContents.send('terminal:metadata', {
+          sessionId: session.id,
+          projectId: session.projectId
+        })
+        removed += 1
+      } catch (error) {
+        // Keep the record so a later launch can retry when its SSH host is up.
+        console.warn(`Could not retire legacy Q&A session ${session.id}:`, error)
       }
     }
-
-    return this.startSession(
-      {
-        projectId,
-        name: generatedTerminalName(`Q&A · ${project.name}`),
-        profile: 'codex',
-        dangerousMode: false
-      },
-      'project-qna',
-      undefined,
-      true
-    )
-  }
-
-  sendProjectQnaPrompt(sessionId: string, prompt: string): void {
-    const session = this.requireSession(sessionId)
-    if (session.kind !== 'project-qna' || session.profile !== 'codex') {
-      throw new Error('Project Q&A session not found.')
-    }
-    this.sendPrompt(
-      sessionId,
-      `Answer this question about the current project. Do not modify files. ${prompt}`
-    )
-  }
-
-  resetProjectQna(projectId: string): void {
-    const project = this.store.getProjectForRuntime(projectId)
-    if (!project || project.archived) throw new Error('Choose an active project.')
-    const existing = this.store.getProjectQnaSession(projectId)
-    if (!existing) return
-    this.delete(existing.id)
+    return removed
   }
 
   startTemporaryCodexChat(projectId: string): TerminalSession {
@@ -973,7 +953,6 @@ export class TerminalManager {
       tmuxAvailability ?? this.connectionHasTmux(connection)
     if (
       (kind === 'action' ||
-        kind === 'project-qna' ||
         kind === 'temporary-chat' ||
         kind === 'latex-chat') &&
       !tmuxAvailable
@@ -981,11 +960,9 @@ export class TerminalManager {
       const capability =
         kind === 'action'
           ? 'Actions'
-          : kind === 'project-qna'
-            ? 'Project Q&A'
-            : kind === 'temporary-chat'
-              ? 'Temporary Codex chats'
-              : 'LaTeX chats'
+          : kind === 'temporary-chat'
+            ? 'Temporary Codex chats'
+            : 'LaTeX chats'
       throw new Error(
         `${capability} require tmux on this connection.`
       )
@@ -1063,7 +1040,6 @@ export class TerminalManager {
       (session) =>
         session.profile === input.profile &&
         session.kind !== 'action' &&
-        session.kind !== 'project-qna' &&
         session.kind !== 'temporary-chat'
     ).length
     const requestedName = input.name ? validatedTerminalName(input.name) : null
@@ -1850,14 +1826,6 @@ export class TerminalManager {
     runtime?.pty.kill()
     this.changeState(session, 'completed', `${session.name} was stopped.`)
     this.emitTransport(session.id, 'detached', 0, 'The terminal was stopped.')
-  }
-
-  archive(sessionId: string): void {
-    this.store.archiveSession(sessionId, true)
-  }
-
-  restore(sessionId: string): void {
-    this.store.archiveSession(sessionId, false)
   }
 
   delete(sessionId: string): void {

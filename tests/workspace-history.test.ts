@@ -102,7 +102,7 @@ describe('recent workspace history', () => {
   })
 
   it('shows at most seven valid destinations and refreshes their labels', () => {
-    let history = ['terminal', 'actions', 'qna', 'notes', 'files', 'chats', 'activity']
+    let history = ['terminal', 'actions', 'notes', 'files', 'chats', 'activity']
       .map((tab, index) =>
         createWorkspaceDestination({
           project,
@@ -127,7 +127,7 @@ describe('recent workspace history', () => {
       null,
       [renamedProject]
     )
-    expect(recent).toHaveLength(7)
+    expect(recent).toHaveLength(6)
     expect(recent.every((item) => item.projectName === 'PanePilot renamed')).toBe(
       true
     )
@@ -353,7 +353,6 @@ describe('recent workspace history', () => {
       projectCapabilityDestinations(project).map((item) => item.tab)
     ).toEqual([
       'actions',
-      'qna',
       'notes',
       'files',
       'chats',

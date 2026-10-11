@@ -129,7 +129,7 @@ describe('local tmux discovery', () => {
     vi.spyOn(internals, 'listTmuxSessions').mockResolvedValue(sessions)
 
     try {
-      expect(await manager.reconcileSessions('local')).toBe(3)
+      expect(await manager.reconcileSessions('local')).toBe(2)
       expect(store.getSession(TERMINAL_ID)).toMatchObject({
         projectId: terminalProject.id,
         name: 'Manuscript Fig - safety'
@@ -142,10 +142,7 @@ describe('local tmux discovery', () => {
           mode: 'edit'
         }
       })
-      expect(store.getProjectQnaSession(latexProject.id)).toMatchObject({
-        id: PROJECT_QNA_ID,
-        kind: 'project-qna'
-      })
+      expect(store.getSession(PROJECT_QNA_ID)).toBeNull()
       expect(await manager.reconcileSessions('local')).toBe(0)
     } finally {
       manager.shutdown()

@@ -278,18 +278,6 @@ function registerIpc(): void {
   ipcMain.handle('actions:delete', (_event, actionId: string) => {
     terminals.deleteAction(actionId)
   })
-  ipcMain.handle('project-qna:start', (_event, projectId: string) =>
-    terminals.startProjectQna(projectId)
-  )
-  ipcMain.handle('project-qna:reset', (_event, projectId: string) => {
-    terminals.resetProjectQna(projectId)
-  })
-  ipcMain.handle(
-    'project-qna:send-prompt',
-    (_event, sessionId: string, prompt: string) => {
-      terminals.sendProjectQnaPrompt(sessionId, prompt)
-    }
-  )
   ipcMain.handle('temporary-chats:start', (_event, projectId: string) =>
     terminals.startTemporaryCodexChat(projectId)
   )
@@ -421,12 +409,6 @@ function registerIpc(): void {
     }
   )
   ipcMain.handle('terminals:stop', (_event, sessionId: string) => terminals.stop(sessionId))
-  ipcMain.handle('terminals:archive', (_event, sessionId: string) =>
-    terminals.archive(sessionId)
-  )
-  ipcMain.handle('terminals:restore', (_event, sessionId: string) =>
-    terminals.restore(sessionId)
-  )
   ipcMain.handle('terminals:delete', (_event, sessionId: string) =>
     terminals.delete(sessionId)
   )
@@ -753,6 +735,11 @@ if (!ownsSingleInstanceLock) {
       })
       registerIpc()
       createWindow()
+      setTimeout(() => {
+        void terminals.removeLegacyProjectQnaSessions().catch((error) => {
+          console.warn('Could not retire legacy Project Q&A sessions:', error)
+        })
+      }, 1_000)
       powerMonitor.on('resume', () => {
         terminals.reconnectAfterWake()
       })

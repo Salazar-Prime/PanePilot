@@ -36,7 +36,6 @@ describe('status-bar terminal jump lists', () => {
   })
   it('routes capability runners to their own UI, never to ordinary terminal tabs', () => {
     expect(statusSessionTab(session('a', 'running', { kind: 'action' }))).toBe('actions')
-    expect(statusSessionTab(session('q', 'running', { kind: 'project-qna' }))).toBe('qna')
     expect(statusSessionTab(session('i', 'running', { kind: 'latex-chat', latexChat: { purpose: 'inline-edit' } }))).toBe('manuscript')
     expect(statusSessionTab(session('normal', 'running'))).toBeNull()
   })

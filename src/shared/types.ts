@@ -583,8 +583,6 @@ export interface ProjectConsoleApi {
     setPinned(sessionId: string, pinned: boolean): Promise<void>
     setFlagged(sessionId: string, flagged: boolean): Promise<void>
     stop(sessionId: string): Promise<void>
-    archive(sessionId: string): Promise<void>
-    restore(sessionId: string): Promise<void>
     delete(sessionId: string): Promise<void>
     onData(listener: (event: TerminalDataEvent) => void): () => void
     onState(listener: (event: TerminalStateEvent) => void): () => void
@@ -598,11 +596,6 @@ export interface ProjectConsoleApi {
     run(actionId: string): Promise<TerminalSession>
     stop(actionId: string): Promise<void>
     delete(actionId: string): Promise<void>
-  }
-  projectQna: {
-    start(projectId: string): Promise<TerminalSession>
-    reset(projectId: string): Promise<void>
-    sendPrompt(sessionId: string, prompt: string): Promise<void>
   }
   temporaryChats: {
     start(projectId: string): Promise<TerminalSession>

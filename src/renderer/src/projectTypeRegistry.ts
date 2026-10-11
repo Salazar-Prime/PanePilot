@@ -18,6 +18,7 @@ export interface ProjectWorkspaceProps {
   project: Project
   connection: Connection | undefined
   workspaceActive?: boolean
+  workspaceFocused?: boolean
   terminalSurfaceCache?: TerminalSurfaceCacheController
   selectedSessionId: string | null
   launchTerminalRequest: number | null
@@ -51,7 +52,6 @@ export interface ProjectTypeDefinition {
     | 'latex-editor'
     | 'agent-chat'
     | 'actions'
-    | 'project-qna'
     | 'context'
     | 'notes'
     | 'google-drive'
@@ -70,7 +70,6 @@ export const projectTypeRegistry: Record<ProjectType, ProjectTypeDefinition> = {
     capabilities: [
       'terminal',
       'actions',
-      'project-qna',
       'notes',
       'files',
       'google-drive',
@@ -89,7 +88,6 @@ export const projectTypeRegistry: Record<ProjectType, ProjectTypeDefinition> = {
       'latex-editor',
       'agent-chat',
       'actions',
-      'project-qna',
       'notes',
       'context',
       'files',

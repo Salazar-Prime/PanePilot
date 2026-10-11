@@ -1,7 +1,5 @@
 import { useMemo, useState } from 'react'
 import {
-  Archive,
-  ArchiveRestore,
   ChevronDown,
   MoreHorizontal,
   PanelRightClose,
@@ -26,7 +24,6 @@ import type { TerminalFileTarget } from '../lib/terminalFileLinks'
 
 interface Props {
   sessions: TerminalSession[]
-  archivedSessions: TerminalSession[]
   sections: LatexSection[]
   projectFolder: string
   activeSessionId: string | null
@@ -40,7 +37,6 @@ interface Props {
 
 export function LatexAgentPane({
   sessions,
-  archivedSessions,
   sections,
   projectFolder,
   activeSessionId,
@@ -52,7 +48,6 @@ export function LatexAgentPane({
   onHide
 }: Props) {
   const [message, setMessage] = useState('')
-  const [showArchived, setShowArchived] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [menu, setMenu] = useState<{
@@ -127,12 +122,6 @@ export function LatexAgentPane({
     }
   }
 
-  async function archive() {
-    if (!activeSession) return
-    await window.projectConsole.terminals.archive(activeSession.id)
-    await onChanged()
-  }
-
   async function remove() {
     if (!activeSession) return
     if (
@@ -142,24 +131,6 @@ export function LatexAgentPane({
     )
       return
     await window.projectConsole.terminals.delete(activeSession.id)
-    await onChanged()
-  }
-
-  async function restoreArchived(session: TerminalSession) {
-    await window.projectConsole.terminals.restore(session.id)
-    setShowArchived(false)
-    onSelectSession(session.id)
-    await onChanged()
-  }
-
-  async function removeArchived(session: TerminalSession) {
-    if (
-      !window.confirm(
-        `Permanently delete “${session.name}” and its saved terminal output? The provider conversation archive will remain.`
-      )
-    )
-      return
-    await window.projectConsole.terminals.delete(session.id)
     await onChanged()
   }
 
@@ -212,26 +183,6 @@ export function LatexAgentPane({
           </div>
         </header>
 
-        {showArchived && (
-          <div className="latex-archived-chats">
-            <strong>Archived chats</strong>
-            {archivedSessions.map((session) => (
-              <div key={session.id}>
-                <StatusDot state={session.state} compact />
-                <span>{session.name}</span>
-                <button onClick={() => run(restoreArchived(session))}>
-                  <ArchiveRestore size={11} /> Restore
-                </button>
-                <button
-                  className="danger-text"
-                  onClick={() => run(removeArchived(session))}
-                >
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
 
         {activeSession && (
           <div className="latex-chat-context-bar">
@@ -318,9 +269,6 @@ export function LatexAgentPane({
                       <RotateCcw size={12} /> Resume
                     </button>
                   )}
-                  <button onClick={() => run(archive())}>
-                    <Archive size={12} /> Archive
-                  </button>
                   <button className="danger-text" onClick={() => run(remove())}>
                     <Trash2 size={12} /> Delete
                   </button>
@@ -405,21 +353,11 @@ export function LatexAgentPane({
                         }
                       ]
                     : []),
-                  ...(archivedSessions.length > 0
-                    ? [
-                        {
-                          id: 'archived',
-                          label: `Archived chats (${archivedSessions.length})`,
-                          icon: <Archive size={13} />,
-                          action: () => setShowArchived((current) => !current)
-                        }
-                      ]
-                    : []),
                   {
                     id: 'hide',
                     label: 'Hide writing chat',
                     icon: <PanelRightClose size={13} />,
-                    separatorBefore: Boolean(activeSession || archivedSessions.length),
+                    separatorBefore: Boolean(activeSession),
                     action: onHide
                   }
                 ]

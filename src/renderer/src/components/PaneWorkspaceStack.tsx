@@ -19,11 +19,13 @@ interface PaneWorkspaceStackProps
     | 'project'
     | 'connection'
     | 'workspaceActive'
+    | 'workspaceFocused'
     | 'terminalSurfaceCache'
     | 'onTransferSession'
     | 'onChanged'
   > {
   activeProject: Project
+  workspaceFocused: boolean
   projects: Project[]
   connections: Connection[]
   onTransferSession?(project: Project, session: TerminalSession): void
@@ -32,6 +34,7 @@ interface PaneWorkspaceStackProps
 
 export function PaneWorkspaceStack({
   activeProject,
+  workspaceFocused,
   projects,
   connections,
   selectedSessionId,
@@ -102,6 +105,7 @@ export function PaneWorkspaceStack({
                 (connection) => connection.id === project.connectionId
               )}
               workspaceActive={active}
+              workspaceFocused={active && workspaceFocused}
               terminalSurfaceCache={terminalSurfaceCache}
               selectedSessionId={active ? selectedSessionId : null}
               launchTerminalRequest={active ? launchTerminalRequest : null}
@@ -137,6 +141,7 @@ export function PaneWorkspaceStack({
               (connection) => connection.id === activeProject.connectionId
             )}
             workspaceActive
+            workspaceFocused={workspaceFocused}
             terminalSurfaceCache={terminalSurfaceCache}
             selectedSessionId={selectedSessionId}
             launchTerminalRequest={launchTerminalRequest}

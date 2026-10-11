@@ -34,6 +34,7 @@ import {
   Menu,
   MessageSquarePlus,
   MessageSquareText,
+  MoreHorizontal,
   Network,
   PanelLeft,
   PanelLeftClose,
@@ -203,7 +204,7 @@ function cacheProjectRead<T>(cache: Map<string, T>, projectId: string, value: T)
 
 function projectStateForSessions(sessions: TerminalSession[]): AgentState {
   const visible = sessions.filter(
-    (session) => !session.archived && session.kind !== 'action'
+    (session) => !session.archived && session.kind !== 'action' && session.kind !== 'project-qna'
   )
   return (
     RENDERER_STATE_PRIORITY.find((state) =>
@@ -284,6 +285,8 @@ export function App() {
   const [newProjectConnectionId, setNewProjectConnectionId] = useState<string>()
   const [newProjectType, setNewProjectType] = useState<ProjectType>('terminal')
   const [showTypeMenu, setShowTypeMenu] = useState(false)
+  const [showTopOverflow, setShowTopOverflow] = useState(false)
+  const topOverflowRef = useRef<HTMLDivElement>(null)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [gitPaneOpen, setGitPaneOpen] = useState(false)
   const [gitPaneRendered, setGitPaneRendered] = useState(false)
@@ -338,6 +341,26 @@ export function App() {
     )
   }
   useEffect(() => () => workspaceSwitcherReleaseRef.current?.reset(), [])
+  useEffect(() => {
+    if (!showTopOverflow) return
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !topOverflowRef.current?.contains(event.target)) {
+        setShowTopOverflow(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowTopOverflow(false)
+        topOverflowRef.current?.querySelector<HTMLButtonElement>('.top-overflow-trigger')?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', closeOutside, true)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside, true)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [showTopOverflow])
   const [sidebarContext, setSidebarContext] = useState<SidebarContext | null>(null)
   const [projectSortMenu, setProjectSortMenu] = useState<{
     connectionId: string
@@ -1669,11 +1692,6 @@ export function App() {
     await refreshProject(session.projectId)
   }
 
-  async function archiveSession(session: TerminalSession) {
-    await window.projectConsole.terminals.archive(session.id)
-    await refreshProject(session.projectId)
-  }
-
   async function resumeAgentSession(owner: Project, session: TerminalSession) {
     await window.projectConsole.terminals.resumeAgent(session.id)
     await selectSession(owner.id, session.id)
@@ -2251,16 +2269,6 @@ export function App() {
                 ]
               : []),
             {
-              id: 'archive',
-              label: 'Archive terminal',
-              icon: <Archive size={14} />,
-              separatorBefore: !(
-                ['codex', 'claude'].includes(session.profile) &&
-                providerSessionReference
-              ),
-              action: () => archiveSession(session)
-            },
-            {
               id: 'delete',
               label: 'Delete terminal',
               icon: <Trash2 size={14} />,
@@ -2415,61 +2423,13 @@ export function App() {
           )}
         </div>
         <div className="top-actions">
-          <button
-            className={`icon-button ${subagentSessionId ? 'active' : ''}`}
-            aria-label="Sub-agents"
-            title={subagentSession ? 'Show this Codex terminal’s sub-agents' : 'Select a Codex terminal to view sub-agents'}
-            disabled={!subagentSession}
-            aria-expanded={Boolean(subagentSessionId)}
-            onClick={() => setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null)}
-          ><GitFork size={17} /></button>
-          <button className={`icon-button quick-notes-toolbar ${showQuickNotes ? 'active' : ''}`}
-            aria-label="Quick Notes" title="Quick Notes" aria-haspopup="dialog" aria-expanded={showQuickNotes}
-            onClick={() => setShowQuickNotes(true)}><StickyNote size={17} /></button>
-          {project && (
-            <button
-              className={`icon-button temporary-chat-toolbar-button ${
-                temporaryChatPanel?.projectId === project.id ? 'active' : ''
-              }`}
-              aria-label="Open quick Codex chats"
-              title="Quick Codex chats"
-              onClick={() => openTemporaryChats(project)}
-            >
-              <MessageSquarePlus size={16} />
-              {project.sessions.filter(
-                (session) =>
-                  session.kind === 'temporary-chat' && !session.archived
-              ).length > 0 && (
-                <span aria-hidden="true">
-                  {
-                    project.sessions.filter(
-                      (session) =>
-                        session.kind === 'temporary-chat' && !session.archived
-                    ).length
-                  }
-                </span>
-              )}
-            </button>
-          )}
-          {project?.latex?.overleafUrl && (
-            <button
-              className="secondary-button header-button overleaf-button"
-              onClick={() =>
-                void window.projectConsole.system.openExternal(
-                  project.latex!.overleafUrl!
-                )
-              }
-            >
-              <ExternalLink size={15} /> Overleaf
-            </button>
-          )}
           {project && (project.repositoryUrl || localRepository) && (
             <button
               className="secondary-button header-button repository-header-button"
               aria-label={
                 localRepository
                   ? `${gitPaneOpen ? 'Close' : 'Open'} Git pane`
-                  : 'Open repository'
+                  : `Open ${githubVisibility?.visibility ?? 'unknown visibility'} GitHub repository`
               }
               onClick={() => {
                 if (localRepository) {
@@ -2496,20 +2456,18 @@ export function App() {
                 </span>
               ) : githubVisibility?.repository ? (
                 <span
-                  className={`repository-visibility-badge ${
+                  className={`repository-visibility-mark ${
                     githubVisibility.visibility ?? 'unknown'
                   }`}
+                  aria-hidden="true"
                 >
                   {githubVisibility.visibility === 'public' ? (
-                    <Globe2 size={10} />
+                    <Globe2 size={11} />
                   ) : githubVisibility.visibility === 'private' ? (
-                    <LockKeyhole size={10} />
+                    <LockKeyhole size={11} />
                   ) : githubVisibility.visibility === 'internal' ? (
-                    <Building2 size={10} />
-                  ) : null}
-                  {githubVisibility.visibility
-                    ? capitalize(githubVisibility.visibility)
-                    : 'Unknown'}
+                    <Building2 size={11} />
+                  ) : '?' }
                 </span>
               ) : null}
             </button>
@@ -2538,8 +2496,59 @@ export function App() {
               key={project.id}
               project={project}
               openRequest={driveDialogRequest}
+              hideWhenDisconnected
             />
           )}
+          <div className="top-overflow-wrap" ref={topOverflowRef}>
+            <button className="icon-button top-overflow-trigger"
+              aria-label="More toolbar actions" aria-haspopup="menu"
+              aria-expanded={showTopOverflow} aria-controls="top-overflow-menu"
+              title="More toolbar actions"
+              onClick={() => setShowTopOverflow((current) => !current)}>
+              <MoreHorizontal size={17} />
+            </button>
+            {showTopOverflow && <div className="top-overflow-menu" id="top-overflow-menu" role="menu"
+              onKeyDown={(event) => {
+                if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+                const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)'))
+                if (!items.length) return
+                event.preventDefault()
+                const current = items.indexOf(document.activeElement as HTMLButtonElement)
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+                  : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+                items[next].focus()
+              }}>
+              <button role="menuitem" onClick={() => { setShowTopOverflow(false); setShowQuickNotes(true) }}>
+                <StickyNote size={15} /> Quick Notes
+              </button>
+              {project && <button role="menuitem" onClick={() => { setShowTopOverflow(false); openTemporaryChats(project) }}>
+                <MessageSquarePlus size={15} /> Quick Codex chats
+              </button>}
+              <button role="menuitem" disabled={!subagentSession}
+                title={subagentSession ? 'Show this Codex terminal’s sub-agents' : 'Select a Codex terminal to view sub-agents'}
+                onClick={() => { setShowTopOverflow(false); setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null) }}>
+                <GitFork size={15} /> Sub-agents
+              </button>
+              {project && <>
+                <div className="top-overflow-divider" role="separator" />
+                <button role="menuitem" onClick={() => {
+                  setShowTopOverflow(false)
+                  setDriveDialogRequest((current) => ({ projectId: project.id, nonce: (current?.nonce ?? 0) + 1 }))
+                }}><Cloud size={15} /> Google Drive connection</button>
+                {project.latex?.overleafUrl && <button role="menuitem" onClick={() => {
+                  setShowTopOverflow(false)
+                  void window.projectConsole.system.openExternal(project.latex!.overleafUrl!)
+                }}><ExternalLink size={15} /> Overleaf</button>}
+                <button role="menuitem" onClick={() => { setShowTopOverflow(false); setShowProjectSettings(true) }}>
+                  <Settings size={15} /> Project settings
+                </button>
+              </>}
+              <div className="top-overflow-divider" role="separator" />
+              <button role="menuitem" onClick={() => { setShowTopOverflow(false); openNewProject() }}>
+                <Plus size={15} /> New project
+              </button>
+            </div>}
+          </div>
         </div>
       </header>
 
@@ -2941,6 +2950,7 @@ export function App() {
               {paneAProject ? (
                 <PaneWorkspaceStack
                   activeProject={paneAProject}
+                  workspaceFocused={!splitOpen || focusedPane === 'a'}
                   projects={activeProjects}
                   connections={connections}
                   selectedSessionId={selectedSessionId}
@@ -3023,6 +3033,7 @@ export function App() {
               {(splitOpen || splitPaneRendered) && (paneBProject ? (
                   <PaneWorkspaceStack
                     activeProject={paneBProject}
+                    workspaceFocused={splitOpen && focusedPane === 'b'}
                     projects={activeProjects}
                     connections={connections}
                     selectedSessionId={paneBSessionId}
@@ -3103,18 +3114,17 @@ export function App() {
 
       <footer className="status-bar">
         <div className="status-brand">
-          <span className="live-pip" />
-          Ready
           {focusedSession?.dangerousMode && (
             <span
               className="status-unsafe"
               title={`${focusedSession.name} is running with its agent permission checks disabled.`}
             >
               <ShieldAlert size={11} />
-              Unsafe · {focusedSession.name}
+              Unsafe
             </span>
           )}
         </div>
+        <div id="status-workspace-nav" className="status-workspace-nav" />
         <TerminalDropStatus />
         <StatusSessionMenu projects={activeProjects} connections={connections}
           onSelect={openStatusSession} />

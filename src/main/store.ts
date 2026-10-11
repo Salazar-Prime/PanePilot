@@ -504,6 +504,7 @@ export class Store {
   }
 
   private migrate(): void {
+    const previousVersion = (this.db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS quick_notes (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -810,16 +811,30 @@ export class Store {
         ON project_actions(project_id, created_at);
       CREATE INDEX IF NOT EXISTS google_drive_files_drive_id_idx
         ON google_drive_files(drive_file_id);
-      CREATE UNIQUE INDEX IF NOT EXISTS terminal_sessions_project_qna_idx
-        ON terminal_sessions(project_id) WHERE session_kind = 'project-qna';
+      DROP INDEX IF EXISTS terminal_sessions_project_qna_idx;
 
       UPDATE projects SET parent_id = NULL WHERE parent_id IS NOT NULL;
       -- Read aloud was removed; discard its obsolete settings and usage counters.
       DROP TABLE IF EXISTS speech_usage;
       DROP TABLE IF EXISTS speech_settings;
-      PRAGMA user_version = 19;
     `)
     this.migrateLegacyTerminalOutput()
+    if (previousVersion < 20) {
+      this.inTransaction(() => {
+        // Archive was a PanePilot-only view. Provider archives and archived
+        // projects are separate and are deliberately left untouched.
+        this.db.exec(`
+          DELETE FROM agent_events
+          WHERE terminal_session_id IN (
+            SELECT id FROM terminal_sessions
+            WHERE archived = 1 AND session_kind <> 'project-qna'
+          );
+          DELETE FROM terminal_sessions
+          WHERE archived = 1 AND session_kind <> 'project-qna';
+        `)
+      })
+    }
+    this.db.exec('PRAGMA user_version = 20')
   }
 
   getQuickNotes(): QuickNotesDocument {
@@ -1942,6 +1957,16 @@ export class Store {
           : ''
       )
     )
+    const visibleSessions = includeWorkspaceCollections
+      ? sessions.filter((session) => session.kind !== 'project-qna')
+      : sessions
+    const state = visibleSessions.length === sessions.length
+      ? row.state
+      : STATE_PRIORITY.find((candidate) =>
+          visibleSessions.some((session) =>
+            !session.archived && session.kind !== 'action' && session.state === candidate
+          )
+        ) ?? 'idle'
     const actions = includeWorkspaceCollections
       ? (
           this.db
@@ -1972,11 +1997,11 @@ export class Store {
       folder: row.folder,
       repositoryUrl: row.repository_url,
       latex: this.getLatexProject(row.id),
-      state: row.state,
+      state,
       archived: Boolean(row.archived),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      sessions,
+      sessions: visibleSessions,
       actions,
       activities
     }
@@ -2180,15 +2205,14 @@ export class Store {
     )
   }
 
-  getProjectQnaSession(projectId: string): TerminalSession | null {
-    const row = this.db
-      .prepare(
-        `SELECT id FROM terminal_sessions
-         WHERE project_id = ? AND session_kind = 'project-qna'
-         LIMIT 1`
-      )
-      .get(projectId) as { id: string } | undefined
-    return row ? this.getSessionWithoutOutput(row.id) : null
+  listLegacyProjectQnaSessions(): TerminalSession[] {
+    const rows = this.db
+      .prepare(`SELECT id FROM terminal_sessions WHERE session_kind = 'project-qna'`)
+      .all() as Array<{ id: string }>
+    return rows.flatMap(({ id }) => {
+      const session = this.getSessionWithoutOutput(id)
+      return session ? [session] : []
+    })
   }
 
   createSession(input: {
@@ -2293,10 +2317,8 @@ export class Store {
         : metadata.sessionKind ??
           existing?.kind ??
           (metadata.latex ? 'latex-chat' : 'terminal')
-    if (sessionKind === 'project-qna') {
-      const existingQna = this.getProjectQnaSession(projectId)
-      if (existingQna && existingQna.id !== metadata.terminalId) return null
-    }
+    // A retired Q&A tmux session must not be rediscovered as a new capability.
+    if (sessionKind === 'project-qna') return null
     const customCommand =
       sessionKind === 'action' ? metadata.action?.command ?? null : null
     if (sessionKind === 'action' && !metadata.action) return null
@@ -2910,23 +2932,6 @@ export class Store {
     )
   }
 
-  archiveSession(id: string, archived: boolean): void {
-    const session = this.requireSession(id)
-    if (!['completed', 'error'].includes(session.state)) {
-      throw new Error('Only stopped terminals can be archived or restored.')
-    }
-    this.db
-      .prepare('UPDATE terminal_sessions SET archived = ?, updated_at = ? WHERE id = ?')
-      .run(archived ? 1 : 0, now(), id)
-    this.addActivity(
-      session.projectId,
-      id,
-      archived ? 'terminal-archived' : 'terminal-restored',
-      `${archived ? 'Archived' : 'Restored'} ${session.name}`
-    )
-    this.updateProjectState(session.projectId)
-  }
-
   deleteSession(id: string): void {
     const session = this.requireSession(id)
     if (!['completed', 'error'].includes(session.state)) {
@@ -3181,7 +3186,8 @@ export class Store {
     const states = this.db
       .prepare(
         `SELECT state FROM terminal_sessions
-         WHERE project_id = ? AND archived = 0 AND session_kind <> 'action'`
+         WHERE project_id = ? AND archived = 0
+           AND session_kind NOT IN ('action', 'project-qna')`
       )
       .all(projectId) as Array<{ state: AgentState }>
     const aggregate =

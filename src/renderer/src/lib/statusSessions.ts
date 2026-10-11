@@ -13,13 +13,12 @@ export const statusSessionFilters: Array<{ id: StatusSessionFilter; title: strin
 export function statusSessions(projects: Project[], filter: StatusSessionFilter): StatusSessionEntry[] {
   const state = statusSessionFilters.find((item) => item.id === filter)!.state
   return projects.filter((project) => !project.archived).flatMap((project) =>
-    project.sessions.filter((session) => !session.archived && session.state === state)
+    project.sessions.filter((session) => !session.archived && session.kind !== 'project-qna' && session.state === state)
       .map((session) => ({ project, session })))
 }
 
-export function statusSessionTab(session: TerminalSession): 'actions' | 'qna' | 'manuscript' | null {
+export function statusSessionTab(session: TerminalSession): 'actions' | 'manuscript' | null {
   if (session.kind === 'action') return 'actions'
-  if (session.kind === 'project-qna') return 'qna'
   if (session.kind === 'latex-chat' && session.latexChat?.purpose === 'inline-edit') return 'manuscript'
   return null
 }
