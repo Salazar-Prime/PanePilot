@@ -14,7 +14,7 @@ PanePilot is a desktop control center for projects that are worked on by people 
 
 The application is intentionally a single desktop UI:
 
-- A compact top bar for project-type selection, project identity, and global actions; secondary actions live in its overflow menu.
+- A compact top bar for project identity and global actions; secondary actions live in its overflow menu, and selected actions can be pinned and reordered on the bar.
 - A toggleable left sidebar for connections, projects, terminals, and attention state.
 - A type-specific main workspace.
 - A fixed-height bottom status bar for focused-project tool navigation and cross-project agent counts.
@@ -127,9 +127,9 @@ These are owner-approved decisions and should be treated as product invariants u
 
 83. Quick Notes is app-wide and opens from the top-bar overflow menu or its pinned toolbar button. Its compact modal contains only Thoughts (plain text) and Checklist (editable, checkable, removable items). A singleton `quick_notes` record in the local PanePilot SQLite database is independent of projects, SSH hosts, and project `.panepilot/notes`; there is no upload or cross-device synchronization. Notes autosave after a short pause and pending edits are flushed before modal dismissal. Writes are serialized without replacing newer typing, revision checks reject stale overwrites, and failed saves retain the draft with a Retry action rather than closing silently. The modal traps keyboard focus, restores the opener on close, and uses the shared topmost-modal Escape handling. Storage validates a 100,000-character thoughts limit, 200 checklist items, and 1,000 characters per item; project deletion never removes these notes.
 
-84. The focused project's tool navigation lives centered in the existing 26 px status bar, not a separate row above the workspace. It remains icon-plus-label, horizontally scrollable at narrow widths, and switches with the focused split pane. The unsafe indicator stays left and transfer progress and cross-project counts stay right. The compact top bar keeps project name and copyable path on one line. GitHub visibility overlays a green globe for Public or yellow lock for Private on the GitHub icon; Internal and Unknown remain distinct. Disconnected Google Drive setup, Quick Notes, quick chats, Sub-agents, and project settings are in the top overflow; an already-connected Drive may retain its direct control. The standalone bottom-left Ready label is gone; unsafe mode shows only a shield and Unsafe pill, while response-ready/working/input/blocked counts remain. PanePilot no longer archives terminal sessions, and the schema upgrade deletes legacy archived-session records and their saved output without deleting archived projects or provider conversations.
+84. The focused project's tool navigation lives centered in the existing 26 px status bar, not a separate row above the workspace. It remains icon-plus-label, horizontally scrollable at narrow widths, and switches with the focused split pane. The dangerous-mode indicator stays left and transfer progress and cross-project counts stay right. The compact top bar keeps project name and copyable path on one line. GitHub visibility overlays a green globe for Public or yellow lock for Private on the GitHub icon; Internal and Unknown remain distinct. Disconnected Google Drive setup, Quick Notes, quick chats, Sub-agents, and project settings are in the top overflow; an already-connected Drive may retain its direct control. The standalone bottom-left Ready label is gone; dangerous mode shows only a shield and YOLO agent pill, while response-ready/working/input/blocked counts remain. PanePilot no longer archives terminal sessions, and the schema upgrade deletes legacy archived-session records and their saved output without deleting archived projects or provider conversations.
 
-85. Each top-overflow command has a pin toggle. Pinned commands appear as compact icon buttons beside the overflow trigger, remain in the overflow for unpinning, and keep their chosen order in a client-local preference across restarts. Project-specific pinned commands remain visible but disabled when the focused project lacks their required context; pinning never opens a project, creates a session, or changes the command's underlying behavior.
+85. Each top-overflow command has a pin toggle. Pinned commands appear as compact icon buttons beside the overflow trigger and can be reordered by dragging them on the top bar; the overflow menu never reorders. Their chosen order is a client-local preference across restarts. Project-specific pinned commands remain visible but disabled when the focused project lacks their required context; pinning and dragging never open a project, create a session, or change the command's underlying behavior. The old top-left Terminal/LaTeX project-type switcher is removed; New project remains in the sidebar and top overflow, with type selection in its creation dialog.
 
 ## Agent lifecycle semantics
 
@@ -421,7 +421,7 @@ interface ProjectTypeDefinition {
 
 Use the registry for:
 
-- The top-bar project-type switcher.
+- The New project form's type selection.
 - New-project form fields.
 - Project workspace dispatch.
 - Available tabs and actions.

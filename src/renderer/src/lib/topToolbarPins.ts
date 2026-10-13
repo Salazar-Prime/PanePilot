@@ -43,3 +43,16 @@ export function toggleTopToolbarPin(
 ): TopToolbarActionId[] {
   return ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]
 }
+
+export function moveTopToolbarPin(
+  ids: TopToolbarActionId[],
+  id: TopToolbarActionId,
+  insertionIndex: number
+): TopToolbarActionId[] {
+  const currentIndex = ids.indexOf(id)
+  if (currentIndex < 0) return ids
+  const others = ids.filter((item) => item !== id)
+  const nextIndex = Math.max(0, Math.min(others.length, Math.trunc(insertionIndex)))
+  if (nextIndex === currentIndex) return ids
+  return [...others.slice(0, nextIndex), id, ...others.slice(nextIndex)]
+}

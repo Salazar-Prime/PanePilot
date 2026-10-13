@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadTopToolbarPins, saveTopToolbarPins, toggleTopToolbarPin } from '../src/renderer/src/lib/topToolbarPins'
+import { loadTopToolbarPins, moveTopToolbarPin, saveTopToolbarPins, toggleTopToolbarPin } from '../src/renderer/src/lib/topToolbarPins'
 
 describe('top toolbar pins', () => {
   it('keeps valid, unique pins in the chosen order', () => {
@@ -20,5 +20,13 @@ describe('top toolbar pins', () => {
     let saved = ''
     saveTopToolbarPins(second, { setItem: (_key, value) => { saved = value } })
     expect(saved).toBe('["new-project"]')
+  })
+
+  it('moves only the dragged toolbar icon and keeps all pins unique', () => {
+    const ids = ['quick-notes', 'sub-agents', 'new-project'] as const
+    expect(moveTopToolbarPin([...ids], 'quick-notes', 2)).toEqual(['sub-agents', 'new-project', 'quick-notes'])
+    expect(moveTopToolbarPin([...ids], 'new-project', 0)).toEqual(['new-project', 'quick-notes', 'sub-agents'])
+    expect(moveTopToolbarPin([...ids], 'sub-agents', 1)).toEqual([...ids])
+    expect(moveTopToolbarPin([...ids], 'sub-agents', 99)).toEqual(['quick-notes', 'new-project', 'sub-agents'])
   })
 })

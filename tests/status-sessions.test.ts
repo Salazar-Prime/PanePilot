@@ -41,7 +41,7 @@ describe('status-bar terminal jump lists', () => {
   })
   it('passes one-shot exact-session requests through both workspaces and never acknowledges another terminal', () => {
     const app = readFileSync('src/renderer/src/components/App.tsx', 'utf8')
-    const route = app.slice(app.indexOf('  function openStatusSession('), app.indexOf('  const typeDefinition'))
+    const route = app.slice(app.indexOf('  function openStatusSession('), app.indexOf('  const paletteSession ='))
     expect(route).toContain('selectSession(projectId, sessionId)')
     expect(route).toContain('initialSessionId: sessionId')
     expect(route).toContain('nextWorkspaceTabRequest(projectId, pane, tab), sessionId')

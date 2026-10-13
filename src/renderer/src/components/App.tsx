@@ -153,6 +153,7 @@ import { TemporaryChatsPanel } from './TemporaryChatsPanel'
 import { TransferSessionDialog } from './TransferSessionDialog'
 import { WorkspaceSwitcherOverlay } from './WorkspaceSwitcherOverlay'
 import { TerminalDropStatus } from './TerminalDropStatus'
+import { PinnedToolbarActions } from './PinnedToolbarActions'
 import {
   loadTopToolbarPins,
   saveTopToolbarPins,
@@ -302,7 +303,6 @@ export function App() {
   const [showNewProject, setShowNewProject] = useState(false)
   const [newProjectConnectionId, setNewProjectConnectionId] = useState<string>()
   const [newProjectType, setNewProjectType] = useState<ProjectType>('terminal')
-  const [showTypeMenu, setShowTypeMenu] = useState(false)
   const [showTopOverflow, setShowTopOverflow] = useState(false)
   const [topToolbarPins, setTopToolbarPins] = useState(() =>
     loadTopToolbarPins(window.localStorage)
@@ -1781,9 +1781,6 @@ export function App() {
     }
   }
 
-  const typeDefinition = project
-    ? projectTypeRegistry[project.type]
-    : projectTypeRegistry.terminal
   const paletteSession = commandPaletteSession(
     project, paneDestinationsRef.current[focusedPane], focusedSession
   )
@@ -1955,7 +1952,6 @@ export function App() {
       icon: <Archive size={15} />,
       action: () => {
         setShowArchivedProjects(true)
-        setShowTypeMenu(false)
       }
     },
     ...activeProjects.map((target): CommandPaletteCommand => {
@@ -2414,61 +2410,6 @@ export function App() {
               <Menu size={17} />
             </button>
           )}
-          <div className="type-switcher-wrap">
-            <button
-              className="type-switcher"
-              onClick={() => setShowTypeMenu((current) => !current)}
-              aria-expanded={showTypeMenu}
-            >
-              {showArchivedProjects ? (
-                <Archive size={15} />
-              ) : project?.type === 'latex' ? (
-                <FileText size={15} />
-              ) : (
-                <TerminalSquare size={15} />
-              )}
-              <span>{showArchivedProjects ? 'Archive' : typeDefinition.label}</span>
-              <ChevronDown size={13} />
-            </button>
-            {showTypeMenu && (
-              <div className="type-menu">
-                {Object.values(projectTypeRegistry).map((definition) => {
-                  const first = activeProjects.find(
-                    (candidate) => candidate.type === definition.id
-                  )
-                  return (
-                    <button
-                      key={definition.id}
-                      className={project?.type === definition.id ? 'active' : ''}
-                      onClick={() => {
-                        setShowTypeMenu(false)
-                        if (first) {
-                          selectProject(first.id)
-                        } else {
-                          openNewProject(undefined, definition.id)
-                        }
-                      }}
-                    >
-                      {definition.id === 'latex' ? (
-                        <FileText size={15} />
-                      ) : (
-                        <TerminalSquare size={15} />
-                      )}
-                      <span>
-                        <strong>{definition.label}</strong>
-                        <small>
-                          {first
-                            ? `${activeProjects.filter((candidate) => candidate.type === definition.id).length} projects`
-                            : 'Create the first project'}
-                        </small>
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-          <div className="top-divider" />
         </div>
         <div className="project-identity">
           {showArchivedProjects ? (
@@ -2572,15 +2513,10 @@ export function App() {
               hideWhenDisconnected
             />
           )}
-          {topToolbarPins.map((id) => {
-            const action = topToolbarActions.find((candidate) => candidate.id === id)
-            if (!action) return null
-            return <button key={id} className="icon-button top-pinned-action"
-              aria-label={action.label} title={action.available ? action.label : action.unavailableReason}
-              disabled={!action.available} onClick={action.run}>
-              {action.icon}
-            </button>
-          })}
+          {topToolbarPins.length > 0 && (
+            <PinnedToolbarActions ids={topToolbarPins} actions={topToolbarActions}
+              onReorder={setTopToolbarPins} />
+          )}
           <div className="top-overflow-wrap" ref={topOverflowRef}>
             <button className="icon-button top-overflow-trigger"
               aria-label="More toolbar actions" aria-haspopup="menu"
@@ -2644,7 +2580,6 @@ export function App() {
             <button
               className="icon-button sidebar-toggle"
               onClick={() => {
-                setShowTypeMenu(false)
                 setSidebarOpen(false)
               }}
               aria-label="Collapse sidebar"
@@ -3198,7 +3133,7 @@ export function App() {
               title={`${focusedSession.name} is running with its agent permission checks disabled.`}
             >
               <ShieldAlert size={11} />
-              Unsafe
+              YOLO agent
             </span>
           )}
         </div>

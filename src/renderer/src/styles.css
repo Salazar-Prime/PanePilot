@@ -83,8 +83,7 @@ select:focus-visible {
   gap: 8px;
 }
 
-.top-bar button,
-.top-bar .type-switcher {
+.top-bar button {
   -webkit-app-region: no-drag;
 }
 
@@ -95,27 +94,6 @@ select:focus-visible {
 
 .sidebar-toggle {
   margin-right: 2px;
-}
-
-.type-switcher {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  height: 28px;
-  padding: 0 9px;
-  color: #bcc1cd;
-  border: 1px solid #2a2f3a;
-  border-radius: 7px;
-  background: #171a22;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.top-divider {
-  width: 1px;
-  height: 18px;
-  margin: 0 2px;
-  background: #2a2e38;
 }
 
 .project-identity {
@@ -171,12 +149,39 @@ select:focus-visible {
   gap: 4px;
 }
 
+.top-pinned-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.top-pinned-item {
+  position: relative;
+  flex: 0 0 27px;
+  cursor: grab;
+  touch-action: none;
+  will-change: transform;
+}
+
+.top-pinned-item.dragging { z-index: 2; cursor: grabbing; }
+.top-pinned-actions.is-dragging, .top-pinned-actions.is-dragging * { user-select: none; }
+.top-pinned-item.dragging .top-pinned-action {
+  color: #e0e7ff;
+  background: #28334a;
+  box-shadow: 0 7px 18px #0009, inset 0 0 0 1px #6477a0;
+  transform: scale(1.08);
+}
+
 .top-pinned-action {
   width: 27px;
   height: 27px;
-  flex: 0 0 27px;
   color: #a8b3c9;
+  cursor: grab;
 }
+
+.top-pinned-action:disabled { pointer-events: none; }
 
 .sidebar {
   grid-area: sidebar;
@@ -861,7 +866,6 @@ select:focus-visible {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -4284,29 +4288,6 @@ select:focus-visible {
 
 /* Project types */
 
-.type-switcher-wrap {
-  position: relative;
-  -webkit-app-region: no-drag;
-}
-
-button.type-switcher {
-  cursor: default;
-}
-
-.type-menu {
-  position: absolute;
-  top: 36px;
-  left: 0;
-  z-index: 80;
-  width: 258px;
-  padding: 5px;
-  border: 1px solid #343a46;
-  border-radius: 9px;
-  background: #171a22;
-  box-shadow: 0 18px 45px #00000099;
-}
-
-.type-menu button,
 .project-type-grid button,
 .latex-mode-grid button {
   display: flex;
@@ -4320,19 +4301,6 @@ button.type-switcher {
   text-align: left;
 }
 
-.type-menu button {
-  min-height: 46px;
-  padding: 7px 9px;
-}
-
-.type-menu button:hover,
-.type-menu button.active {
-  color: #e0e3ea;
-  border-color: #2e3441;
-  background: #20242e;
-}
-
-.type-menu button > span,
 .project-type-grid button > span,
 .latex-mode-grid button > span {
   display: flex;
@@ -4341,14 +4309,12 @@ button.type-switcher {
   gap: 3px;
 }
 
-.type-menu strong,
 .project-type-grid strong,
 .latex-mode-grid strong {
   color: inherit;
   font-size: 10px;
 }
 
-.type-menu small,
 .project-type-grid small,
 .latex-mode-grid small {
   color: #606876;
