@@ -9,6 +9,19 @@ const FULL_THREAD_ID =
 const TRUNCATED_THREAD_ID =
   /\b([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{5,8})\.\.\./i
 
+/** Codex can queue a question while its terminal title still says Working. */
+export function codexQueuedQuestionOnScreen(screenText: string): boolean {
+  const lines = screenText.split(/\r?\n/).slice(-12).map((line) => line.trim())
+  const header = lines.findIndex((line) => /^[•·]?\s*Queued follow-up inputs$/i.test(line))
+  if (header < 0) return false
+  const count = lines.findIndex(
+    (line, index) => index > header && index <= header + 3 && /^\?\s*[1-9]\d*\s+questions?$/i.test(line)
+  )
+  return count >= 0 && lines.some(
+    (line, index) => index > count && index <= count + 3 && /^shift\s*\+\s*←\s+to answer$/i.test(line)
+  )
+}
+
 /**
  * Codex exposes `activity`, `run-state`, and `task-progress` as TUI title
  * items. PanePilot mirrors those items into the tmux pane title so a second
@@ -27,6 +40,22 @@ export function codexStateFromPaneTitle(
   if (previous === 'running') return 'response-ready'
   if (previous === 'completed' || previous === 'error') return 'idle'
   return null
+}
+
+export function codexStateFromPaneSnapshot(
+  paneTitle: string,
+  screenText: string | null | undefined,
+  previous: AgentState
+): AgentState | null {
+  if (screenText != null && codexQueuedQuestionOnScreen(screenText)) {
+    return 'needs-input'
+  }
+  // A failed or skipped capture cannot prove a previously queued question ended.
+  if (
+    previous === 'needs-input' && screenText == null &&
+    codexStateFromPaneTitle(paneTitle, 'idle') === 'running'
+  ) return null
+  return codexStateFromPaneTitle(paneTitle, previous)
 }
 
 /**

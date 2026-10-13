@@ -294,6 +294,15 @@ title beside the versioned PanePilot tmux options. `Working` or `Thinking` maps 
 `running`, an action-required title maps to `needs-input`, and `Ready` after a
 previously running state maps to `response-ready`.
 
+Codex's `Queued follow-up inputs` footer can show a pending question while
+the pane title still says `Working`. An attached Codex screen recognizes the
+full footer (heading, positive question count, and answer shortcut) and marks
+the session `needs-input`. Each visible-connection discovery pass also checks
+a bounded, rotating set of detached working Codex panes through read-only tmux
+screen captures. A submitted answer alone does not clear the alert while the
+footer remains visible; a later screen/title continuation does. Do not treat
+ordinary scrollback text or non-Codex terminals as queued questions.
+
 `task-progress` is the latest progress emitted by Codex `update_plan`; it is useful
 context but is not by itself proof that a turn is running. Local and legacy sessions
 continue to use the narrow rendered-screen fallback.
