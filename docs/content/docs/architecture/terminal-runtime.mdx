@@ -93,6 +93,9 @@ SQLite row:
 - An unreachable host leaves cached local state unchanged.
 - Codex pane-title fields refresh current `run-state` and `task-progress` without
   consuming a per-device event stream.
+- A bounded, rotating set of detached Codex panes whose title says Working receives a
+  read-only screen capture so a visible queued question can override that title with
+  `needs-input` without attaching or resizing the terminal.
 
 LaTeX chat scope, mode, and portable section source/title information are included so
 an imported chat can be reconciled with the receiving laptop's section identities.
@@ -177,6 +180,11 @@ into the tmux pane title. Because tmux owns that snapshot, every laptop reads th
 current value without a remote spool. Working/Thinking restores `running`,
 action-required restores `needs-input`, and Ready after Working becomes
 `response-ready`.
+
+The Codex composer can queue a follow-up question without changing the title from
+Working. PanePilot recognizes the complete live question footer in an attached screen
+or bounded discovery capture and keeps `needs-input` sticky until that footer
+disappears and Codex accepts the answer or continues.
 
 A detached PTY backend cannot be recovered. PanePilot marks it completed with an
 activity explaining why.

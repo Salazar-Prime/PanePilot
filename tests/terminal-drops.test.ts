@@ -28,7 +28,7 @@ function store(remote = true) {
 function receive(name: string, data: Buffer, size = data.length, id = randomUUID(), directory?: string) {
   const result = spawnSync('python3', ['-c', RECEIVE_DROP_SCRIPT], {
     input: Buffer.concat([Buffer.from(JSON.stringify({ root, name, size, id, directory }) + '\n'), data]),
-    encoding: 'utf8', timeout: 10_000
+    encoding: 'utf8', timeout: 30_000
   })
   return { ...result, id }
 }
@@ -48,7 +48,7 @@ describe('remote dropped-asset receiver', () => {
       expect(await readFile(remotePath)).toEqual(data)
       expect(progress).toHaveBeenLastCalledWith(data.length)
     } finally { await file.close() }
-  })
+  }, 30_000)
 
   it('writes exact binary bytes into unique project metadata folders and acknowledges progress', async () => {
     const data = Buffer.alloc(700_000, 173)

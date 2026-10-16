@@ -81,6 +81,12 @@ Codex terminals expose `run-state` and `task-progress` through the tmux pane tit
 PanePilot can restore the latest status after an SSH reconnect without a remote daemon
 or event spool. Claude Code continues to use terminal-output fallback tracking.
 
+Codex can display a queued follow-up question while its pane title still says Working.
+PanePilot recognizes that live prompt and marks the session **Needs input**. Attached
+terminals update from their rendered screen; discovery checks a bounded, rotating set
+of detached local or SSH Codex panes without attaching or resizing them. The alert
+clears only after the prompt disappears and Codex accepts the response or continues.
+
 Shell and Action terminals are excluded from agent-state detection, so ordinary
 terminal output cannot create a false working state.
 
@@ -91,7 +97,8 @@ project capability without acknowledging or changing the session.
 
 The focused project's tool navigation is centered in that same status bar. Secondary
 global and project actions live in the top overflow menu; use the pin beside an action
-to keep it in the top toolbar on this PanePilot client.
+to keep it in the top toolbar on this PanePilot client. Drag pinned actions to reorder
+them, or focus one and press Option/Alt-Left/Right; the order persists across restarts.
 
 After the computer restarts, eligible local tmux-backed terminals and chats are
 recovered only when you open their exact tab. Detaching an ordinary terminal leaves

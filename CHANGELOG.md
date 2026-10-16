@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.13.0 — 2026-10-16
+
+This release improves attention accuracy and makes the compact toolbar easier to
+personalize:
+
+- Codex terminals now surface a queued follow-up question as **Needs input** even when
+  the pane title still says Working. Attached terminals update from their live screen;
+  detached local or SSH panes are checked through bounded, rotating read-only captures.
+- Pinned top-toolbar actions can be reordered by dragging or with Option/Alt-Left/Right. Their
+  client-local order persists across restarts without changing the overflow menu.
+- The obsolete Terminal/LaTeX type switcher has been removed from the top bar; project
+  type remains available when creating a project, and the dangerous-mode indicator is
+  now labeled **YOLO agent**.
+
+The v0.13.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.12.0 — 2026-10-11
 
 This release streamlines the workspace and makes terminal recovery more deliberate:

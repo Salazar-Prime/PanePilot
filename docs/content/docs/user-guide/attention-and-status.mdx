@@ -11,7 +11,7 @@ model includes seven states:
 | --- | --- | --- |
 | `idle` | Ready | The session is open and not currently detected as working |
 | `running` | Working | A Codex or Claude working marker is visible |
-| `needs-input` | Needs input | Codex reports an action-required title or PanePilot detects a prompt |
+| `needs-input` | Needs input | Codex reports an action-required title or PanePilot detects a live queued question |
 | `response-ready` | Response ready | A remote Codex pane returns to Ready after Working |
 | `needs-attention` | Needs attention | A previously visible working marker disappeared |
 | `completed` | Stopped | The terminal process or tmux session ended normally or was stopped |
@@ -45,6 +45,14 @@ Remote PanePilot-managed Codex sessions additionally mirror `activity`, `run-sta
 and `task-progress` into their tmux pane title. Every laptop reads the same current
 snapshot, so no remote event spool is required. `task-progress` describes the latest
 Codex plan update; `run-state` remains the liveness signal.
+
+Codex may show a **Queued follow-up inputs** footer while its title still says Working.
+PanePilot requires the complete live footer—a heading, positive question count, and
+answer shortcut—before marking the session **Needs input**, so old scrollback or
+ordinary output does not trigger it. Attached screens update directly. Each discovery
+pass checks only a bounded, rotating set of detached working Codex panes through
+read-only tmux captures, including over SSH. Submitting terminal input does not clear
+the alert by itself; the prompt must disappear and execution must continue.
 
 ## Where status appears
 
