@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PanePilot — Git history time-slice concepts</title>
+  <style>
+    :root { color-scheme: dark; --ink:#e6e9ed; --muted:#8c969f; --line:#424950; --main:#80c6b2; --feature:#aab5f0; --release:#e2ba81; --hotfix:#c6a4db; }
+    * { box-sizing: border-box; }
+    html,body { width:1200px; height:820px; margin:0; overflow:hidden; }
+    body { color:var(--ink); background:#090b0e; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; -webkit-font-smoothing:antialiased; }
+    button { font:inherit; cursor:pointer; }
+    .app { position:absolute; inset:0; background:#0c0f15; color:#738092; }
+    .app-top { height:52px; display:flex; align-items:center; gap:12px; padding:0 18px; border-bottom:1px solid #29313d; font-size:12px; }
+    .traffic { display:flex; gap:8px; margin-right:16px; }
+    .traffic i { width:11px; height:11px; border-radius:50%; background:#ef6663; }
+    .traffic i:nth-child(2){background:#eebf4e}.traffic i:nth-child(3){background:#56be70}
+    .app-top strong { color:#ced4dd; }
+    .app-top .project { margin-left:auto; color:#b9c1cc; }
+    .sidebar { position:absolute; top:52px; bottom:27px; width:218px; padding:25px 17px; background:#10141b; border-right:1px solid #28313d; font-size:11px; }
+    .sidebar small { display:block; margin-bottom:17px; color:#677486; letter-spacing:.18em; font-weight:700; }
+    .sidebar div { height:42px; display:flex; align-items:center; gap:10px; }
+    .sidebar i { width:23px;height:23px;display:grid;place-items:center;border-radius:6px;background:#263252;color:#adbbee;font-style:normal;font-weight:700; }
+    .main { position:absolute; top:52px; bottom:27px; left:218px; right:0; padding:26px 30px; font:12px/2 "SFMono-Regular",Menlo,monospace; }
+    .main strong { display:block; color:#a8b4c7; margin-bottom:20px; font:600 12px -apple-system,BlinkMacSystemFont,sans-serif; }
+    .main em { color:#91c5ac; font-style:normal; }
+    .status { position:absolute; bottom:0; left:0; right:0; height:27px; padding:6px 13px; border-top:1px solid #29313d; background:#0b0e13; font-size:10px; }
+    .status span { float:right; }
+    .veil { position:absolute; inset:0; background:#050608c9; backdrop-filter:blur(7px); }
+    .concept { position:absolute; z-index:4; top:23px; left:28px; display:grid; gap:4px; }
+    .concept small { color:#7f8b94; font:700 9px "SFMono-Regular",Menlo,monospace; letter-spacing:.17em; }
+    .concept strong { color:#d6dde3; font-size:17px; letter-spacing:-.025em; }
+
+    .history-modal { position:absolute; z-index:3; top:65px; left:calc(50% - 535px); width:1070px; height:690px; overflow:hidden; border:1px solid #555d66; border-radius:20px; background:radial-gradient(circle at 48% -10%,#35394170,transparent 50%),linear-gradient(145deg,#20242a 0%,#11151a 45%,#1b1f25 100%); box-shadow:0 38px 110px #000c,inset 0 1px 0 #ffffff20; }
+    .history-modal::before { position:absolute; inset:0; pointer-events:none; content:""; background:linear-gradient(115deg,#ffffff0b,transparent 30%,#ffffff04 78%,transparent); }
+    .modal-header { position:relative; display:flex; height:80px; align-items:center; justify-content:space-between; padding:0 34px; border-bottom:1px solid #ffffff17; }
+    .identity { display:flex; align-items:center; gap:13px; }
+    .identity-mark { width:37px;height:37px;display:grid;place-items:center;border:1px solid #68747b;border-radius:11px;background:linear-gradient(145deg,#465159,#22282e);color:#d7e1e4;font-size:18px; }
+    .identity small { display:block; color:#8b989e; font:700 9px "SFMono-Regular",Menlo,monospace; letter-spacing:.16em; }
+    .identity h1 { margin:4px 0 0; color:#edf1f3; font-size:18px; line-height:1; letter-spacing:-.03em; font-weight:650; }
+    .identity h1 span { color:#9ba5ab; font-weight:450; }
+    .header-actions { display:flex; align-items:center; gap:11px; }
+    .read-only { color:#929ca3; font-size:10px; border:1px solid #4a535a; padding:6px 10px; border-radius:999px; background:#ffffff09; }
+    .icon-button { width:31px;height:31px;display:grid;place-items:center;border:1px solid #4c555e;border-radius:9px;background:#ffffff0b;color:#cbd2d5;font-size:18px; }
+    .icon-button:hover,.icon-button:focus-visible { background:#ffffff20;outline:1px solid #c6d3d8; }
+    .branch-strip { position:relative; display:flex; align-items:center; gap:15px; height:66px; padding:0 34px; border-bottom:1px solid #ffffff0d; }
+    .branch-caption { color:#77848d; font:700 10px "SFMono-Regular",Menlo,monospace; letter-spacing:.1em; text-transform:uppercase; }
+    .branch-chips { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .branch-chip { display:inline-flex; align-items:center; gap:7px; min-height:28px; padding:0 11px; color:#b8c2c7; border:1px solid #46515a; border-radius:999px; background:#ffffff09; font-size:11px; }
+    .branch-chip i { width:7px;height:7px;border-radius:50%;background:var(--branch-color,#aab5bc);box-shadow:0 0 11px var(--branch-color,#aab5bc); }
+    .branch-chip[data-branch="main"]{--branch-color:var(--main)}.branch-chip[data-branch="feature"]{--branch-color:var(--feature)}.branch-chip[data-branch="release"]{--branch-color:var(--release)}.branch-chip[data-branch="hotfix"]{--branch-color:var(--hotfix)}
+    .branch-chip[aria-pressed="true"] { color:#f2f5f4; background:#ffffff1b; border-color:#87929b; }
+    .branch-chip:hover { background:#ffffff1a; }
+
+    .story { position:relative; display:grid; grid-template-columns:minmax(0,1fr) 225px; align-items:center; gap:22px; height:196px; padding:22px 39px 24px; }
+    .story-prefix { display:flex; align-items:center; gap:11px; color:#929ca4; font:700 10px "SFMono-Regular",Menlo,monospace; letter-spacing:.12em; text-transform:uppercase; }
+    .story-prefix::before { width:20px;height:1px;background:var(--main);content:"";box-shadow:0 0 10px var(--main); }
+    .story h2 { max-width:680px; margin:15px 0 12px; color:#eff2f3; font-size:29px; font-weight:610; line-height:1.14; letter-spacing:-.045em; }
+    .story-meta { display:flex; align-items:center; gap:10px; color:#8d979f; font-size:11px; }
+    .story-meta i { width:3px;height:3px;border-radius:50%;background:#69737b; }
+    .story-side { display:grid; justify-items:end; gap:12px; }
+    .merge-label { color:#bbcad3; border:1px solid #52616a; border-radius:999px; padding:5px 9px; font:600 10px "SFMono-Regular",Menlo,monospace; background:#34434c5c; }
+    .copy-hash { display:flex; align-items:center; gap:11px; padding:10px 12px; color:#e6edf0; border:1px solid #68757c; border-radius:10px; background:linear-gradient(160deg,#333e45,#242c32); box-shadow:inset 0 1px 0 #ffffff14; }
+    .copy-hash code { font:700 13px "SFMono-Regular",Menlo,monospace; }
+    .copy-hash small { color:#a0afb8; font-size:9px; }
+    .copy-hash:hover,.copy-hash:focus-visible { border-color:#a9c5c3; outline:none; background:#3a4a51; }
+    .story-note { color:#7a878f; text-align:right; font-size:10px; }
+    .merge-insight { display:none; }
+    .merge-insight[hidden] { display:none !important; }
+
+    .timeline-shell { position:relative; margin:0 25px; height:300px; border:1px solid #4c555d; border-radius:15px; background:linear-gradient(180deg,#242b30bd,#11171c 48%,#151b20); box-shadow:inset 0 1px 0 #ffffff11; }
+    .timeline-head { display:flex; height:44px; align-items:center; justify-content:space-between; gap:10px; padding:0 17px; border-bottom:1px solid #ffffff12; }
+    .timeline-head strong { color:#d6dfe1; font-size:12px; font-weight:625; }
+    .timeline-head span { color:#829099; font:10px "SFMono-Regular",Menlo,monospace; }
+    .timeline-controls { display:flex; gap:6px; align-items:center; }
+    .timeline-controls button { width:25px;height:25px;border:1px solid #48535c;border-radius:7px;background:#ffffff0b;color:#c5d0d4; }
+    .timeline-window { position:relative; height:186px; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; cursor:grab; }
+    .timeline-window::-webkit-scrollbar { display:none; }
+    .timeline-window:active { cursor:grabbing; }
+    .timeline-inner { position:relative; width:1840px; height:186px; }
+    .timeline-lines { position:absolute; inset:0; width:1840px; height:186px; overflow:visible; }
+    .timeline-lines path { fill:none; stroke-width:2.1; stroke-linecap:round; stroke-linejoin:round; }
+    .timeline-lines .main-line { stroke:var(--main); }
+    .timeline-lines .feature-line { stroke:var(--feature); }
+    .timeline-lines .release-line { stroke:var(--release); }
+    .timeline-lines .hotfix-line { stroke:var(--hotfix); }
+    .timeline-lines .guide { stroke:#ffffff13; stroke-width:1; stroke-dasharray:3 7; }
+    .timeline-lane-name { position:absolute; z-index:1; left:24px; color:#9ca8ad; font:600 10px "SFMono-Regular",Menlo,monospace; }
+    .timeline-lane-name.main { top:28px;color:var(--main) }.timeline-lane-name.feature{top:96px;color:var(--feature)}.timeline-lane-name.release{top:147px;color:var(--release)}.timeline-lane-name.hotfix{top:4px;color:var(--hotfix)}
+    .commit-node { position:absolute; z-index:2; width:18px;height:18px; padding:0; transform:translate(-50%,-50%); border:2px solid var(--node-color);border-radius:50%;background:#182126;color:#dce4e8;box-shadow:0 0 0 3px #182126; }
+    .commit-node[data-branch="main"]{--node-color:var(--main)}.commit-node[data-branch="feature"]{--node-color:var(--feature)}.commit-node[data-branch="release"]{--node-color:var(--release)}.commit-node[data-branch="hotfix"]{--node-color:var(--hotfix)}
+    .commit-node.merge { width:22px;height:22px;background:var(--node-color);box-shadow:0 0 0 4px #182126,0 0 20px var(--node-color); }
+    .commit-node.selected { width:24px;height:24px;background:var(--node-color);box-shadow:0 0 0 5px #182126,0 0 25px var(--node-color); }
+    .commit-node:hover,.commit-node:focus-visible { outline:none; transform:translate(-50%,-50%) scale(1.25); }
+    .commit-node span { position:absolute; left:50%; top:23px; transform:translateX(-50%); color:#a8b5bc; white-space:nowrap; font:10px "SFMono-Regular",Menlo,monospace; }
+    .commit-node[data-label-position="above"] span { top:auto; bottom:24px; }
+    .commit-node.selected span { color:#ecf4f1; font-weight:700; }
+    .slice-glass { position:absolute; z-index:3; top:44px; bottom:64px; left:50%; width:185px; transform:translateX(-50%); pointer-events:none; border-left:1px solid #ffffff3d;border-right:1px solid #ffffff3d;background:linear-gradient(90deg,#ffffff00,#ffffff0a 50%,#ffffff00);box-shadow:inset 0 0 30px #ffffff0a; }
+    .slice-glass::after { position:absolute; top:7px; right:7px; color:#adbcc2; content:"CURRENT SLICE"; font:600 8px "SFMono-Regular",Menlo,monospace; letter-spacing:.1em; }
+    .overview { position:relative; height:41px; margin:9px 17px 0; border:1px solid #4a555d; border-radius:8px; background:#10161b; cursor:pointer; overflow:hidden; }
+    .overview::before { position:absolute; inset:7px 11px; background:linear-gradient(180deg,transparent 19%,var(--main) 20%,var(--main) 24%,transparent 25%,transparent 45%,var(--feature) 46%,var(--feature) 50%,transparent 51%,transparent 68%,var(--release) 69%,var(--release) 73%,transparent 74%); content:"";opacity:.6; }
+    .overview::after { position:absolute; left:40%; top:13px; width:27%; height:12px; border-top:1px solid var(--feature);border-bottom:1px solid var(--release);border-radius:40%;content:"";opacity:.5; }
+    .overview-window { position:absolute; z-index:1; top:3px; bottom:3px; left:17%; width:54%; border:1px solid #d8e7e88c; border-radius:5px; background:#b9d2d218; box-shadow:0 0 13px #b9d2d226,inset 0 0 10px #e4f4f412; }
+    .modal-footer { display:flex; justify-content:space-between; align-items:center; height:47px; padding:0 36px; color:#859198; font-size:10px; }
+    .modal-footer strong { color:#c6d4d8; font-weight:550; }
+    .toast { position:absolute; z-index:7; left:50%; bottom:39px; transform:translateX(-50%); padding:10px 14px; color:#ecf5f3; border:1px solid #78ad9e; border-radius:9px; background:#20372f; box-shadow:0 8px 25px #0008; font-size:11px; opacity:0; pointer-events:none; }
+    .reopen { position:absolute; z-index:2; left:50%; top:50%; transform:translate(-50%,-50%); display:none; padding:12px 18px; color:#e1ebed;border:1px solid #73818b;border-radius:11px;background:#1e2a31; }
+
+    body[data-variant="1"] .story h2 { max-width:640px; }
+    body[data-variant="1"] .slice-glass { width:185px; }
+
+    body[data-variant="2"] .history-modal { background:radial-gradient(circle at 20% 13%,#41474b75,transparent 47%),linear-gradient(140deg,#202429,#111519 67%,#242a2e); }
+    body[data-variant="2"] .branch-strip { height:71px; background:#ffffff04; }
+    body[data-variant="2"] .branch-chip { border-radius:7px; }
+    body[data-variant="2"] .story { grid-template-columns:270px minmax(0,1fr); height:192px; gap:0; padding:0; }
+    body[data-variant="2"] .story-left { height:100%; display:flex; justify-content:center; flex-direction:column; padding:0 25px 0 35px; border-right:1px solid #ffffff1b; }
+    body[data-variant="2"] .story h2 { margin:9px 0; font-size:24px; }
+    body[data-variant="2"] .story-prefix { font-size:9px; }
+    body[data-variant="2"] .story-side { align-items:center; justify-items:start; gap:10px; padding-left:31px; }
+    body[data-variant="2"] .story-side::before { content:"SELECTED SHA"; color:#8b989f; font:700 10px "SFMono-Regular",Menlo,monospace; letter-spacing:.13em; }
+    body[data-variant="2"] .story-note { text-align:left; }
+    body[data-variant="2"] .merge-insight { position:absolute; top:46px; right:43px; display:grid; gap:14px; width:286px; padding:17px 20px; border:1px solid #ffffff24; border-radius:10px; background:#ffffff07; }
+    body[data-variant="2"] .merge-insight small { color:#819099; font:700 9px "SFMono-Regular",Menlo,monospace; letter-spacing:.14em; }
+    body[data-variant="2"] .merge-insight div { display:flex; align-items:center; gap:9px; font:600 10px "SFMono-Regular",Menlo,monospace; }
+    body[data-variant="2"] .merge-insight b { font-weight:600; }
+    body[data-variant="2"] .merge-insight b:first-child { color:var(--feature); }
+    body[data-variant="2"] .merge-insight b:last-child { color:var(--main); }
+    body[data-variant="2"] .merge-insight i { color:#8d9aa2; font-style:normal; }
+    body[data-variant="2"] .merge-insight span { color:#87949b; font-size:10px; }
+    body[data-variant="2"] .timeline-shell { border-radius:9px; }
+    body[data-variant="2"] .slice-glass { width:120px; border-color:#a9c0c666; }
+
+    body[data-variant="3"] .history-modal { background:radial-gradient(circle at 49% -19%,#424a4f6e,transparent 53%),linear-gradient(140deg,#1c2226,#111519 55%,#1b2023); }
+    body[data-variant="3"] .branch-strip { height:59px; border-bottom:0; }
+    body[data-variant="3"] .branch-chip { border-color:transparent; background:transparent; padding:0 7px; }
+    body[data-variant="3"] .branch-chip[aria-pressed="true"] { border-color:#647178; background:#ffffff0e; }
+    body[data-variant="3"] .story { height:202px; grid-template-columns:minmax(0,1fr) 260px; padding:18px 42px 20px; }
+    body[data-variant="3"] .story h2 { font-size:35px; max-width:730px; }
+    body[data-variant="3"] .story-side { border-left:1px solid #ffffff1d; padding-left:22px; }
+    body[data-variant="3"] .copy-hash { border:0; border-bottom:1px solid #819096; border-radius:0; padding:9px 0; background:transparent; box-shadow:none; }
+    body[data-variant="3"] .timeline-shell { border-color:#414c51; background:#11171b; }
+    body[data-variant="3"] .slice-glass { width:100px; border-color:#ffffff32; background:#ffffff05; }
+
+    body[data-variant="4"] .history-modal { background:radial-gradient(circle at 80% 9%,#4b4f536b,transparent 48%),linear-gradient(145deg,#24282b,#0e1317 60%,#181e23); }
+    body[data-variant="4"] .branch-strip { height:58px; }
+    body[data-variant="4"] .story { height:160px; padding-top:14px; padding-bottom:13px; }
+    body[data-variant="4"] .story h2 { font-size:26px; margin:10px 0; }
+    body[data-variant="4"] .timeline-shell { height:343px; background:radial-gradient(circle at 56% 39%,#3341467d,transparent 55%),#11171b; }
+    body[data-variant="4"] .timeline-window,body[data-variant="4"] .timeline-inner { height:230px; }
+    body[data-variant="4"] .timeline-inner { transform:translateY(22px); }
+    body[data-variant="4"] .slice-glass { bottom:64px; width:215px; border-color:#ffffff55; }
+    body[data-variant="4"] .overview { margin-top:9px; }
+    body[data-variant="4"] .modal-footer { height:37px; }
+    @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior:auto!important; animation-duration:0.01ms!important; transition-duration:0.01ms!important; } }
+  </style>
+</head>
+<body>
+  <div class="app"><div class="app-top"><div class="traffic"><i></i><i></i><i></i></div><strong>PanePilot</strong><span class="project">PanePilot / Git</span></div><aside class="sidebar"><small>PROJECTS</small><div><i>P</i>PanePilot</div><div><i>L</i>LaTeX manuscript</div><div><i>V</i>ved-scout</div></aside><div class="main"><strong>Terminals / Codex</strong><div><em>❯</em> git log --all --graph --oneline</div><div><em>✓</em> Repository ready</div></div><div class="status">◈ YOLO agent <span>● 0 working　　● 1 response ready</span></div></div>
+  <div class="veil"></div>
+  <div class="concept"><small>GIT HISTORY / INTERACTIVE STUDY</small><strong id="concept-name">01 / Aperture</strong></div>
+  <button class="reopen" id="reopen">Open repository history</button>
+  <main class="history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
+    <header class="modal-header">
+      <div class="identity"><span class="identity-mark" aria-hidden="true">⑂</span><div><small>ILLUSTRATIVE HISTORY • READ ONLY</small><h1 id="history-title">PanePilot <span>/ repository history</span></h1></div></div>
+      <div class="header-actions"><span class="read-only">4 branches · 12 commits in view</span><button class="icon-button" id="close" aria-label="Close history">×</button></div>
+    </header>
+    <section class="branch-strip" aria-label="Branch filter"><span class="branch-caption">Branches</span><div class="branch-chips">
+      <button class="branch-chip" data-branch="all" aria-pressed="true"><i></i>All</button>
+      <button class="branch-chip" data-branch="main" aria-pressed="false"><i></i>main</button>
+      <button class="branch-chip" data-branch="feature" aria-pressed="false"><i></i>feature/terminal-ui</button>
+      <button class="branch-chip" data-branch="release" aria-pressed="false"><i></i>release/0.13</button>
+      <button class="branch-chip" data-branch="hotfix" aria-pressed="false"><i></i>hotfix/pdf</button>
+    </div></section>
+    <section class="story" aria-live="polite">
+      <div class="story-left"><div class="story-prefix" id="story-prefix">MERGE COMMIT · MAIN</div><h2 id="story-subject">Unify the terminal workspace controls</h2><div class="story-meta"><span id="story-author">Maya Chen</span><i></i><span id="story-date">12 Oct 2026</span><i></i><span id="story-branch">main</span></div></div>
+      <div class="story-side"><span class="merge-label" id="merge-label">↗ 2 parents merged</span><button class="copy-hash" id="copy-hash" title="Copy full commit SHA"><code id="story-hash">a48d2f1</code><small>Copy SHA ↗</small></button><div class="story-note">Click any commit on the timeline to copy it.</div></div>
+      <div class="merge-insight" id="merge-insight"><small>MERGE PATH</small><div><b id="merge-source">feature/terminal-ui</b><i>↗</i><b>main</b></div><span>Branch ancestry stays visible beside the selected commit.</span></div>
+    </section>
+    <section class="timeline-shell" aria-label="Horizontal commit timeline">
+      <div class="timeline-head"><strong>History window</strong><div class="timeline-controls"><span>Older</span><button id="older" aria-label="Scroll to older commits">←</button><button id="newer" aria-label="Scroll to newer commits">→</button><span>Newer</span></div></div>
+      <div class="timeline-window" id="timeline-window" tabindex="0" aria-label="Scroll through repository history horizontally">
+        <div class="timeline-inner">
+          <svg class="timeline-lines" viewBox="0 0 1840 186" aria-hidden="true">
+            <path class="guide" d="M30 78 H1810"/><path class="main-line" d="M30 78 H1810"/>
+            <path class="feature-line" d="M305 78 C350 78 345 122 390 122 H690 C735 122 730 78 780 78"/>
+            <path class="release-line" d="M850 78 C905 78 900 154 960 154 H1250 C1300 154 1310 78 1370 78"/>
+            <path class="hotfix-line" d="M1430 78 C1480 78 1480 40 1520 40 H1640 C1680 40 1680 78 1710 78"/>
+          </svg>
+          <span class="timeline-lane-name main">main</span><span class="timeline-lane-name feature">feature</span><span class="timeline-lane-name release">release</span><span class="timeline-lane-name hotfix">hotfix</span>
+          <button class="commit-node" style="left:160px;top:78px" data-branch="main" data-hash="e71b649" data-subject="Establish the project workspace" data-author="Elliot Park" data-date="03 Sep 2026" aria-label="Commit e71b649: Establish the project workspace"><span>e71b649</span></button>
+          <button class="commit-node" style="left:305px;top:78px" data-branch="main" data-hash="c629e8a" data-subject="Introduce reusable project tools" data-author="Maya Chen" data-date="18 Sep 2026" aria-label="Commit c629e8a: Introduce reusable project tools"><span>c629e8a</span></button>
+          <button class="commit-node" style="left:430px;top:122px" data-branch="feature" data-hash="14aa683" data-subject="Compose a quieter terminal rail" data-author="Maya Chen" data-date="24 Sep 2026" aria-label="Commit 14aa683: Compose a quieter terminal rail"><span>14aa683</span></button>
+          <button class="commit-node" style="left:570px;top:122px" data-branch="feature" data-hash="6f239bc" data-subject="Add direct keyboard focus targets" data-author="Maya Chen" data-date="28 Sep 2026" aria-label="Commit 6f239bc: Add direct keyboard focus targets"><span>6f239bc</span></button>
+          <button class="commit-node" style="left:690px;top:122px" data-branch="feature" data-hash="3bd526e" data-subject="Polish terminal launch profiles" data-author="Maya Chen" data-date="04 Oct 2026" aria-label="Commit 3bd526e: Polish terminal launch profiles"><span>3bd526e</span></button>
+          <button class="commit-node merge selected" style="left:780px;top:78px" data-branch="main" data-hash="a48d2f1" data-subject="Unify the terminal workspace controls" data-author="Maya Chen" data-date="12 Oct 2026" data-merge="2 parents merged" aria-label="Merge commit a48d2f1: Unify the terminal workspace controls"><span>a48d2f1</span></button>
+          <button class="commit-node" style="left:930px;top:78px" data-branch="main" data-hash="0dc79a3" data-subject="Tidy repository status signals" data-author="Elliot Park" data-date="13 Oct 2026" aria-label="Commit 0dc79a3: Tidy repository status signals"><span>0dc79a3</span></button>
+          <button class="commit-node" style="left:1010px;top:154px" data-branch="release" data-hash="8b42d5e" data-subject="Prepare the 0.13 release notes" data-author="Nora Lee" data-date="14 Oct 2026" aria-label="Commit 8b42d5e: Prepare the 0.13 release notes"><span>8b42d5e</span></button>
+          <button class="commit-node" style="left:1180px;top:154px" data-branch="release" data-hash="f7e63c2" data-subject="Verify the packaged build" data-author="Nora Lee" data-date="15 Oct 2026" aria-label="Commit f7e63c2: Verify the packaged build"><span>f7e63c2</span></button>
+          <button class="commit-node merge" style="left:1370px;top:78px" data-branch="main" data-hash="2a76bdf" data-subject="Merge release validation" data-author="Nora Lee" data-date="16 Oct 2026" data-merge="2 parents merged" aria-label="Merge commit 2a76bdf: Merge release validation"><span>2a76bdf</span></button>
+          <button class="commit-node" style="left:1550px;top:40px" data-branch="hotfix" data-hash="91e0c47" data-subject="Preserve PDF reading position" data-author="Elliot Park" data-date="16 Oct 2026" aria-label="Commit 91e0c47: Preserve PDF reading position"><span>91e0c47</span></button>
+          <button class="commit-node merge" style="left:1710px;top:78px" data-branch="main" data-hash="5da239b" data-subject="Merge PDF position fix" data-author="Elliot Park" data-date="17 Oct 2026" data-merge="2 parents merged" aria-label="Merge commit 5da239b: Merge PDF position fix"><span>5da239b</span></button>
+        </div>
+      </div>
+      <div class="slice-glass" aria-hidden="true"></div>
+      <div class="overview" id="overview" role="slider" tabindex="0" aria-label="Timeline overview; move the visible history window" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="overview-window" id="overview-window"></div></div>
+    </section>
+    <footer class="modal-footer"><span><strong>Click a commit to copy its full SHA.</strong> Select branches to focus their history.</span><span>Scroll horizontally · drag the overview</span></footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite">Copied full commit SHA</div>
+  <script defer src="./preview.js"></script>
+</body>
+</html>
