@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PanePilot terminal launcher — centered concepts</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --canvas: #0b0e15;
+      --panel: #171c27;
+      --text: #e8edf6;
+      --muted: #9ba7b9;
+      --line: #344052;
+      --name: #aebcf9;
+      --profile: #8dc8cf;
+      --thread: #beadfa;
+      --danger: #ecaa7e;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 1200px; height: 820px; margin: 0; overflow: hidden; }
+    body { background: var(--canvas); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    .app-top { position: absolute; inset: 0 0 auto; height: 52px; display: flex; align-items: center; gap: 11px; padding: 0 18px; border-bottom: 1px solid #252c38; color: #b6bfcd; background: #0e121a; }
+    .traffic { display: flex; gap: 8px; margin-right: 15px; }
+    .traffic i { width: 11px; height: 11px; border-radius: 50%; background: #f46c69; }
+    .traffic i:nth-child(2) { background: #f3c34e; }
+    .traffic i:nth-child(3) { background: #53c46d; }
+    .app-brand { font-size: 13px; font-weight: 700; letter-spacing: -.02em; }
+    .app-project { margin-left: auto; font-size: 12px; font-weight: 650; }
+    .app-project small { display: block; color: #717d8e; font-size: 10px; font-weight: 400; text-align: right; }
+    .app-sidebar { position: absolute; top: 52px; bottom: 28px; left: 0; width: 218px; padding: 18px 14px; border-right: 1px solid #252c38; background: #0e1219; color: #808c9e; }
+    .app-sidebar .section { color: #b0bacb; font-size: 10px; font-weight: 700; letter-spacing: .13em; margin: 12px 0 17px; }
+    .app-sidebar .project { height: 38px; display: flex; align-items: center; gap: 9px; font-size: 11px; }
+    .app-sidebar .project b { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; background: #28345c; color: #bdc9ff; }
+    .app-sidebar .project.active { color: #e4e9f1; }
+    .app-terminal { position: absolute; top: 52px; right: 0; bottom: 28px; left: 218px; padding: 26px 31px; color: #8f9bab; font: 12px/1.9 "SFMono-Regular", Menlo, monospace; }
+    .app-terminal .tab { color: #aeb9d4; font: 600 11px -apple-system, BlinkMacSystemFont, sans-serif; margin-bottom: 24px; }
+    .app-terminal .green { color: #96cdb0; }
+    .app-terminal .blue { color: #8faff1; }
+    .app-status { position: absolute; inset: auto 0 0; height: 28px; display: flex; align-items: center; padding: 0 13px; border-top: 1px solid #252c38; background: #0c1017; color: #798698; font-size: 10px; }
+    .app-status span { margin-left: auto; }
+    .veil { position: absolute; inset: 0; background: #05070dce; backdrop-filter: blur(2px); }
+    .concept { position: absolute; top: 42px; left: 44px; z-index: 2; display: grid; gap: 7px; }
+    .concept small { color: #738199; font: 600 10px "SFMono-Regular", Menlo, monospace; letter-spacing: .14em; }
+    .concept strong { color: #c9d2e5; font-size: 17px; font-weight: 650; letter-spacing: -.03em; }
+
+    .dialog { position: absolute; z-index: 2; top: 50%; left: 50%; transform: translate(-50%, -49%); width: 566px; padding: 31px 34px 29px; border: 1px solid #3a465b; border-radius: 18px; background: var(--panel); box-shadow: 0 30px 90px #000b, inset 0 1px 0 #ffffff10; }
+    .close { position: absolute; top: 17px; right: 19px; width: 28px; height: 28px; display: grid; place-items: center; color: #8f9bad; font-size: 20px; line-height: 1; border-radius: 8px; }
+    .fields { width: 442px; margin: 0 auto; }
+    .group { position: relative; padding-left: 41px; }
+    .group + .group { margin-top: 24px; }
+    .group-content { position: relative; }
+    .number { position: absolute; z-index: 1; left: 0; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 999px; background: #27344d; color: var(--name); font: 700 12px "SFMono-Regular", Menlo, monospace; box-shadow: 0 0 0 4px var(--panel); }
+    .name-group .number { top: 54px; }
+    .profile-group .number { color: var(--profile); background: #1d3c43; }
+    .thread-group .number { color: var(--thread); background: #342b4d; }
+    .danger-group .number { color: var(--danger); background: #4b3128; }
+    .profile-row .number { left: -41px; }
+    .label { display: block; margin-bottom: 12px; text-align: center; color: #d7dfed; font-size: 14px; line-height: 1.3; font-weight: 675; letter-spacing: -.012em; }
+    .name-group .label { font-size: 16px; }
+    .input { width: 100%; height: 43px; display: flex; align-items: center; justify-content: center; padding: 0 16px; border: 1px solid #45536d; border-radius: 10px; background: #0f151f; color: #8492a6; text-align: center; font-size: 12px; }
+    .name-group .input { border-color: #7186ce; box-shadow: 0 0 0 3px #566bbb2b; }
+    .caret { width: 1px; height: 17px; margin-right: 3px; background: #cad5ff; }
+    .profiles { display: grid; gap: 6px; }
+    .profile-row { position: relative; min-height: 45px; display: grid; place-items: center; border: 1px solid #394657; border-radius: 10px; background: #151c27; color: #c1cad9; text-align: center; font-size: 13px; font-weight: 625; }
+    .profile-row.selected { border-color: #83aeb8; background: #233a44; color: #e3f7f7; box-shadow: inset 0 0 0 1px #84c7d029; }
+    .profile-row.selected .number { background: #35656c; color: #e5ffff; }
+    .thread-group .label { font-size: 13px; margin-bottom: 9px; }
+    .thread-group .input { height: 42px; border-color: #47425c; }
+    .danger-control { min-height: 53px; display: flex; align-items: center; justify-content: center; gap: 12px; border: 1px solid #755240; border-radius: 10px; background: #2d211d; color: #f0c7ad; font-size: 13px; font-weight: 640; }
+    .check { width: 17px; height: 17px; display: grid; place-items: center; border: 1px solid #ecab83; border-radius: 5px; background: #d28d66; color: #271b18; font-size: 12px; font-weight: 800; }
+    .footer { display: flex; justify-content: flex-end; gap: 11px; margin-top: 29px; padding-top: 19px; border-top: 1px solid #313b4d; }
+    .button { position: relative; min-width: 96px; height: 38px; display: grid; place-items: center; padding: 0 19px; border: 1px solid #48566b; border-radius: 9px; background: #252e3c; color: #d4dce9; font-size: 12px; font-weight: 650; }
+    .button.primary { min-width: 142px; border-color: #91a2e9; background: #6579cf; color: #fff; box-shadow: 0 4px 15px #2d418a50; }
+    .button .shortcut { position: absolute; right: 9px; bottom: -11px; min-height: 21px; display: flex; align-items: center; gap: 3px; padding: 2px 6px; border: 1px solid #647189; border-radius: 6px; background: #313b4e; color: #e1e8f5; font: 650 10px "SFMono-Regular", Menlo, monospace; white-space: nowrap; box-shadow: 0 3px 8px #0005; }
+    .button.primary .shortcut { border-color: #b2bff3; background: #4057a0; color: #fff; }
+    .button .shortcut b { font: inherit; }
+    .button .shortcut em { font-style: normal; font-weight: 500; opacity: .65; }
+
+    /* 01: spacious single-surface groups; closest to the current form. */
+    body[data-variant="1"] .dialog { width: 564px; }
+    body[data-variant="1"] .group { padding-top: 14px; padding-bottom: 14px; }
+    body[data-variant="1"] .group + .group { margin-top: 12px; }
+    body[data-variant="1"] .group-content { padding: 0 13px; }
+    body[data-variant="1"] .group::before { content: ""; position: absolute; inset: 0 0 0 35px; border: 1px solid #364253; border-radius: 14px; background: #1b2230; }
+    body[data-variant="1"] .name-group .number { top: 65px; }
+    body[data-variant="1"] .profile-row .number { left: -54px; }
+    body[data-variant="1"] .thread-group .input { background: #111825; }
+    body[data-variant="1"] .danger-control { background: #31251f; }
+
+    /* 02: thin rules and air, with the clearest vertical group rhythm. */
+    body[data-variant="2"] .dialog { background: #151a24; }
+    body[data-variant="2"] .group + .group { margin-top: 30px; padding-top: 20px; }
+    body[data-variant="2"] .group + .group::before { content: ""; position: absolute; top: 0; left: 40px; right: 0; height: 1px; background: #344052; }
+    body[data-variant="2"] .profile-row { background: #171e2a; }
+    body[data-variant="2"] .profile-row.selected { background: #244049; }
+    body[data-variant="2"] .danger-control { background: transparent; }
+    body[data-variant="2"] .footer { border: 0; margin-top: 32px; }
+
+    /* 03: a confident coloured bracket on the left of each family. */
+    body[data-variant="3"] .dialog { width: 578px; background: #171d29; }
+    body[data-variant="3"] .group { padding-left: 54px; }
+    body[data-variant="3"] .group::before { content: ""; position: absolute; top: 0; bottom: 0; left: 12px; width: 17px; border-left: 2px solid currentColor; border-top: 2px solid currentColor; border-bottom: 2px solid currentColor; border-radius: 8px 0 0 8px; opacity: .52; }
+    body[data-variant="3"] .name-group { color: var(--name); }
+    body[data-variant="3"] .profile-group { color: var(--profile); }
+    body[data-variant="3"] .thread-group { color: var(--thread); }
+    body[data-variant="3"] .danger-group { color: var(--danger); }
+    body[data-variant="3"] .group + .group { margin-top: 27px; }
+    body[data-variant="3"] .number { left: 2px; }
+    body[data-variant="3"] .profile-row .number { left: -52px; }
+    body[data-variant="3"] .profile-row { border-radius: 7px; }
+    body[data-variant="3"] .profile-row.selected { background: #233a43; }
+    body[data-variant="3"] .danger-control { background: #2a211e; }
+
+    /* 04: softly tinted bays make each group distinct without large outlines. */
+    body[data-variant="4"] .dialog { width: 572px; background: #1a202b; }
+    body[data-variant="4"] .group { padding: 13px 14px 13px 47px; border-radius: 13px; }
+    body[data-variant="4"] .group + .group { margin-top: 15px; }
+    body[data-variant="4"] .name-group { background: linear-gradient(95deg, #283256 0%, #202735 72%); }
+    body[data-variant="4"] .profile-group { background: linear-gradient(95deg, #1e3c42 0%, #202735 72%); }
+    body[data-variant="4"] .thread-group { background: linear-gradient(95deg, #322b47 0%, #202735 72%); }
+    body[data-variant="4"] .danger-group { background: linear-gradient(95deg, #442f2a 0%, #202735 72%); }
+    body[data-variant="4"] .number { left: 10px; box-shadow: none; }
+    body[data-variant="4"] .name-group .number { top: 64px; }
+    body[data-variant="4"] .profile-row .number { left: -37px; }
+    body[data-variant="4"] .profile-row { background: #101923aa; }
+    body[data-variant="4"] .profile-row.selected { background: #2a4e54; }
+    body[data-variant="4"] .danger-control { background: #251d1bcc; }
+
+    /* 05: a lean focus path, preserving the chosen mockup's rail. */
+    body[data-variant="5"] .dialog { width: 542px; padding-left: 44px; padding-right: 44px; }
+    body[data-variant="5"] .fields { position: relative; width: 425px; }
+    body[data-variant="5"] .fields::before { content: ""; position: absolute; top: 45px; bottom: 20px; left: 14px; width: 1px; background: linear-gradient(var(--name), #47727a 40%, #705f90 72%, var(--danger)); opacity: .55; }
+    body[data-variant="5"] .group + .group { margin-top: 26px; }
+    body[data-variant="5"] .group-content { padding: 0 5px; }
+    body[data-variant="5"] .number { width: 26px; height: 26px; left: 1px; box-shadow: 0 0 0 5px #171c27; }
+    body[data-variant="5"] .profile-row .number { left: -41px; }
+    body[data-variant="5"] .profile-row { border: 0; border-radius: 8px; background: #202937; }
+    body[data-variant="5"] .profile-row.selected { background: #2c4c53; box-shadow: none; }
+    body[data-variant="5"] .thread-group .input { border: 1px solid #44425a; }
+    body[data-variant="5"] .danger-control { border: 0; background: #34251f; }
+  </style>
+</head>
+<body>
+  <div class="app-top"><div class="traffic"><i></i><i></i><i></i></div><span class="app-brand">PanePilot</span><div class="app-project">PanePilot <small>~/Projects/PanePilot</small></div></div>
+  <div class="app-sidebar"><div class="section">PROJECTS</div><div class="project active"><b>P</b>PanePilot</div><div class="project"><b>L</b>LaTeX manuscript</div><div class="project"><b>V</b>ved-scout</div></div>
+  <div class="app-terminal"><div class="tab">Terminals　 /　 Codex</div><div><span class="green">❯</span> codex resume <span class="blue">&lt;thread-id&gt;</span></div><div><span class="green">✓</span> Ready to work in PanePilot</div><div>　</div><div><span class="green">❯</span> _</div></div>
+  <div class="app-status">◈ YOLO agent <span>● 0 working　　● 1 response ready　　● 1 blocked</span></div>
+  <div class="veil"></div>
+  <div class="concept"><small>TERMINAL LAUNCHER / CENTERED CONCEPTS</small><strong id="concept-name"></strong></div>
+  <section class="dialog" aria-label="New terminal dialog mockup">
+    <div class="close">×</div>
+    <div class="fields">
+      <div class="group name-group"><span class="number">1</span><div class="group-content"><label class="label">Terminal / tmux name</label><div class="input"><span class="caret"></span>Optional — a unique name will be chosen</div></div></div>
+      <div class="group profile-group"><div class="group-content"><div class="profiles">
+        <div class="profile-row"><span class="number">2</span>Login shell</div>
+        <div class="profile-row selected"><span class="number">3</span>Codex</div>
+        <div class="profile-row"><span class="number">4</span>Claude Code</div>
+      </div></div></div>
+      <div class="group thread-group"><span class="number">5</span><div class="group-content"><label class="label">Codex thread ID</label><div class="input">Paste a thread ID to resume (optional)</div></div></div>
+      <div class="group danger-group"><span class="number">6</span><div class="group-content"><div class="danger-control"><span class="check">✓</span>YOLO mode</div></div></div>
+    </div>
+    <footer class="footer"><div class="button">Cancel<span class="shortcut"><b>Esc</b></span></div><div class="button primary">Start terminal<span class="shortcut"><b>Cmd</b><em>+</em><b>Enter</b></span></div></footer>
+  </section>
+  <script>
+    const variant = new URLSearchParams(location.search).get('variant') || '1';
+    const names = {
+      '1': '01 / Soft tiers',
+      '2': '02 / Quiet rules',
+      '3': '03 / Colour brackets',
+      '4': '04 / Tinted bays',
+      '5': '05 / Lean focus path'
+    };
+    document.body.dataset.variant = variant;
+    document.getElementById('concept-name').textContent = names[variant] || names['1'];
+  </script>
+</body>
+</html>
