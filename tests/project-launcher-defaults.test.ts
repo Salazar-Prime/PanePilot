@@ -9,6 +9,17 @@ describe('new project and agent launcher defaults', () => {
     expect(source.match(/ref=\{folderInputRef\}/g)).toHaveLength(2)
   })
 
+  it('focuses the new terminal name and keeps the background terminal from stealing it', () => {
+    const source = readFileSync('src/renderer/src/components/TerminalLauncher.tsx', 'utf8')
+    expect(source).toContain('ref={dialogRef}')
+    expect(source).toContain('ref={nameInputRef}')
+    expect(source).toContain('autoFocus')
+    expect(source).toContain('nameInputRef.current?.focus()')
+    expect(source).toContain("document.addEventListener('focusin', keepFocusInDialog)")
+    expect(source).toContain("document.removeEventListener('focusin', keepFocusInDialog)")
+    expect(source).toContain('if (!dialogRef.current.contains(event.target))')
+  })
+
   it('starts new Codex and LaTeX chats with visible permission bypass checked', () => {
     for (const component of ['TerminalLauncher', 'LatexChatLauncher']) {
       const source = readFileSync(`src/renderer/src/components/${component}.tsx`, 'utf8')

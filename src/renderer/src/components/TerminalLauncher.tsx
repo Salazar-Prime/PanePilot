@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Bot, ShieldAlert, Sparkles, TerminalSquare, X } from 'lucide-react'
 import type { LaunchProfile, StartTerminalInput } from '@shared/types'
 import { useModalEscape } from '../lib/modalEscape'
@@ -21,6 +21,8 @@ interface Props {
 }
 
 export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
+  const dialogRef = useRef<HTMLElement>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const [profile, setProfile] = useState<LaunchProfile>('codex')
   const [name, setName] = useState('')
   const [codexThreadId, setCodexThreadId] = useState('')
@@ -29,6 +31,24 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
   const [error, setError] = useState('')
   const isAgent = profile === 'codex' || profile === 'claude'
   useModalEscape(onClose, true, submitting)
+
+  useEffect(() => {
+    const focusNameInput = () => nameInputRef.current?.focus()
+    const keepFocusInDialog = (event: FocusEvent) => {
+      if (!(event.target instanceof Element) || !dialogRef.current) return
+      const otherDialog = event.target.closest('[role="dialog"][aria-modal="true"]')
+      if (otherDialog && otherDialog !== dialogRef.current) return
+      if (!dialogRef.current.contains(event.target)) {
+        focusNameInput()
+      }
+    }
+    document.addEventListener('focusin', keepFocusInDialog)
+    const frame = window.requestAnimationFrame(focusNameInput)
+    return () => {
+      document.removeEventListener('focusin', keepFocusInDialog)
+      window.cancelAnimationFrame(frame)
+    }
+  }, [])
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -54,6 +74,7 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="modal launcher-modal"
         role="dialog"
         aria-modal="true"
@@ -73,6 +94,8 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
           <label className="field">
             <span>Terminal / tmux name</span>
             <input
+              ref={nameInputRef}
+              autoFocus
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Optional — PanePilot will choose a unique name"
