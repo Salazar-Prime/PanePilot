@@ -86,6 +86,7 @@
     .timeline-lines .hotfix-line { stroke:var(--hotfix); }
     .timeline-lines .guide { stroke:#ffffff13; stroke-width:1; stroke-dasharray:3 7; }
     .timeline-lane-name { position:absolute; z-index:1; left:24px; color:#9ca8ad; font:600 10px "SFMono-Regular",Menlo,monospace; }
+    .time-marker { display:none; }
     .timeline-lane-name.main { top:28px;color:var(--main) }.timeline-lane-name.feature{top:96px;color:var(--feature)}.timeline-lane-name.release{top:147px;color:var(--release)}.timeline-lane-name.hotfix{top:4px;color:var(--hotfix)}
     .commit-node { position:absolute; z-index:2; width:18px;height:18px; padding:0; transform:translate(-50%,-50%); border:2px solid var(--node-color);border-radius:50%;background:#182126;color:#dce4e8;box-shadow:0 0 0 3px #182126; }
     .commit-node[data-branch="main"]{--node-color:var(--main)}.commit-node[data-branch="feature"]{--node-color:var(--feature)}.commit-node[data-branch="release"]{--node-color:var(--release)}.commit-node[data-branch="hotfix"]{--node-color:var(--hotfix)}
@@ -106,8 +107,33 @@
     .toast { position:absolute; z-index:7; left:50%; bottom:39px; transform:translateX(-50%); padding:10px 14px; color:#ecf5f3; border:1px solid #78ad9e; border-radius:9px; background:#20372f; box-shadow:0 8px 25px #0008; font-size:11px; opacity:0; pointer-events:none; }
     .reopen { position:absolute; z-index:2; left:50%; top:50%; transform:translate(-50%,-50%); display:none; padding:12px 18px; color:#e1ebed;border:1px solid #73818b;border-radius:11px;background:#1e2a31; }
 
-    body[data-variant="1"] .story h2 { max-width:640px; }
-    body[data-variant="1"] .slice-glass { width:185px; }
+    body[data-variant="1"] .concept { display:none; }
+    body[data-variant="1"] .history-modal { top:30px; left:30px; width:1140px; height:760px; border-radius:16px; }
+    body[data-variant="1"] .modal-header { height:58px; padding:0 27px; }
+    body[data-variant="1"] .identity-mark { width:31px; height:31px; border-radius:8px; font-size:16px; }
+    body[data-variant="1"] .identity h1 { font-size:15px; }
+    body[data-variant="1"] .branch-strip { height:46px; padding:0 27px; }
+    body[data-variant="1"] .branch-chip { min-height:25px; }
+    body[data-variant="1"] .story { height:80px; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:7px 29px; border-bottom:1px solid #ffffff0e; }
+    body[data-variant="1"] .story-prefix { font-size:9px; }
+    body[data-variant="1"] .story h2 { max-width:none; margin:5px 0 4px; font-size:20px; line-height:1.1; }
+    body[data-variant="1"] .story-meta { font-size:10px; }
+    body[data-variant="1"] .story-side { display:flex; align-items:center; gap:11px; }
+    body[data-variant="1"] .story-note { display:none; }
+    body[data-variant="1"] .copy-hash { padding:8px 10px; }
+    body[data-variant="1"] .timeline-shell { height:540px; margin:0 17px; border-radius:11px; background:radial-gradient(circle at 49% 37%,#303f4444,transparent 42%),linear-gradient(180deg,#172025,#11181d 54%,#12191e); }
+    body[data-variant="1"] .timeline-head { height:40px; }
+    body[data-variant="1"] .timeline-window,body[data-variant="1"] .timeline-inner,body[data-variant="1"] .timeline-lines { height:450px; }
+    body[data-variant="1"] .timeline-inner { width:1950px; }
+    body[data-variant="1"] .timeline-lines { z-index:1; }
+    body[data-variant="1"] .time-marker { position:absolute; z-index:0; top:17px; display:block; height:410px; padding-left:8px; border-left:1px solid #ffffff13; color:#819096; font:700 9px "SFMono-Regular",Menlo,monospace; letter-spacing:.1em; }
+    body[data-variant="1"] .timeline-lane-name.main { top:154px; }
+    body[data-variant="1"] .timeline-lane-name.feature { top:253px; }
+    body[data-variant="1"] .timeline-lane-name.release { top:325px; }
+    body[data-variant="1"] .timeline-lane-name.hotfix { top:68px; }
+    body[data-variant="1"] .slice-glass { top:40px; bottom:49px; width:178px; }
+    body[data-variant="1"] .overview { height:32px; margin:8px 17px 0; }
+    body[data-variant="1"] .modal-footer { height:36px; padding:0 28px; }
 
     body[data-variant="2"] .history-modal { background:radial-gradient(circle at 20% 13%,#41474b75,transparent 47%),linear-gradient(140deg,#202429,#111519 67%,#242a2e); }
     body[data-variant="2"] .branch-strip { height:71px; background:#ffffff04; }
@@ -186,6 +212,7 @@
             <path class="release-line" d="M850 78 C905 78 900 154 960 154 H1250 C1300 154 1310 78 1370 78"/>
             <path class="hotfix-line" d="M1430 78 C1480 78 1480 40 1520 40 H1640 C1680 40 1680 78 1710 78"/>
           </svg>
+          <span class="time-marker" style="left:1010px">14 OCT</span><span class="time-marker" style="left:1370px">16 OCT</span><span class="time-marker" style="left:1710px">17 OCT</span>
           <span class="timeline-lane-name main">main</span><span class="timeline-lane-name feature">feature</span><span class="timeline-lane-name release">release</span><span class="timeline-lane-name hotfix">hotfix</span>
           <button class="commit-node" style="left:160px;top:78px" data-branch="main" data-hash="e71b649" data-subject="Establish the project workspace" data-author="Elliot Park" data-date="03 Sep 2026" aria-label="Commit e71b649: Establish the project workspace"><span>e71b649</span></button>
           <button class="commit-node" style="left:305px;top:78px" data-branch="main" data-hash="c629e8a" data-subject="Introduce reusable project tools" data-author="Maya Chen" data-date="18 Sep 2026" aria-label="Commit c629e8a: Introduce reusable project tools"><span>c629e8a</span></button>

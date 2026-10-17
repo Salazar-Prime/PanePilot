@@ -52,7 +52,15 @@ async function render() {
         overviewHasPosition: true
       })
       await window.webContents.executeJavaScript('document.getElementById("close").click()')
-      await new Promise((resolve) => setTimeout(resolve, 350))
+      await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        const deadline = Date.now() + 2000
+        const check = () => {
+          if (document.querySelector('.history-modal').style.display === 'none') resolve()
+          else if (Date.now() > deadline) reject(new Error('History modal did not close'))
+          else setTimeout(check, 25)
+        }
+        check()
+      })`)
       assert.equal(await window.webContents.executeJavaScript('document.querySelector(".history-modal").style.display'), 'none')
       await window.webContents.executeJavaScript('document.getElementById("reopen").click()')
       assert.equal(await window.webContents.executeJavaScript('document.querySelector(".history-modal").style.display'), 'block')

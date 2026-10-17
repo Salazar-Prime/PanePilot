@@ -20,6 +20,16 @@ let motionAnimate = null
 let toastTimer = 0
 let draggingOverview = false
 
+if (document.body.dataset.variant === '1') {
+  document.querySelector('.timeline-lines').setAttribute('viewBox', '0 0 1840 450')
+  for (const path of document.querySelectorAll('.timeline-lines path')) {
+    path.setAttribute('transform', 'scale(1 2.25)')
+  }
+  for (const node of nodes) {
+    node.style.top = `${parseFloat(node.style.top) * 2.25}px`
+  }
+}
+
 // The preview uses the same Motion library proposed for the eventual React modal.
 // It remains usable when the CDN is unavailable; only the enhanced motion falls back.
 import('https://cdn.jsdelivr.net/npm/motion@14.3.0/+esm')
@@ -176,8 +186,13 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && modal.style.display !== 'none') closeModal()
 })
 
+if (document.body.dataset.variant === '1') {
+  const apertureCommit = nodes.find((node) => node.dataset.hash === '2a76bdf')
+  if (apertureCommit) selectCommit(apertureCommit, false)
+}
+
 requestAnimationFrame(() => {
-  timeline.scrollLeft = 270
+  timeline.scrollLeft = document.body.dataset.variant === '1' ? 820 : 270
   updateOverview()
   window.__mockupReady = true
 })
