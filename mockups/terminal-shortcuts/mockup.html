@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PanePilot — New terminal shortcut concepts</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --canvas: #0b0e15;
+      --panel: #171c27;
+      --raised: #202735;
+      --line: #30394a;
+      --text: #e8edf6;
+      --muted: #9ba7b9;
+      --quiet: #6d788a;
+      --accent: #a5b4f5;
+      --accent-surface: #293455;
+      --warm: #e5a985;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 1200px; height: 820px; margin: 0; overflow: hidden; }
+    body {
+      background: var(--canvas);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .app-top {
+      position: absolute; inset: 0 0 auto; height: 52px; display: flex; align-items: center;
+      gap: 11px; padding: 0 18px; border-bottom: 1px solid #252c38; color: #b6bfcd;
+      background: #0e121a;
+    }
+    .traffic { display: flex; gap: 8px; margin-right: 15px; }
+    .traffic i { width: 11px; height: 11px; border-radius: 50%; background: #f46c69; }
+    .traffic i:nth-child(2) { background: #f3c34e; }
+    .traffic i:nth-child(3) { background: #53c46d; }
+    .app-brand { font-size: 13px; font-weight: 700; letter-spacing: -.02em; }
+    .app-project { margin-left: auto; font-size: 12px; font-weight: 650; }
+    .app-project small { display: block; color: #717d8e; font-size: 10px; font-weight: 400; text-align: right; }
+    .app-sidebar {
+      position: absolute; top: 52px; bottom: 28px; left: 0; width: 218px; padding: 18px 14px;
+      border-right: 1px solid #252c38; background: #0e1219; color: #808c9e;
+    }
+    .app-sidebar .section { color: #b0bacb; font-size: 10px; font-weight: 700; letter-spacing: .13em; margin: 12px 0 17px; }
+    .app-sidebar .project { height: 38px; display: flex; align-items: center; gap: 9px; font-size: 11px; }
+    .app-sidebar .project b { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; background: #28345c; color: #bdc9ff; }
+    .app-sidebar .project.active { color: #e4e9f1; }
+    .app-terminal {
+      position: absolute; top: 52px; right: 0; bottom: 28px; left: 218px; padding: 26px 31px;
+      color: #8f9bab; font: 12px/1.9 "SFMono-Regular", Menlo, monospace;
+    }
+    .app-terminal .tab { color: #aeb9d4; font: 600 11px -apple-system, BlinkMacSystemFont, sans-serif; margin-bottom: 24px; }
+    .app-terminal .green { color: #96cdb0; }
+    .app-terminal .blue { color: #8faff1; }
+    .app-status {
+      position: absolute; inset: auto 0 0; height: 28px; display: flex; align-items: center;
+      padding: 0 13px; border-top: 1px solid #252c38; background: #0c1017;
+      color: #798698; font-size: 10px;
+    }
+    .app-status span { margin-left: auto; }
+    .veil { position: absolute; inset: 0; background: #05070dc9; backdrop-filter: blur(2px); }
+    .concept {
+      position: absolute; top: 42px; left: 44px; z-index: 2; display: grid; gap: 7px;
+    }
+    .concept small { color: #738199; font: 600 10px "SFMono-Regular", Menlo, monospace; letter-spacing: .14em; }
+    .concept strong { color: #c9d2e5; font-size: 17px; font-weight: 650; letter-spacing: -.03em; }
+    .dialog {
+      position: absolute; z-index: 2; top: 50%; left: 50%; transform: translate(-50%, -48%);
+      width: 590px; padding: 27px 28px 24px; border: 1px solid #3a465b; border-radius: 17px;
+      background: var(--panel); box-shadow: 0 30px 90px #000b, inset 0 1px 0 #ffffff12;
+    }
+    .dialog-head { display: flex; align-items: start; justify-content: space-between; margin-bottom: 22px; }
+    .eyebrow { color: #889cf3; font: 700 10px "SFMono-Regular", Menlo, monospace; letter-spacing: .16em; }
+    h1 { margin: 7px 0 0; font-size: 21px; line-height: 1.25; font-weight: 680; letter-spacing: -.045em; }
+    .close { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 7px; color: #9ca8b9; font-size: 19px; line-height: 1; }
+    .field { margin: 15px 0 17px; }
+    .field-label { display: flex; align-items: center; min-height: 22px; margin-bottom: 7px; color: #b5becc; font-size: 11px; font-weight: 630; }
+    .field-label small { margin-left: 7px; color: #79859a; font-size: 10px; font-weight: 500; }
+    .hint { display: inline-flex; align-items: center; justify-content: center; flex: none; white-space: nowrap;
+      font: 600 10px "SFMono-Regular", Menlo, monospace; letter-spacing: -.025em; }
+    .field-label .hint { margin-left: auto; }
+    .field > .hint { display: none; }
+    .input { position: relative; min-height: 40px; display: flex; align-items: center; padding: 0 13px; border: 1px solid #414e64;
+      border-radius: 9px; background: #0e131d; color: #828fa3; font-size: 11px; }
+    .name .input { border-color: #657cc2; box-shadow: 0 0 0 3px #566bba29; }
+    .caret { width: 1px; height: 16px; margin-right: 2px; background: #b8c8ff; }
+    .profiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin: 18px 0 19px; }
+    .profile { position: relative; min-height: 94px; padding: 13px; border: 1px solid #364153; border-radius: 11px;
+      background: #151b27; }
+    .profile.selected { border-color: #7083ca; background: #212b48; box-shadow: inset 0 0 0 1px #697dc331; }
+    .profile-icon { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; background: #2b3545;
+      color: #c5cfde; font: 700 11px "SFMono-Regular", Menlo, monospace; }
+    .profile.selected .profile-icon { color: #d4deff; background: #40528b; }
+    .profile strong { display: block; margin-top: 9px; font-size: 11px; font-weight: 680; }
+    .profile small { display: block; margin-top: 3px; color: #8a97a9; font-size: 9px; line-height: 1.25; }
+    .profile .hint { position: absolute; top: 13px; right: 12px; }
+    .thread .input { color: #7e8a9c; border-color: #344052; }
+    .field-help { margin-top: 7px; color: #727f91; font-size: 10px; line-height: 1.4; }
+    .danger { position: relative; min-height: 59px; display: flex; align-items: center; gap: 11px;
+      margin-top: 20px; padding: 11px 12px; border: 1px solid #74513f; border-radius: 9px; background: #302019; }
+    .check { width: 15px; height: 15px; display: grid; place-items: center; flex: none; border-radius: 4px;
+      background: #e39368; color: #291b16; font-size: 11px; font-weight: 800; }
+    .shield { color: #e8a17c; font-size: 18px; }
+    .danger strong { display: block; color: #efc1a8; font-size: 11px; font-weight: 680; }
+    .danger small { display: block; margin-top: 3px; color: #aa8170; font-size: 10px; }
+    .danger .hint { margin-left: auto; }
+    .footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 23px; padding-top: 18px;
+      border-top: 1px solid #313a49; }
+    .button { height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 0 13px; border: 1px solid #3d4759; border-radius: 8px; background: #252c39;
+      color: #c4cddb; font-size: 11px; font-weight: 670; }
+    .button.primary { color: #f6f7ff; border-color: #889ae6; background: #6578d0; box-shadow: 0 3px 11px #24336d59; }
+    .button.primary .hint { color: #f3f5ff; }
+
+    /* 01 — Integrated endcaps: keyboard cues share each control's geometry. */
+    body[data-variant="1"] .hint { min-width: 31px; height: 20px; padding: 0 7px; border: 1px solid #55647b;
+      border-radius: 6px; background: #273142; color: #d4ddef; }
+    body[data-variant="1"] .field-label .hint { display: none; }
+    body[data-variant="1"] .field .input { padding-right: 54px; }
+    body[data-variant="1"] .field .input + .hint { position: absolute; top: 39px; right: 9px; display: inline-flex; }
+    body[data-variant="1"] .field { position: relative; }
+    body[data-variant="1"] .profile .hint { top: 10px; right: 10px; }
+    body[data-variant="1"] .profile.selected .hint { border-color: #8599ed; background: #46598f; }
+    body[data-variant="1"] .danger .hint { border-color: #a77459; background: #583729; color: #ffd0b0; }
+    body[data-variant="1"] .button .hint { height: 19px; border-color: #576379; background: #313b4d; }
+    body[data-variant="1"] .button.primary .hint { border-color: #a3b0ef; background: #5267b7; }
+
+    /* 02 — Shortcut rail: all six keys live in one quiet aligned column. */
+    body[data-variant="2"] .dialog { width: 560px; padding-right: 69px; }
+    body[data-variant="2"] .profiles { grid-template-columns: 1fr; gap: 6px; margin: 15px 0; }
+    body[data-variant="2"] .profile { min-height: 48px; display: grid; grid-template-columns: 26px 1fr; align-items: center; column-gap: 10px; padding: 7px 10px; }
+    body[data-variant="2"] .profile strong { margin: 0; }
+    body[data-variant="2"] .profile small { grid-column: 2; margin-top: -4px; }
+    body[data-variant="2"] .profile .hint,
+    body[data-variant="2"] .field-label .hint,
+    body[data-variant="2"] .danger .hint { position: absolute; right: -45px; top: 50%; transform: translateY(-50%); margin: 0; }
+    body[data-variant="2"] .field { position: relative; }
+    body[data-variant="2"] .field-label .hint { top: 55px; }
+    body[data-variant="2"] .hint { min-width: 31px; height: 23px; padding: 0 5px; border-radius: 9px;
+      border: 1px solid #46566f; background: #242e40; color: #b7c7e3; }
+    body[data-variant="2"] .profile.selected .hint { border-color: #8195e6; background: #364778; color: #e6edff; }
+    body[data-variant="2"] .danger .hint { border-color: #916349; background: #4a3126; color: #efb796; }
+    body[data-variant="2"] .dialog::after { content: ""; position: absolute; top: 123px; bottom: 101px; right: 51px;
+      width: 1px; background: linear-gradient(transparent, #45546e 11%, #45546e 89%, transparent); }
+    body[data-variant="2"] .footer { margin-right: -41px; }
+    body[data-variant="2"] .button .hint { border: 0; background: #ffffff12; }
+
+    /* 03 — Soft chips: shorter text and paper-thin shape next to the label. */
+    body[data-variant="3"] .dialog { background: #19202c; border-color: #3a4556; }
+    body[data-variant="3"] .hint { height: 19px; padding: 0 7px; border: 1px solid #4a5a70; border-radius: 999px;
+      background: #273343; color: #b7c7dc; font-size: 10px; }
+    body[data-variant="3"] .field-label { gap: 7px; }
+    body[data-variant="3"] .field-label .hint { margin-left: 0; }
+    body[data-variant="3"] .profile .hint { top: auto; right: auto; left: 12px; bottom: 11px; }
+    body[data-variant="3"] .profile { min-height: 117px; }
+    body[data-variant="3"] .profile strong { margin-top: 8px; }
+    body[data-variant="3"] .profile small { max-width: 135px; }
+    body[data-variant="3"] .profile.selected .hint { border-color: #7f92db; background: #3a4c77; color: #edf1ff; }
+    body[data-variant="3"] .danger .hint { border-color: #8b5e48; background: #543629; color: #f5bd9f; }
+    body[data-variant="3"] .footer .hint { background: #ffffff14; border-color: #ffffff2b; }
+
+    /* 04 — Number-only tags: Command is established once, not repeated six times. */
+    body[data-variant="4"] .dialog { width: 604px; }
+    body[data-variant="4"] .dialog-head { margin-bottom: 10px; }
+    body[data-variant="4"] .hint { width: 24px; height: 24px; padding: 0; border-radius: 8px; color: #c7d2ee;
+      border: 1px solid #50617e; background: #29364e; font-size: 11px; }
+    body[data-variant="4"] .hint .cmd { display: none; }
+    body[data-variant="4"] .shortcut-explainer { display: flex; align-items: center; gap: 8px; margin: 0 0 18px;
+      color: #9daeca; font-size: 10px; }
+    body[data-variant="4"] .shortcut-explainer b { width: 22px; height: 22px; display: grid; place-items: center;
+      border: 1px solid #6475a0; border-radius: 7px; background: #303f63; color: #e0e8ff; font: 600 11px "SFMono-Regular", Menlo, monospace; }
+    body[data-variant="4"] .profile .hint { top: 11px; right: 11px; }
+    body[data-variant="4"] .profile.selected .hint { border-color: #9aacf3; background: #4a5f9b; color: #fff; }
+    body[data-variant="4"] .danger .hint { border-color: #9f6d51; background: #573728; color: #ffcfac; }
+    body[data-variant="4"] .button .hint { width: auto; min-width: 24px; padding: 0 6px; font-size: 9px; }
+    body[data-variant="4"] .button.primary .hint { min-width: 34px; border-color: #b4c1ff; background: #5368ad; }
+
+    /* 05 — Focus path: controls read like a crisp keyboard sequence. */
+    body[data-variant="5"] .dialog { width: 570px; padding-left: 58px; }
+    body[data-variant="5"] .dialog::before { content: ""; position: absolute; left: 32px; top: 156px; bottom: 123px;
+      width: 1px; background: linear-gradient(#6374b8, #39465c 70%, #80543f); }
+    body[data-variant="5"] .profiles { grid-template-columns: 1fr; gap: 5px; margin: 15px 0; }
+    body[data-variant="5"] .profile { min-height: 46px; display: grid; grid-template-columns: 25px 1fr; align-items: center;
+      column-gap: 10px; padding: 6px 10px; }
+    body[data-variant="5"] .profile strong { margin: 0; }
+    body[data-variant="5"] .profile small { grid-column: 2; margin-top: -5px; }
+    body[data-variant="5"] .field, body[data-variant="5"] .profile, body[data-variant="5"] .danger { position: relative; }
+    body[data-variant="5"] .field-label .hint, body[data-variant="5"] .profile .hint,
+    body[data-variant="5"] .danger .hint { position: absolute; top: 50%; left: -37px; right: auto; transform: translateY(-50%); margin: 0; }
+    body[data-variant="5"] .field-label .hint { top: 56px; }
+    body[data-variant="5"] .hint { min-width: 28px; height: 23px; padding: 0 5px; border: 1px solid #627397;
+      border-radius: 999px; background: #2d3a57; color: #dbe5ff; }
+    body[data-variant="5"] .profile.selected .hint { border-color: #a4b5f5; background: #5267a8; color: #fff; }
+    body[data-variant="5"] .danger .hint { border-color: #a56e50; background: #573828; color: #ffcaab; }
+    body[data-variant="5"] .footer .hint { border: 0; background: #ffffff12; }
+
+    .shortcut-explainer { display: none; }
+  </style>
+</head>
+<body>
+  <div class="app-top"><div class="traffic"><i></i><i></i><i></i></div><span class="app-brand">PanePilot</span><div class="app-project">PanePilot <small>~/Projects/PanePilot</small></div></div>
+  <div class="app-sidebar"><div class="section">PROJECTS</div><div class="project active"><b>P</b>PanePilot</div><div class="project"><b>L</b>LaTeX manuscript</div><div class="project"><b>V</b>ved-scout</div></div>
+  <div class="app-terminal"><div class="tab">Terminals　 /　 Codex</div><div><span class="green">❯</span> codex resume <span class="blue">&lt;thread-id&gt;</span></div><div><span class="green">✓</span> Ready to work in PanePilot</div><div>　</div><div><span class="green">❯</span> _</div></div>
+  <div class="app-status">◈ YOLO agent <span>● 0 working　　● 1 response ready　　● 1 blocked</span></div>
+  <div class="veil"></div>
+  <div class="concept"><small>NEW TERMINAL / SHORTCUT TREATMENT</small><strong id="concept-name"></strong></div>
+  <section class="dialog" aria-label="New terminal dialog mockup">
+    <header class="dialog-head"><div><div class="eyebrow">NEW TERMINAL</div><h1>What do you want to run?</h1></div><div class="close">×</div></header>
+    <div class="shortcut-explainer"><b>⌘</b><span>Press Command + a number to jump to a control</span></div>
+    <div class="field name"><div class="field-label">Terminal / tmux name <kbd class="hint"><span class="cmd">⌘</span>1</kbd></div><div class="input"><span class="caret"></span>Optional — PanePilot will choose a unique name</div><kbd class="hint"><span class="cmd">⌘</span>1</kbd></div>
+    <div class="profiles">
+      <div class="profile"><div class="profile-icon">›_</div><strong>Login shell</strong><small>Your normal interactive shell</small><kbd class="hint"><span class="cmd">⌘</span>2</kbd></div>
+      <div class="profile selected"><div class="profile-icon">✦</div><strong>Codex</strong><small>Start an OpenAI coding agent</small><kbd class="hint"><span class="cmd">⌘</span>3</kbd></div>
+      <div class="profile"><div class="profile-icon">◈</div><strong>Claude Code</strong><small>Start an Anthropic coding agent</small><kbd class="hint"><span class="cmd">⌘</span>4</kbd></div>
+    </div>
+    <div class="field thread"><div class="field-label">Existing Codex thread ID <small>Optional</small><kbd class="hint"><span class="cmd">⌘</span>5</kbd></div><div class="input">xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</div><kbd class="hint"><span class="cmd">⌘</span>5</kbd><div class="field-help">Paste an exact thread ID to resume an existing conversation.</div></div>
+    <div class="danger"><span class="check">✓</span><span class="shield">♢</span><div><strong>Disable permission checks</strong><small>Only for isolated or disposable environments</small></div><kbd class="hint"><span class="cmd">⌘</span>6</kbd></div>
+    <footer class="footer"><div class="button">Cancel <kbd class="hint">Esc</kbd></div><div class="button primary">Start terminal <kbd class="hint">⌘↵</kbd></div></footer>
+  </section>
+  <script>
+    const variant = new URLSearchParams(location.search).get('variant') || '1';
+    const names = {
+      '1': '01 / Integrated endcaps',
+      '2': '02 / Aligned shortcut rail',
+      '3': '03 / Soft label chips',
+      '4': '04 / Number-only tags',
+      '5': '05 / Guided focus path'
+    };
+    document.body.dataset.variant = variant;
+    document.getElementById('concept-name').textContent = names[variant] || names['1'];
+  </script>
+</body>
+</html>
