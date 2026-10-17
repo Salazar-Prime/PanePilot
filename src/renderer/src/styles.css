@@ -3676,6 +3676,30 @@ select:focus-visible {
   font-size: 9px;
 }
 
+.launcher-modal .profile-card {
+  position: relative;
+  padding-right: 38px;
+}
+
+.launcher-modal .modal-shortcut-hint {
+  color: #777f90;
+  font-family: "SFMono-Regular", "Cascadia Code", monospace;
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.launcher-modal .field > span .modal-shortcut-hint,
+.launcher-modal .danger-option > .modal-shortcut-hint {
+  margin-left: auto;
+}
+
+.launcher-modal .profile-card > .modal-shortcut-hint {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
 .danger-option {
   display: flex;
   align-items: center;

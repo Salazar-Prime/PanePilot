@@ -20,6 +20,19 @@ describe('new project and agent launcher defaults', () => {
     expect(source).toContain('if (!dialogRef.current.contains(event.target))')
   })
 
+  it('numbers terminal launcher controls and submits through its form shortcut', () => {
+    const source = readFileSync('src/renderer/src/components/TerminalLauncher.tsx', 'utf8')
+    expect(source).toContain('useModalShortcuts({')
+    expect(source).toContain('onSubmit: () => formRef.current?.requestSubmit()')
+    expect(source).toContain('blocked: submitting')
+    expect(source).toContain('if (submittingRef.current) return')
+    expect(source).toContain('aria-keyshortcuts="Meta+1 Control+1"')
+    expect(source).toContain('aria-keyshortcuts={`Meta+${index + 2} Control+${index + 2}`}')
+    expect(source).toContain("profile === 'codex' ? 'Meta+6 Control+6' : 'Meta+5 Control+5'")
+    expect(source.match(/data-modal-shortcut/g)).toHaveLength(4)
+    expect(source).toContain('useModalEscape(onClose, true, submitting)')
+  })
+
   it('starts new Codex and LaTeX chats with visible permission bypass checked', () => {
     for (const component of ['TerminalLauncher', 'LatexChatLauncher']) {
       const source = readFileSync(`src/renderer/src/components/${component}.tsx`, 'utf8')
