@@ -1,24 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bot, ShieldAlert, Sparkles, TerminalSquare, X } from 'lucide-react'
+import { Bot, Sparkles, TerminalSquare, X } from 'lucide-react'
 import type { LaunchProfile, StartTerminalInput } from '@shared/types'
 import { useModalEscape } from '../lib/modalEscape'
 import { useModalShortcuts } from '../lib/modalShortcuts'
 
-const profiles: Array<{
-  id: LaunchProfile
-  label: string
-  description: string
-  icon: typeof Bot
-}> = [
-  { id: 'shell', label: 'Login shell', description: 'Your normal interactive shell', icon: TerminalSquare },
-  { id: 'codex', label: 'Codex', description: 'Start an OpenAI coding agent', icon: Sparkles },
-  { id: 'claude', label: 'Claude Code', description: 'Start an Anthropic coding agent', icon: Bot }
+const profiles: Array<{ id: LaunchProfile; label: string; icon: typeof Bot }> = [
+  { id: 'shell', label: 'Login shell', icon: TerminalSquare },
+  { id: 'codex', label: 'Codex', icon: Sparkles },
+  { id: 'claude', label: 'Claude Code', icon: Bot }
 ]
 
 function ShortcutRailMarker({ number }: { number: number }) {
   return (
     <span className="launcher-shortcut-track" aria-hidden="true">
-      <kbd className="modal-shortcut-hint">⌘{number}</kbd>
+      <kbd className="modal-shortcut-hint">{number}</kbd>
     </span>
   )
 }
@@ -42,6 +37,9 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
   const [error, setError] = useState('')
   const isAgent = profile === 'codex' || profile === 'claude'
   const submitModifierLabel = navigator.platform.toLocaleLowerCase().includes('mac') ? 'Cmd' : 'Ctrl'
+  const dangerousModeHelp = profile === 'codex'
+    ? 'Codex will run without approvals or sandboxing. Only use in isolated or disposable environments.'
+    : 'Claude Code will skip permission prompts. Only use in isolated or disposable environments.'
   useModalEscape(onClose, true, submitting)
   useModalShortcuts({
     dialogRef,
@@ -101,98 +99,95 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
         aria-labelledby="launcher-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="modal-heading">
-          <div>
-            <span className="eyebrow">NEW TERMINAL</span>
-            <h2 id="launcher-title">What do you want to run?</h2>
-          </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close">
-            <X size={17} />
-          </button>
-        </div>
+        <h2 id="launcher-title" className="launcher-visually-hidden">New terminal</h2>
+        <button className="icon-button launcher-close" onClick={onClose} aria-label="Close">
+          <X size={17} />
+        </button>
         <form ref={formRef} onSubmit={submit}>
-          <div className="launcher-shortcut-row launcher-name-row rail-start">
-            <ShortcutRailMarker number={1} />
-            <label className="field">
-              <span>Terminal / tmux name</span>
-              <input
-                ref={nameInputRef}
-                autoFocus
-                data-modal-shortcut
-                aria-keyshortcuts="Meta+1 Control+1"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Optional — PanePilot will choose a unique name"
-              />
-            </label>
-          </div>
-          <div className="profile-grid">
-            {profiles.map((item, index) => {
-              const Icon = item.icon
-              return (
-                <div
-                  key={item.id}
-                  className={`launcher-shortcut-row ${profile === item.id ? 'selected' : ''} ${!isAgent && index === profiles.length - 1 ? 'rail-end' : ''}`}
-                >
-                  <ShortcutRailMarker number={index + 2} />
-                  <button
-                    type="button"
-                    data-modal-shortcut
-                    aria-keyshortcuts={`Meta+${index + 2} Control+${index + 2}`}
-                    className={`profile-card ${profile === item.id ? 'selected' : ''}`}
-                    onClick={() => setProfile(item.id)}
-                  >
-                    <Icon size={20} />
-                    <strong>{item.label}</strong>
-                    <span>{item.description}</span>
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-          {profile === 'codex' && (
-            <div className="launcher-shortcut-row launcher-thread-row">
-              <ShortcutRailMarker number={5} />
+          <div className="launcher-fields">
+            <div className="launcher-shortcut-row launcher-name-row">
+              <ShortcutRailMarker number={1} />
               <label className="field">
-                <span>Existing Codex thread ID <small>Optional</small></span>
+                <span>Terminal / tmux name</span>
                 <input
+                  ref={nameInputRef}
+                  autoFocus
                   data-modal-shortcut
-                  aria-keyshortcuts="Meta+5 Control+5"
-                  value={codexThreadId}
-                  onChange={(event) => setCodexThreadId(event.target.value)}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
+                  aria-keyshortcuts="Meta+1 Control+1"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Optional — PanePilot will choose a unique name"
                 />
-                <small>
-                  Paste an exact thread ID to run <code>codex resume</code> instead
-                  of creating a new conversation.
-                </small>
               </label>
             </div>
-          )}
-          {isAgent && (
-            <div className="launcher-shortcut-row launcher-danger-row rail-end">
-              <ShortcutRailMarker number={profile === 'codex' ? 6 : 5} />
-              <label className={`danger-option ${dangerousMode ? 'enabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  data-modal-shortcut
-                  aria-keyshortcuts={
-                    profile === 'codex' ? 'Meta+6 Control+6' : 'Meta+5 Control+5'
-                  }
-                  checked={dangerousMode}
-                  onChange={(event) => setDangerousMode(event.target.checked)}
-                />
-                <ShieldAlert size={19} />
-                <span>
-                  <strong>Disable permission checks</strong>
-                  <small>Only for isolated or disposable environments</small>
-                </span>
-              </label>
+            <div className="profile-grid launcher-profile-group">
+              {profiles.map((item, index) => {
+                const Icon = item.icon
+                return (
+                  <div
+                    key={item.id}
+                    className={`launcher-shortcut-row launcher-profile-row ${profile === item.id ? 'selected' : ''}`}
+                  >
+                    <ShortcutRailMarker number={index + 2} />
+                    <button
+                      type="button"
+                      data-modal-shortcut
+                      aria-keyshortcuts={`Meta+${index + 2} Control+${index + 2}`}
+                      aria-pressed={profile === item.id}
+                      data-profile={item.id}
+                      className={`profile-card ${profile === item.id ? 'selected' : ''}`}
+                      onClick={() => setProfile(item.id)}
+                    >
+                      <Icon size={17} aria-hidden="true" />
+                      <span>{item.label}</span>
+                    </button>
+                  </div>
+                )
+              })}
             </div>
-          )}
+            {profile === 'codex' && (
+              <div className="launcher-shortcut-row launcher-thread-row">
+                <ShortcutRailMarker number={5} />
+                <label className="field">
+                  <span>Codex thread ID</span>
+                  <input
+                    data-modal-shortcut
+                    aria-keyshortcuts="Meta+5 Control+5"
+                    value={codexThreadId}
+                    onChange={(event) => setCodexThreadId(event.target.value)}
+                    placeholder="Paste a thread ID to resume (optional)"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                </label>
+              </div>
+            )}
+            {isAgent && (
+              <div className="launcher-shortcut-row launcher-danger-row">
+                <ShortcutRailMarker number={profile === 'codex' ? 6 : 5} />
+                <label
+                  className={`danger-option ${dangerousMode ? 'enabled' : ''}`}
+                  title={dangerousModeHelp}
+                >
+                  <input
+                    type="checkbox"
+                    data-modal-shortcut
+                    aria-describedby="launcher-yolo-warning"
+                    aria-keyshortcuts={
+                      profile === 'codex' ? 'Meta+6 Control+6' : 'Meta+5 Control+5'
+                    }
+                    checked={dangerousMode}
+                    onChange={(event) => setDangerousMode(event.target.checked)}
+                  />
+                  <strong>YOLO mode</strong>
+                  <span id="launcher-yolo-warning" className="launcher-visually-hidden">
+                    {dangerousModeHelp}
+                  </span>
+                </label>
+              </div>
+            )}
+          </div>
           {error && <p className="form-error">{error}</p>}
           <div className="modal-actions">
             <button
@@ -202,7 +197,7 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
               title="Escape"
               aria-keyshortcuts="Escape"
             >
-              Cancel <kbd className="modal-shortcut-hint">Esc</kbd>
+              Cancel <span className="launcher-button-shortcut" aria-hidden="true"><kbd>Esc</kbd></span>
             </button>
             <button
               type="submit"
@@ -213,9 +208,9 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
             >
               {submitting ? 'Starting…' : 'Start terminal'}
               <span className="launcher-submit-shortcut" aria-hidden="true">
-                <kbd className="modal-shortcut-hint">{submitModifierLabel}</kbd>
+                <kbd>{submitModifierLabel}</kbd>
                 <span>+</span>
-                <kbd className="modal-shortcut-hint">Enter</kbd>
+                <kbd>Enter</kbd>
               </span>
             </button>
           </div>
