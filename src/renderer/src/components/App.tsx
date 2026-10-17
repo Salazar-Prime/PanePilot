@@ -111,6 +111,7 @@ import {
 import {
   consumeWorkspaceTabRequest,
   loadWorkspaceHistory,
+  mostRecentTerminalDestination,
   nextWorkspaceSwitcherIndex,
   nextWorkspaceSwitcherMode,
   projectCapabilityDestinations,
@@ -761,7 +762,17 @@ export function App() {
         setConnections(nextConnections)
         setProjects(nextProjects)
         const firstActive = nextProjects.find((project) => !project.archived)
-        setSelectedProjectId((current) => current ?? firstActive?.id ?? null)
+        const lastTerminal = mostRecentTerminalDestination(
+          workspaceHistoryRef.current,
+          nextProjects
+        )
+        setSelectedProjectId((current) =>
+          current ?? lastTerminal?.projectId ?? firstActive?.id ?? null
+        )
+        if (lastTerminal?.sessionId) {
+          setSelectedSessionId((current) => current ?? lastTerminal.sessionId)
+          openSession(lastTerminal.sessionId)
+        }
       })
       .catch((caught) => setError(messageFor(caught)))
       .finally(() => setLoading(false))

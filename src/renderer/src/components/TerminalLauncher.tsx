@@ -24,7 +24,7 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
   const [profile, setProfile] = useState<LaunchProfile>('codex')
   const [name, setName] = useState('')
   const [codexThreadId, setCodexThreadId] = useState('')
-  const [dangerousMode, setDangerousMode] = useState(false)
+  const [dangerousMode, setDangerousMode] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const isAgent = profile === 'codex' || profile === 'claude'
@@ -88,7 +88,6 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
                   className={`profile-card ${profile === item.id ? 'selected' : ''}`}
                   onClick={() => {
                     setProfile(item.id)
-                    if (item.id === 'shell') setDangerousMode(false)
                   }}
                 >
                   <Icon size={20} />

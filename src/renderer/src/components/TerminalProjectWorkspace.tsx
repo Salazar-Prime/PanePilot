@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Clipboard,
@@ -116,6 +116,7 @@ export function TerminalProjectWorkspace({
     null
   )
   const [draggingTabId, setDraggingTabId] = useState<string | null>(null)
+  const pendingStartedSessionId = useRef<string | null>(null)
   const [tabDropTarget, setTabDropTarget] = useState<{
     targetId: string
     edge: TabDropEdge
@@ -242,6 +243,23 @@ export function TerminalProjectWorkspace({
   }, [activeSession?.id, workspaceActive])
 
   useEffect(() => {
+    const pending = pendingStartedSessionId.current
+    if (!pending) return
+    if (!workspaceActive) {
+      pendingStartedSessionId.current = null
+      return
+    }
+    // Wait until the project refresh contains the new session and the launch
+    // dialog has closed; otherwise the old tab or modal can reclaim focus.
+    if (showLauncher || !terminalSessions.some((session) => session.id === pending)) return
+    pendingStartedSessionId.current = null
+    selectWorkspaceTab('terminal')
+    onSessionSelected(pending)
+    onOpenSession(pending)
+    onSelectSession(pending)
+  }, [project.sessions, showLauncher, workspaceActive])
+
+  useEffect(() => {
     if (!workspaceActive) return
     const session = tab === 'terminal' ? activeSession : null
     onWorkspaceDestinationVisited(
@@ -355,11 +373,13 @@ export function TerminalProjectWorkspace({
 
   async function startTerminal(input: Parameters<typeof window.projectConsole.terminals.start>[0]) {
     const session = await window.projectConsole.terminals.start(input)
-    await onChanged()
-    selectWorkspaceTab('terminal')
-    onSessionSelected(session.id)
-    onOpenSession(session.id)
-    onSelectSession(session.id)
+    pendingStartedSessionId.current = session.id
+    try {
+      await onChanged()
+    } catch (error) {
+      pendingStartedSessionId.current = null
+      throw error
+    }
   }
 
   function openFile(target: TerminalFileTarget) {

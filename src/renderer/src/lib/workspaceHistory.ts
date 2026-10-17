@@ -301,6 +301,27 @@ export function recentWorkspaceDestinations(
   return result
 }
 
+/** Restore the last usable terminal, even when a non-terminal tool was visited later. */
+export function mostRecentTerminalDestination(
+  history: WorkspaceDestination[],
+  projects: Project[]
+): WorkspaceDestination | null {
+  const projectsById = new Map(
+    projects.filter((project) => !project.archived && project.type === 'terminal')
+      .map((project) => [project.id, project])
+  )
+  for (const destination of history) {
+    if (destination.tab !== 'terminal' || !destination.sessionId) continue
+    const project = projectsById.get(destination.projectId)
+    if (!project) continue
+    if (!project.sessions.some((session) =>
+      session.id === destination.sessionId && session.kind === 'terminal' && !session.archived
+    )) continue
+    return hydrateDestination(destination, project)
+  }
+  return null
+}
+
 export function workspaceSwitcherDestinations(
   history: WorkspaceDestination[],
   current: WorkspaceDestination | null,

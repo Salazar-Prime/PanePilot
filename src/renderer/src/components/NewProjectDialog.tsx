@@ -67,6 +67,8 @@ export function NewProjectDialog({
   const [remoteLoading, setRemoteLoading] = useState(false)
   const [remoteSelectionIndex, setRemoteSelectionIndex] = useState(0)
   const remoteBrowseRequestRef = useRef(0)
+  const dialogRef = useRef<HTMLElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
   const connection = connections.find((item) => item.id === connectionId)
   const definition = projectTypeRegistry[type]
   const folderDestination = newProjectFolderDestination(folder, newFolderName)
@@ -90,6 +92,24 @@ export function NewProjectDialog({
       Math.min(remoteSelectionIndex, Math.max(0, remoteFolderEntries.length - 1))
     ] ?? null
   useModalEscape(onClose, true, submitting)
+
+  useEffect(() => {
+    const focusFolderInput = () => folderInputRef.current?.focus()
+    const keepFocusInDialog = (event: FocusEvent) => {
+      if (!(event.target instanceof Element) || !dialogRef.current) return
+      const otherDialog = event.target.closest('[role="dialog"][aria-modal="true"]')
+      if (otherDialog && otherDialog !== dialogRef.current) return
+      if (!dialogRef.current.contains(event.target)) {
+        focusFolderInput()
+      }
+    }
+    document.addEventListener('focusin', keepFocusInDialog)
+    const frame = window.requestAnimationFrame(focusFolderInput)
+    return () => {
+      document.removeEventListener('focusin', keepFocusInDialog)
+      window.cancelAnimationFrame(frame)
+    }
+  }, [])
 
   useEffect(() => {
     if (!nameEdited) {
@@ -193,6 +213,7 @@ export function NewProjectDialog({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="modal project-modal"
         role="dialog"
         aria-modal="true"
@@ -283,6 +304,7 @@ export function NewProjectDialog({
                     <ChevronUp size={15} />
                   </button>
                   <input
+                    ref={folderInputRef}
                     value={folder}
                     onChange={(event) => updateRemotePath(event.target.value)}
                     onKeyDown={(event) => {
@@ -486,6 +508,7 @@ export function NewProjectDialog({
                 <span>{folderMode === 'new' ? 'Create inside' : 'Project folder'}</span>
                 <div className="field-row">
                   <input
+                    ref={folderInputRef}
                     value={folder}
                     onChange={(event) => setFolder(event.target.value)}
                     placeholder={

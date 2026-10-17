@@ -46,7 +46,7 @@ export function LatexChatLauncher({
     initialSection?.id ?? sections[0]?.id ?? ''
   )
   const [name, setName] = useState('')
-  const [dangerousMode, setDangerousMode] = useState(false)
+  const [dangerousMode, setDangerousMode] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   useModalEscape(onClose, true, submitting)

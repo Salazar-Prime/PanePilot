@@ -8,6 +8,7 @@ import {
   consumeWorkspaceTabRequest,
   createWorkspaceDestination,
   loadWorkspaceHistory,
+  mostRecentTerminalDestination,
   nextWorkspaceSwitcherIndex,
   nextWorkspaceSwitcherMode,
   projectCapabilityDestinations,
@@ -64,6 +65,33 @@ const project: Project = {
 }
 
 describe('recent workspace history', () => {
+  it('restores the latest valid terminal even after visiting tools or losing a session', () => {
+    const older = { ...session, id: 'older', name: 'Older' }
+    const newer = { ...session, id: 'newer', name: 'Newer' }
+    const active = { ...project, sessions: [older, newer] }
+    const history = [
+      createWorkspaceDestination({ project: active, tab: 'notes' }),
+      createWorkspaceDestination({ project: active, tab: 'terminal', sessionId: 'deleted' }),
+      createWorkspaceDestination({ project: active, tab: 'terminal', sessionId: newer.id }),
+      createWorkspaceDestination({ project: active, tab: 'terminal', sessionId: older.id })
+    ]
+    expect(mostRecentTerminalDestination(history, [active])).toEqual(
+      expect.objectContaining({ projectId: active.id, sessionId: newer.id })
+    )
+    expect(mostRecentTerminalDestination(history, [{ ...active, sessions: [older] }])).toEqual(
+      expect.objectContaining({ sessionId: older.id })
+    )
+    expect(mostRecentTerminalDestination(history, [{ ...active, archived: true }])).toBeNull()
+  })
+
+  it('uses that history choice when initializing the focused workspace', () => {
+    const app = readFileSync('src/renderer/src/components/App.tsx', 'utf8')
+    expect(app).toContain('const lastTerminal = mostRecentTerminalDestination(')
+    expect(app).toContain('current ?? lastTerminal?.projectId ?? firstActive?.id ?? null')
+    expect(app).toContain('setSelectedSessionId((current) => current ?? lastTerminal.sessionId)')
+    expect(app).toContain('openSession(lastTerminal.sessionId)')
+  })
+
   it('moves revisited destinations to the front without duplicates', () => {
     const notes = createWorkspaceDestination({ project, tab: 'notes' })
     const files = createWorkspaceDestination({ project, tab: 'files' })

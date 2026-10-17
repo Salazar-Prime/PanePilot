@@ -34,7 +34,7 @@ These are owner-approved decisions and should be treated as product invariants u
 7. Terminals appear both as tabs in the main workspace and as direct-jump items under their project in the sidebar.
 8. Persistent terminals use tmux when available. A plain PTY is the fallback.
 9. User-created terminal launch profiles are login shell, Codex, and Claude Code. Reusable custom commands are project Actions, not ordinary terminal tabs.
-10. Dangerous permission bypass is per terminal, off by default, and visibly marked. Enabling or resuming it does not show an additional confirmation prompt, and it must never become a silent global default.
+10. Dangerous permission bypass is per agent terminal and visibly marked. New Codex, Claude, and LaTeX chat launchers show its checkbox checked by default, but it can be unchecked for each launch; login shells never receive it. Enabling or resuming it does not show an additional confirmation prompt, and it must never become a hidden global preference.
 11. Terminal rename is non-destructive. Detaching an ordinary terminal leaves its tmux session running. There is no PanePilot terminal archive; confirmed deletion closes the exact live terminal session when necessary, then removes PanePilot's saved output.
 12. Deleting a terminal does not delete the provider's Codex or Claude conversation archive.
 13. Local Codex and Claude archives are indexed read-only and are searchable across full message text.
@@ -130,6 +130,8 @@ These are owner-approved decisions and should be treated as product invariants u
 84. The focused project's tool navigation lives centered in the existing 26 px status bar, not a separate row above the workspace. It remains icon-plus-label, horizontally scrollable at narrow widths, and switches with the focused split pane. The dangerous-mode indicator stays left and transfer progress and cross-project counts stay right. The compact top bar keeps project name and copyable path on one line. GitHub visibility overlays a green globe for Public or yellow lock for Private on the GitHub icon; Internal and Unknown remain distinct. Disconnected Google Drive setup, Quick Notes, quick chats, Sub-agents, and project settings are in the top overflow; an already-connected Drive may retain its direct control. The standalone bottom-left Ready label is gone; dangerous mode shows only a shield and YOLO agent pill, while response-ready/working/input/blocked counts remain. PanePilot no longer archives terminal sessions, and the schema upgrade deletes legacy archived-session records and their saved output without deleting archived projects or provider conversations.
 
 85. Each top-overflow command has a pin toggle. Pinned commands appear as compact icon buttons beside the overflow trigger and can be reordered by dragging them on the top bar; the overflow menu never reorders. Their chosen order is a client-local preference across restarts. Project-specific pinned commands remain visible but disabled when the focused project lacks their required context; pinning and dragging never open a project, create a session, or change the command's underlying behavior. The old top-left Terminal/LaTeX project-type switcher is removed; New project remains in the sidebar and top overflow, with type selection in its creation dialog.
+
+86. Opening New project puts keyboard focus in its local or SSH folder-path text field and keeps background terminal attachment from stealing focus while the dialog is open. A newly created terminal becomes the selected, focused terminal after its project refresh contains the new session and the launcher closes; the old tab must not reclaim selection during that refresh. On startup, PanePilot selects the newest valid terminal destination in the saved twenty-item workspace history, even if a non-terminal tool was visited later. Deleted or archived sessions/projects are skipped; the normal initial project remains the fallback when there is no valid terminal history. The existing five-second visit rule determines which destinations enter that history.
 
 ## Agent lifecycle semantics
 
@@ -318,8 +320,8 @@ Dangerous mode uses:
 
 Safety invariants:
 
-- Off by default for every launch.
-- Per-terminal choice, never a global preference.
+- Checked by default in new Codex, Claude, and LaTeX chat launchers; the user can uncheck it before each launch.
+- Per-agent-session choice, never a hidden global preference; login shells always launch without bypass.
 - No additional confirmation on launch, resume, or reboot recovery after the user enables it for a terminal.
 - Persistent `unsafe` badge on the terminal.
 - Activity history records that permission checks were disabled.
