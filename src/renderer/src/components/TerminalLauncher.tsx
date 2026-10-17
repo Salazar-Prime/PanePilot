@@ -15,6 +15,14 @@ const profiles: Array<{
   { id: 'claude', label: 'Claude Code', description: 'Start an Anthropic coding agent', icon: Bot }
 ]
 
+function ShortcutRailMarker({ number }: { number: number }) {
+  return (
+    <span className="launcher-shortcut-track" aria-hidden="true">
+      <kbd className="modal-shortcut-hint">⌘{number}</kbd>
+    </span>
+  )
+}
+
 interface Props {
   projectId: string
   onClose(): void
@@ -33,6 +41,7 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const isAgent = profile === 'codex' || profile === 'claude'
+  const submitModifierLabel = navigator.platform.toLocaleLowerCase().includes('mac') ? 'Cmd' : 'Ctrl'
   useModalEscape(onClose, true, submitting)
   useModalShortcuts({
     dialogRef,
@@ -102,82 +111,87 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
           </button>
         </div>
         <form ref={formRef} onSubmit={submit}>
-          <label className="field">
-            <span>
-              Terminal / tmux name <kbd className="modal-shortcut-hint">⌘1</kbd>
-            </span>
-            <input
-              ref={nameInputRef}
-              autoFocus
-              data-modal-shortcut
-              aria-keyshortcuts="Meta+1 Control+1"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Optional — PanePilot will choose a unique name"
-            />
-          </label>
+          <div className="launcher-shortcut-row launcher-name-row rail-start">
+            <ShortcutRailMarker number={1} />
+            <label className="field">
+              <span>Terminal / tmux name</span>
+              <input
+                ref={nameInputRef}
+                autoFocus
+                data-modal-shortcut
+                aria-keyshortcuts="Meta+1 Control+1"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Optional — PanePilot will choose a unique name"
+              />
+            </label>
+          </div>
           <div className="profile-grid">
             {profiles.map((item, index) => {
               const Icon = item.icon
               return (
-                <button
-                  type="button"
+                <div
                   key={item.id}
-                  data-modal-shortcut
-                  aria-keyshortcuts={`Meta+${index + 2} Control+${index + 2}`}
-                  className={`profile-card ${profile === item.id ? 'selected' : ''}`}
-                  onClick={() => {
-                    setProfile(item.id)
-                  }}
+                  className={`launcher-shortcut-row ${profile === item.id ? 'selected' : ''} ${!isAgent && index === profiles.length - 1 ? 'rail-end' : ''}`}
                 >
-                  <Icon size={20} />
-                  <strong>{item.label}</strong>
-                  <span>{item.description}</span>
-                  <kbd className="modal-shortcut-hint">⌘{index + 2}</kbd>
-                </button>
+                  <ShortcutRailMarker number={index + 2} />
+                  <button
+                    type="button"
+                    data-modal-shortcut
+                    aria-keyshortcuts={`Meta+${index + 2} Control+${index + 2}`}
+                    className={`profile-card ${profile === item.id ? 'selected' : ''}`}
+                    onClick={() => setProfile(item.id)}
+                  >
+                    <Icon size={20} />
+                    <strong>{item.label}</strong>
+                    <span>{item.description}</span>
+                  </button>
+                </div>
               )
             })}
           </div>
           {profile === 'codex' && (
-            <label className="field">
-              <span>
-                Existing Codex thread ID <small>Optional</small>
-                <kbd className="modal-shortcut-hint">⌘5</kbd>
-              </span>
-              <input
-                data-modal-shortcut
-                aria-keyshortcuts="Meta+5 Control+5"
-                value={codexThreadId}
-                onChange={(event) => setCodexThreadId(event.target.value)}
-                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-              <small>
-                Paste an exact thread ID to run <code>codex resume</code> instead
-                of creating a new conversation.
-              </small>
-            </label>
+            <div className="launcher-shortcut-row launcher-thread-row">
+              <ShortcutRailMarker number={5} />
+              <label className="field">
+                <span>Existing Codex thread ID <small>Optional</small></span>
+                <input
+                  data-modal-shortcut
+                  aria-keyshortcuts="Meta+5 Control+5"
+                  value={codexThreadId}
+                  onChange={(event) => setCodexThreadId(event.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+                <small>
+                  Paste an exact thread ID to run <code>codex resume</code> instead
+                  of creating a new conversation.
+                </small>
+              </label>
+            </div>
           )}
           {isAgent && (
-            <label className={`danger-option ${dangerousMode ? 'enabled' : ''}`}>
-              <input
-                type="checkbox"
-                data-modal-shortcut
-                aria-keyshortcuts={
-                  profile === 'codex' ? 'Meta+6 Control+6' : 'Meta+5 Control+5'
-                }
-                checked={dangerousMode}
-                onChange={(event) => setDangerousMode(event.target.checked)}
-              />
-              <ShieldAlert size={19} />
-              <span>
-                <strong>Disable permission checks</strong>
-                <small>Only for isolated or disposable environments</small>
-              </span>
-              <kbd className="modal-shortcut-hint">⌘{profile === 'codex' ? 6 : 5}</kbd>
-            </label>
+            <div className="launcher-shortcut-row launcher-danger-row rail-end">
+              <ShortcutRailMarker number={profile === 'codex' ? 6 : 5} />
+              <label className={`danger-option ${dangerousMode ? 'enabled' : ''}`}>
+                <input
+                  type="checkbox"
+                  data-modal-shortcut
+                  aria-keyshortcuts={
+                    profile === 'codex' ? 'Meta+6 Control+6' : 'Meta+5 Control+5'
+                  }
+                  checked={dangerousMode}
+                  onChange={(event) => setDangerousMode(event.target.checked)}
+                />
+                <ShieldAlert size={19} />
+                <span>
+                  <strong>Disable permission checks</strong>
+                  <small>Only for isolated or disposable environments</small>
+                </span>
+              </label>
+            </div>
           )}
           {error && <p className="form-error">{error}</p>}
           <div className="modal-actions">
@@ -194,11 +208,15 @@ export function TerminalLauncher({ projectId, onClose, onStart }: Props) {
               type="submit"
               className="primary-button"
               disabled={submitting}
-              title="Command + Enter"
+              title={`${submitModifierLabel} + Enter`}
               aria-keyshortcuts="Meta+Enter Control+Enter"
             >
               {submitting ? 'Starting…' : 'Start terminal'}
-              <kbd className="modal-shortcut-hint">⌘↵</kbd>
+              <span className="launcher-submit-shortcut" aria-hidden="true">
+                <kbd className="modal-shortcut-hint">{submitModifierLabel}</kbd>
+                <span>+</span>
+                <kbd className="modal-shortcut-hint">Enter</kbd>
+              </span>
             </button>
           </div>
         </form>

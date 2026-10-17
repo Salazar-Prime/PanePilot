@@ -33,6 +33,18 @@ describe('new project and agent launcher defaults', () => {
     expect(source).toContain('useModalEscape(onClose, true, submitting)')
   })
 
+  it('places shortcuts in a left rail and spells out the submit keys', () => {
+    const source = readFileSync('src/renderer/src/components/TerminalLauncher.tsx', 'utf8')
+    const styles = readFileSync('src/renderer/src/styles.css', 'utf8')
+    expect(source).toContain('className="launcher-shortcut-track"')
+    expect(source).toContain('className="launcher-shortcut-row launcher-name-row rail-start"')
+    expect(source).toContain('className="launcher-shortcut-row launcher-danger-row rail-end"')
+    expect(source).toContain('<kbd className="modal-shortcut-hint">{submitModifierLabel}</kbd>')
+    expect(source).toContain('<kbd className="modal-shortcut-hint">Enter</kbd>')
+    expect(source).not.toContain('⌘↵')
+    expect(styles).toContain('.launcher-modal .profile-grid {\n  grid-template-columns: 1fr;')
+  })
+
   it('starts new Codex and LaTeX chats with visible permission bypass checked', () => {
     for (const component of ['TerminalLauncher', 'LatexChatLauncher']) {
       const source = readFileSync(`src/renderer/src/components/${component}.tsx`, 'utf8')

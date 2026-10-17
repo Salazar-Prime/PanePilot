@@ -194,8 +194,15 @@
     body[data-variant="5"] .profile.selected .hint { border-color: #a4b5f5; background: #5267a8; color: #fff; }
     body[data-variant="5"] .danger .hint { border-color: #a56e50; background: #573828; color: #ffcaab; }
     body[data-variant="5"] .footer .hint { border: 0; background: #ffffff12; }
+    body[data-variant="5"] .button.primary > .hint { display: none; }
+    body[data-variant="5"] .submit-combo { display: inline-flex; align-items: center; gap: 4px; }
+    body[data-variant="5"] .submit-combo kbd { height: 20px; display: inline-flex; align-items: center;
+      padding: 0 6px; border: 1px solid #a0b0ee; border-radius: 5px; background: #425993;
+      color: #f5f7ff; font: 600 9px "SFMono-Regular", Menlo, monospace; }
+    body[data-variant="5"] .submit-combo span { color: #f1f4ff; font-size: 10px; }
 
     .shortcut-explainer { display: none; }
+    .submit-combo { display: none; }
   </style>
 </head>
 <body>
@@ -216,7 +223,7 @@
     </div>
     <div class="field thread"><div class="field-label">Existing Codex thread ID <small>Optional</small><kbd class="hint"><span class="cmd">⌘</span>5</kbd></div><div class="input">xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</div><kbd class="hint"><span class="cmd">⌘</span>5</kbd><div class="field-help">Paste an exact thread ID to resume an existing conversation.</div></div>
     <div class="danger"><span class="check">✓</span><span class="shield">♢</span><div><strong>Disable permission checks</strong><small>Only for isolated or disposable environments</small></div><kbd class="hint"><span class="cmd">⌘</span>6</kbd></div>
-    <footer class="footer"><div class="button">Cancel <kbd class="hint">Esc</kbd></div><div class="button primary">Start terminal <kbd class="hint">⌘↵</kbd></div></footer>
+    <footer class="footer"><div class="button">Cancel <kbd class="hint">Esc</kbd></div><div class="button primary">Start terminal <kbd class="hint">⌘↵</kbd><span class="submit-combo"><kbd>Cmd</kbd><span>+</span><kbd>Enter</kbd></span></div></footer>
   </section>
   <script>
     const variant = new URLSearchParams(location.search).get('variant') || '1';
