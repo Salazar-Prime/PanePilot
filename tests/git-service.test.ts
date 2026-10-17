@@ -7,6 +7,7 @@ import {
   GitService,
   gitRemoteCommand,
   parseGitGraph,
+  parseGitBranches,
   parseGitHubRepositoryReference,
   parseGitPorcelainV2
 } from '../src/main/git'
@@ -95,6 +96,19 @@ describe('Git porcelain parsing', () => {
     )
   })
 
+  it('distinguishes local and remote branches and omits symbolic remote HEAD', () => {
+    const hash = 'a'.repeat(40)
+    expect(parseGitBranches([
+      `refs/remotes/origin/main\0${hash}`,
+      `refs/remotes/origin/HEAD\0${hash}`,
+      `refs/heads/feature/quiet-ui\0${hash}`,
+      `refs/tags/v1\0${hash}`
+    ].join('\n'))).toEqual([
+      { name: 'feature/quiet-ui', hash, remote: false },
+      { name: 'origin/main', hash, remote: true }
+    ])
+  })
+
   it('normalizes GitHub HTTPS and SSH repository references', () => {
     expect(
       parseGitHubRepositoryReference(
@@ -118,6 +132,9 @@ describe('Git porcelain parsing', () => {
         'https://github.com/owner/repo/issues/1'
       )
     ).toBeNull()
+    expect(parseGitHubRepositoryReference('ssh://git@github.com/owner/repo.git')?.url).toBe('https://github.com/owner/repo')
+    expect(parseGitHubRepositoryReference('javascript://github.com/owner/repo')).toBeNull()
+    expect(parseGitHubRepositoryReference('https://github.com/owner/repo?redirect=elsewhere')).toBeNull()
   })
 })
 
@@ -241,6 +258,15 @@ describe('project Git service', () => {
         subject: 'Initial commit',
         author: 'PanePilot Test'
       })
+      git(projectFolder, 'branch', 'feature/older-work')
+      const head = git(projectFolder, 'rev-parse', 'HEAD').trim()
+      git(projectFolder, 'update-ref', 'refs/remotes/origin/main', head)
+      git(projectFolder, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')
+      await expect(service.branches(project.id)).resolves.toEqual([
+        { name: 'feature/older-work', hash: head, remote: false },
+        { name: 'main', hash: head, remote: false },
+        { name: 'origin/main', hash: head, remote: true }
+      ])
     } finally {
       store.close()
     }

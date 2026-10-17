@@ -234,6 +234,9 @@ function registerIpc(): void {
     (_event, projectId: string, offset?: number, limit?: number) =>
       gitService.commits(projectId, offset, limit)
   )
+  ipcMain.handle('git:branches', (_event, projectId: string) =>
+    gitService.branches(projectId)
+  )
 
   ipcMain.handle('terminals:start', (_event, input: StartTerminalInput) => terminals.start(input))
   ipcMain.handle('terminals:preview', (event, sessionId: string) => {

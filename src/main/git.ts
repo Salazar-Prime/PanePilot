@@ -1,6 +1,7 @@
 import { execFile, execFileSync } from 'node:child_process'
 import type {
   Connection,
+  GitBranchRef,
   GitChangeKind,
   GitCommit,
   GitCommitPage,
@@ -10,7 +11,10 @@ import type {
   GitRepositoryStatus,
   Project
 } from '../shared/types'
+import { parseGitHubRepositoryReference, type GitHubRepositoryReference } from '../shared/git'
 import type { Store } from './store'
+
+export { parseGitHubRepositoryReference } from '../shared/git'
 
 const GIT_TIMEOUT_MS = 12_000
 const GIT_MAX_BUFFER = 8 * 1024 * 1024
@@ -21,52 +25,11 @@ const LOG_FIELD = '\x1f'
 const GITHUB_VISIBILITY_CACHE_MS = 5 * 60 * 1_000
 const GITHUB_API_TIMEOUT_MS = 8_000
 
-export interface GitHubRepositoryReference {
-  nameWithOwner: string
-  url: string
-}
-
 export interface GitHubVisibilityResolver {
   resolve(reference: GitHubRepositoryReference): Promise<{
     visibility: GitHubRepositoryVisibility
     source: 'gh' | 'public-api'
   } | null>
-}
-
-export function parseGitHubRepositoryReference(
-  rawUrl: string | null | undefined
-): GitHubRepositoryReference | null {
-  const value = rawUrl?.trim()
-  if (!value) return null
-  const scpMatch = value.match(/^git@github\.com:([^/]+)\/(.+?)(?:\.git)?$/i)
-  const normalized = scpMatch
-    ? `https://github.com/${scpMatch[1]}/${scpMatch[2]}`
-    : value
-  try {
-    const url = new URL(normalized)
-    if (url.hostname.toLocaleLowerCase() !== 'github.com') return null
-    const parts = url.pathname
-      .replace(/^\/+|\/+$/g, '')
-      .split('/')
-      .filter(Boolean)
-    if (parts.length !== 2) return null
-    const owner = parts[0]
-    const name = parts[1].replace(/\.git$/i, '')
-    if (
-      !owner ||
-      !name ||
-      !/^[a-z0-9_.-]+$/i.test(owner) ||
-      !/^[a-z0-9_.-]+$/i.test(name)
-    ) {
-      return null
-    }
-    return {
-      nameWithOwner: `${owner}/${name}`,
-      url: `https://github.com/${owner}/${name}`
-    }
-  } catch {
-    return null
-  }
 }
 
 function normalizeGitHubVisibility(
@@ -394,6 +357,23 @@ export function parseGitGraph(raw: string): GitCommit[] {
   return commits
 }
 
+export function parseGitBranches(raw: string): GitBranchRef[] {
+  const branches: GitBranchRef[] = []
+  for (const record of raw.split(/\r?\n/)) {
+    const [refname, hash] = record.split('\0')
+    if (!refname || !/^[a-f0-9]{40,64}$/i.test(hash ?? '')) continue
+    const remote = refname.startsWith('refs/remotes/')
+    const prefix = remote ? 'refs/remotes/' : 'refs/heads/'
+    if (!refname.startsWith(prefix)) continue
+    const name = refname.slice(prefix.length)
+    if (!name || (remote && name.endsWith('/HEAD'))) continue
+    branches.push({ name, hash, remote })
+  }
+  return branches.sort((a, b) =>
+    Number(a.remote) - Number(b.remote) || a.name.localeCompare(b.name)
+  )
+}
+
 function isNotRepository(error: unknown): boolean {
   const detail =
     error instanceof GitCommandError
@@ -549,6 +529,21 @@ export class GitService {
       offset,
       total,
       hasMore: offset + commits.length < total
+    }
+  }
+
+  async branches(projectId: string): Promise<GitBranchRef[]> {
+    const { runner } = this.projectRunner(projectId)
+    try {
+      return parseGitBranches(await runner.run([
+        'for-each-ref',
+        '--format=%(refname)%00%(objectname)',
+        'refs/heads',
+        'refs/remotes'
+      ]))
+    } catch (error) {
+      if (isNotRepository(error)) return []
+      throw error
     }
   }
 
