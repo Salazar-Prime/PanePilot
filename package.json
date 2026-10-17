@@ -40,6 +40,7 @@
     "lucide-react": "0.468.0",
     "marked": "14.0.0",
     "monaco-editor": "0.56.0",
+    "motion": "14.3.0",
     "node-pty": "1.1.0",
     "pdfjs-dist": "4.8.69",
     "react": "18.3.1",

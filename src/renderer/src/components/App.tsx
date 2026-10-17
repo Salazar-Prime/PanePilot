@@ -141,6 +141,7 @@ import {
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 import { GoogleDriveControl } from './GoogleDriveControl'
 import { GitPane } from './GitPane'
+import { GitHistoryModal } from './GitHistoryModal'
 import { NewProjectDialog } from './NewProjectDialog'
 import { PaneWorkspaceStack } from './PaneWorkspaceStack'
 import { PortForwardDialog } from './PortForwardDialog'
@@ -312,6 +313,7 @@ export function App() {
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [gitPaneOpen, setGitPaneOpen] = useState(false)
   const [gitPaneRendered, setGitPaneRendered] = useState(false)
+  const [gitHistoryProjectId, setGitHistoryProjectId] = useState<string | null>(null)
   const [gitStatus, setGitStatus] = useState<GitRepositoryStatus | null>(null)
   const [gitStatusLoading, setGitStatusLoading] = useState(false)
   const [gitStatusError, setGitStatusError] = useState('')
@@ -1175,6 +1177,9 @@ export function App() {
   const gitPaneVisible =
     gitPaneOpen && project != null && projectSupportsGit && !showArchivedProjects
   useEffect(() => {
+    setGitHistoryProjectId(null)
+  }, [project?.id])
+  useEffect(() => {
     if (gitPaneVisible) {
       setGitPaneRendered(true)
       return
@@ -1884,6 +1889,15 @@ export function App() {
                   keywords: ['source control', 'status', 'history', 'branch'],
                   icon: <GitBranch size={15} />,
                   action: () => setGitPaneOpen((current) => !current)
+                },
+                {
+                  id: 'action:git-history',
+                  section: 'Actions',
+                  label: 'Open Git history timeline',
+                  detail: `Explore branches and merges for ${project.name}`,
+                  keywords: ['commits', 'graph', 'history', 'branches', 'git'],
+                  icon: <GitFork size={15} />,
+                  action: () => setGitHistoryProjectId(project.id)
                 }
               ]
             : []),
@@ -3131,10 +3145,18 @@ export function App() {
             statusLoading={gitStatusLoading}
             statusError={gitStatusError}
             onRefreshStatus={refreshGitStatus}
+            onOpenHistory={() => setGitHistoryProjectId(project.id)}
             onClose={() => setGitPaneOpen(false)}
           />
         )}
       </div>
+
+      {project && projectSupportsGit && !showArchivedProjects && (
+        <GitHistoryModal key={project.id} open={gitHistoryProjectId === project.id}
+          projectId={project.id} projectName={project.name} repositoryUrl={project.repositoryUrl}
+          status={gitStatus} onRefreshStatus={refreshGitStatus}
+          onClose={() => setGitHistoryProjectId(null)} />
+      )}
 
       <footer className="status-bar">
         <div className="status-brand">

@@ -12,8 +12,8 @@ import {
   ArrowUp,
   CheckCircle2,
   GitBranch,
-  GitCommit as GitCommitIcon,
   Layers3,
+  Maximize2,
   RefreshCw,
   X
 } from 'lucide-react'
@@ -34,6 +34,7 @@ interface GitPaneProps {
   statusLoading: boolean
   statusError: string
   onRefreshStatus(): Promise<void>
+  onOpenHistory(): void
   onClose(): void
 }
 
@@ -194,6 +195,7 @@ export function GitPane({
   statusLoading,
   statusError,
   onRefreshStatus,
+  onOpenHistory,
   onClose
 }: GitPaneProps) {
   const [commits, setCommits] = useState<GitCommit[]>([])
@@ -281,6 +283,10 @@ export function GitPane({
           </span>
         </div>
         <div className="git-pane-actions">
+          <button className="icon-button" onClick={onOpenHistory}
+            disabled={!status?.isRepository} aria-label="Open Git history timeline" title="Open Git history timeline">
+            <Maximize2 size={14} />
+          </button>
           <button
             className="icon-button"
             onClick={() => void refreshAll()}
@@ -403,7 +409,10 @@ export function GitPane({
                     : `${commits.length} of ${commitTotal}`}
                 </small>
               </span>
-              <GitCommitIcon size={15} />
+              <button className="git-open-history" onClick={onOpenHistory}
+                title="Open the full Git history timeline">
+                <Maximize2 size={11} /> Open timeline
+              </button>
             </div>
             <div className="git-commit-list">
               {commits.map((commit) => (
