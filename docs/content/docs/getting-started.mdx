@@ -70,6 +70,13 @@ The terminal name is also the tmux session name when tmux is used. If you omit i
 PanePilot generates a profile-based name such as `Codex 1` and adds a numeric suffix
 when that tmux name already exists on the connection.
 
+The dialog focuses the terminal name when it opens. Use Command/Control plus the
+displayed number to focus or choose a marked control, Command/Control-Enter to start,
+or Escape to cancel. New Codex and Claude Code launches start with **YOLO mode**
+selected, which bypasses their normal permission checks and, for Codex, its sandbox.
+Uncheck it before starting unless the project runs in an isolated or disposable
+environment. Login shells never receive an agent permission-bypass flag.
+
 Use the project’s **Actions** tab for reusable custom shell commands. Actions are
 editable, run in fresh ephemeral tmux sessions, and keep only the latest run output.
 Use **Quick Codex chats** for persistent project-scoped conversations that stay out of

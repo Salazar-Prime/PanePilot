@@ -87,12 +87,14 @@ stored folder rather than a renderer-supplied arbitrary path.
 
 Permission bypass is:
 
-- Off by default.
+- Preselected in new Codex, Claude Code, and LaTeX writing-chat launchers, with a
+  visible control that can be unchecked before launch.
 - Chosen for one agent terminal at a time.
 - Persistently marked as `unsafe`.
 - Recorded in activity.
 
-It must never become a silent application-wide preference.
+Login shells never receive a bypass flag. The setting must never become a silent
+application-wide preference.
 
 ## Destructive operations
 

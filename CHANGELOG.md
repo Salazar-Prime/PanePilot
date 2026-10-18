@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.14.0 — 2026-10-18
+
+This release adds deeper read-only Git exploration and makes project history,
+previews, and launch flows easier to navigate:
+
+- The new Aperture timeline explores local and remote branches from their exact tips
+  in a searchable horizontal commit graph, with bounded history loading and an
+  explicit full-SHA copy action. It remains read-only for local and SSH projects.
+- LLM Chats now groups recorded sub-agent conversations beneath their parents,
+  preserves searchable agent paths, shares transcript trimming across the current
+  app session, and adds previous/next user-message navigation. A contextual
+  **Sub-agents** action appears for the visible linked Codex thread when descendants
+  exist.
+- Files now opens bounded, sandboxed static HTML previews with project-relative
+  assets. Launch dialogs focus their primary input and add numbered shortcuts, and
+  stale Codex queued-input alerts clear when the live footer disappears. **Important:**
+  new Codex, Claude Code, and LaTeX agent launchers now start with permission bypass
+  selected; uncheck **YOLO mode** or **Disable permission checks** before starting if
+  you want normal approval and sandbox prompts. Login shells are unaffected.
+
+The v0.14.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.13.0 — 2026-10-16
 
 This release improves attention accuracy and makes the compact toolbar easier to

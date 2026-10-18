@@ -22,7 +22,12 @@ Previews read at most 1 MB. A larger file is marked truncated and cannot be edit
 Files containing a null byte are treated as binary and are not rendered as text.
 Explicitly choose **Edit** before changing a file, then **Save** to write it. Markdown
 opens in a sanitized GitHub-style Preview and can switch to Source; Preview renders
-the current unsaved draft.
+the current unsaved draft. `.html`, `.htm`, and `.xhtml` files also open in Preview and
+can switch to Source or Edit. Their static document is sanitized and isolated in an
+iframe without scripts, forms, popups, downloads, or top navigation. Project-relative
+images and stylesheets use the bounded local/SSH preview API; remote web assets and CSS
+imports are blocked. Each HTML preview allows at most 16 relative assets totaling 16
+MB and reflects the current unsaved draft.
 Folder navigation, the selected preview, editor scroll position, and unsaved draft stay
 mounted while switching to another project tab. This state lasts only for the current
 PanePilot renderer lifetime.
@@ -52,6 +57,7 @@ the first user message or Claude summary.
 Search covers:
 
 - Title.
+- Recorded agent name and explicit hierarchy path for Codex sub-agents.
 - Working directory.
 - Complete user and assistant message text.
 
@@ -59,6 +65,16 @@ Results show a matching snippet and match count; the selected transcript highlig
 matches and offers a visible copy action for the exact provider session ID. Local parsed files are cached by
 path, modification time, and size, then rescanned when those values change. Remote
 normalized scans use a separate five-second cache.
+
+Recorded Codex sub-agent conversations appear beneath their parent in a collapsible
+tree. Search expands the ancestor path to a match, and a selected child can navigate
+back to its parent. The opening-message hide count is shared across chats and sidebar
+previews for the current PanePilot app session. Previous and next buttons jump between
+user messages. None of these view controls changes the provider archive or index.
+
+For the exact visible linked Codex terminal or LaTeX writing chat, a metadata-only
+presence check can add **Sub-agents** to the toolbar when descendants exist. Transcript
+content is read only when the user opens the overlay.
 
 Codex provider session IDs also allow a stopped linked terminal to resume its exact
 conversation. See [Terminal sessions](./terminals.mdx#codex-session-identity-and-resume).
@@ -84,3 +100,8 @@ A repository without `origin` shows **Local** and opens the read-only Git pane. 
 GitHub origin shows Public, Private, Internal, or Unknown based on the local GitHub CLI
 and public API visibility checks. External repository links are limited to validated
 `http` or `https` URLs.
+
+**Open Git history timeline** opens the read-only Aperture view. It lists local and
+remote branches, supports branch search, and renders their commit topology
+horizontally. Choosing a branch loads bounded history reachable from its exact tip;
+choosing a commit shows details, and the dedicated copy button copies the full SHA.

@@ -48,11 +48,14 @@ Codex plan update; `run-state` remains the liveness signal.
 
 Codex may show a **Queued follow-up inputs** footer while its title still says Working.
 PanePilot requires the complete live footer—a heading, positive question count, and
-answer shortcut—before marking the session **Needs input**, so old scrollback or
-ordinary output does not trigger it. Attached screens update directly. Each discovery
-pass checks only a bounded, rotating set of detached working Codex panes through
-read-only tmux captures, including over SSH. Submitting terminal input does not clear
-the alert by itself; the prompt must disappear and execution must continue.
+answer shortcut—within the last eight rendered screen rows before marking the session
+**Needs input**, so old scrollback or ordinary output does not trigger it. Attached
+screens update directly. Each discovery pass checks only a bounded, rotating set of
+detached working Codex panes through read-only tmux captures, including over SSH. A
+successful capture without the footer clears this queued-question alert back to the
+pane-title state. Failed or skipped captures cannot clear it, and stronger explicit
+approval-required evidence remains sticky. Submitting terminal input alone does not
+clear the alert.
 
 ## Where status appears
 

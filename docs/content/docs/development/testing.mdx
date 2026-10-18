@@ -21,8 +21,9 @@ npm test
 | `session-sort.test.ts` | Pinning and every terminal sort mode |
 
 These tests exercise pure or bounded services. The SSH integration case is opt-in
-through `PANEPILOT_TEST_SSH_ALIAS` and `PANEPILOT_TEST_REMOTE_PROJECT`. There are no
-formal Electron integration tests yet.
+through `PANEPILOT_TEST_SSH_ALIAS` and `PANEPILOT_TEST_REMOTE_PROJECT`. Focused
+Electron smoke scripts under `scripts/test-*-ui.mjs` exercise selected renderer flows
+without using the developer's application profile.
 
 ## Test design principles
 
@@ -74,7 +75,8 @@ actual tmux server.
 - Switch projects and sessions.
 - Preserve active-session fallback when a terminal is archived.
 - Preserve Files panel state while switching workspace tabs.
-- Require confirmation for dangerous mode and permanent deletion.
+- Keep the permission-bypass control visible and per-session, and require confirmation
+  for permanent deletion.
 - Exclude archived projects and sessions from live counts.
 
 ## Documentation validation

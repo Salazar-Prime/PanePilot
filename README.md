@@ -82,10 +82,13 @@ PanePilot can restore the latest status after an SSH reconnect without a remote 
 or event spool. Claude Code continues to use terminal-output fallback tracking.
 
 Codex can display a queued follow-up question while its pane title still says Working.
-PanePilot recognizes that live prompt and marks the session **Needs input**. Attached
-terminals update from their rendered screen; discovery checks a bounded, rotating set
-of detached local or SSH Codex panes without attaching or resizing them. The alert
-clears only after the prompt disappears and Codex accepts the response or continues.
+PanePilot recognizes the complete live footer within the last eight rendered rows and
+marks the session **Needs input**. Attached terminals update from their rendered
+screen; discovery checks a bounded, rotating set of detached local or SSH Codex panes
+without attaching or resizing them. A valid screen without that footer clears the
+queued-question alert back to the pane-title state, while failed or skipped captures
+cannot clear it and explicit approval-required alerts remain sticky. Pressing Enter by
+itself never clears the alert.
 
 Shell and Action terminals are excluded from agent-state detection, so ordinary
 terminal output cannot create a false working state.
@@ -122,6 +125,12 @@ older commits** retained as a fallback. Local and SSH-backed projects are suppor
 and these status/history reads run with Git optional locks disabled so PanePilot does
 not update the repository.
 
+Choose **Open Git history timeline** for the Aperture view: a searchable horizontal
+topology of local and remote branches, commits, forks, and merges. Selecting a branch
+loads history reachable from that branch's exact tip. Selecting a commit reveals its
+details; copying its full SHA requires the explicit copy button. History loading stays
+bounded and read-only.
+
 The top **Repository** action labels a Git repository with no `origin` remote as
 **Local** and opens its read-only Git pane. For GitHub origins, it instead shows
 **Public**, **Private**, or **Internal**. PanePilot first uses the locally authenticated
@@ -130,7 +139,7 @@ then falls back to GitHub's public repository API. If neither can see the reposi
 the label is **Unknown** instead of assuming that a missing repository is private.
 The check is read-only and cached briefly.
 
-## Markdown preview
+## Markdown and HTML previews
 
 Markdown files open in a rendered **Preview** in both the Files workspace and project
 Notes, with **Source** available beside it for the Monaco view. Choosing **Edit** in
@@ -141,6 +150,13 @@ heading links, and GitHub-style alerts. Relative links open the target inside th
 project, relative images are loaded through PanePilot's bounded local/SSH file
 preview, and web links open in the system browser. Raw HTML is sanitized before
 rendering.
+
+Files ending in `.html`, `.htm`, or `.xhtml` open in a static **Preview** by default
+and retain **Source** and **Edit** modes. PanePilot sanitizes the document and renders
+it in a sandboxed iframe without scripts, forms, popups, downloads, or top navigation.
+Project-relative images and stylesheets may load through the existing bounded local or
+SSH preview path; remote web assets and CSS imports do not load. Preview reflects the
+current unsaved draft and is capped at 16 relative assets totaling 16 MB.
 
 The Files explorer toolbar can create an empty file or folder in the current
 directory. Right-click an explorer entry for copy-path, rename, download, or nested
@@ -224,11 +240,17 @@ For a visible Codex terminal or LaTeX writing chat, **Sub-agents** opens a read-
 terminal-style grid for descendant Codex threads. PanePilot reads the matching Codex
 archives on the local or SSH project host only while the overlay is open and displays
 public assistant messages and tool I/O—not reasoning or inherited context. The viewer
-does not launch agents, send terminal input, or modify provider archives.
+does not launch agents, send terminal input, or modify provider archives. When the
+exact visible linked thread has descendants, PanePilot also shows a contextual
+**Sub-agents** toolbar action after a metadata-only presence check; opening the overlay
+is still what loads transcript content.
 
-In **LLM Chats**, use **Hide first** to omit a chosen number of rendered message cards
-from the start of the selected conversation. **Show all** restores them; the control
-does not alter the provider archive or search index.
+In **LLM Chats**, recorded Codex sub-agents appear in a collapsible hierarchy beneath
+their parent. Search includes agent names and recorded hierarchy paths and expands the
+matching ancestor chain. **Hide first** omits a chosen number of rendered message
+cards from every chat and sidebar preview for the current PanePilot app session;
+**Show all** restores them. Previous/next controls jump between user messages. These
+controls do not alter provider archives or the search index.
 
 Press **Command/Control-Up or Down** to revisit recent work. PanePilot tints only the
 left sidebar and shows the current destination with up to seven prior destinations,

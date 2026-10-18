@@ -52,7 +52,9 @@ that distinction in code and documentation.
 
 ## Destructive actions
 
-- Dangerous permission bypass is per terminal, off by default, visible, and recorded.
+- Dangerous permission bypass is per agent session, visibly preselected in new Codex,
+  Claude Code, and LaTeX writing-chat launchers, individually clearable, and recorded.
+  Login shells never receive it, and it never becomes a hidden global preference.
 - Detaching an ordinary terminal leaves its tmux session running. Deletion stops the
   exact live backend when necessary and removes PanePilot's local session data.
 - Deletion requires confirmation and does not delete provider archives.

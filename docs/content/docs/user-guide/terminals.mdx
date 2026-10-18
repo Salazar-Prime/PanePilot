@@ -21,6 +21,10 @@ Each profile has its own icon in terminal tabs, sidebar rows, and LaTeX chat swi
 Custom commands are managed as project [Actions](./actions.mdx), rather than ordinary
 terminal profiles.
 
+The New terminal dialog focuses the name field. Command/Control plus a displayed
+number focuses or chooses the matching control, Command/Control-Enter submits the
+form, and Escape closes it unless a launch is still settling.
+
 ## tmux and PTY backends
 
 PanePilot checks for tmux locally through `PATH` and common system or Homebrew
@@ -126,9 +130,11 @@ For agent profiles, **Disable permission checks** adds:
 - Codex: `--dangerously-bypass-approvals-and-sandbox`
 - Claude Code: `--dangerously-skip-permissions`
 
-The option is off for every new launch and available only for Codex and Claude. It is
-scoped to one terminal and never becomes a global default. A **YOLO agent** pill remains
-visible in the status bar, and the activity timeline records that permission checks
-were disabled.
+The option is selected when a new Codex, Claude Code, or LaTeX writing-chat launcher
+opens. Uncheck it before starting if you want the provider's normal approvals and, for
+Codex, sandboxing. Login shells never receive either bypass flag. The choice is scoped
+to one session and never becomes a hidden application-wide preference. A **YOLO
+agent** pill remains visible in the status bar, and the activity timeline records that
+permission checks were disabled.
 
 Use it only in an isolated or disposable environment.

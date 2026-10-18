@@ -94,8 +94,10 @@ SQLite row:
 - Codex pane-title fields refresh current `run-state` and `task-progress` without
   consuming a per-device event stream.
 - A bounded, rotating set of detached Codex panes whose title says Working receives a
-  read-only screen capture so a visible queued question can override that title with
-  `needs-input` without attaching or resizing the terminal.
+  read-only screen capture so a complete queued-question footer in the final eight
+  rendered rows can override that title with `needs-input` without attaching or
+  resizing the terminal. A valid capture without the footer restores the title state;
+  failed or skipped captures cannot clear attention.
 
 LaTeX chat scope, mode, and portable section source/title information are included so
 an imported chat can be reconciled with the receiving laptop's section identities.
