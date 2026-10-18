@@ -72,6 +72,7 @@ const api: ProjectConsoleApi = {
   terminals: {
     preview: (sessionId: string) => ipcRenderer.invoke('terminals:preview', sessionId),
     subagents: (sessionId: string) => ipcRenderer.invoke('terminals:subagents', sessionId),
+    subagentSummary: (sessionId: string) => ipcRenderer.invoke('terminals:subagent-summary', sessionId),
     start: (input: StartTerminalInput) => ipcRenderer.invoke('terminals:start', input),
     discover: (connectionId?: string) =>
       ipcRenderer.invoke('terminals:discover', connectionId),

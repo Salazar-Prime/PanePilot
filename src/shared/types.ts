@@ -542,6 +542,12 @@ export interface CodexSubagentSnapshot {
   rootFound: boolean
 }
 
+export interface CodexSubagentSummary {
+  count: number
+  rootFound: boolean
+  limited: boolean
+}
+
 export interface ProjectConsoleApi {
   quickNotes: {
     get(): Promise<import('./quickNotes').QuickNotesDocument>
@@ -579,6 +585,7 @@ export interface ProjectConsoleApi {
   terminals: {
     preview(sessionId: string): Promise<TerminalPreviewSnapshot>
     subagents(sessionId: string): Promise<CodexSubagentSnapshot>
+    subagentSummary(sessionId: string): Promise<CodexSubagentSummary>
     start(input: StartTerminalInput): Promise<TerminalSession>
     discover(connectionId?: string): Promise<number>
     attach(sessionId: string, cols: number, rows: number): Promise<{ output: string }>

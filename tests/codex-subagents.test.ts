@@ -83,6 +83,23 @@ describe('public output parsing', () => {
 })
 
 describe('bounded local and SSH-host reads', () => {
+  it('returns a metadata-only summary, separately cached from transcript reads', async () => {
+    const f = fixture()
+    const reader = new CodexSubagentReader(f.sessions)
+    expect(await reader.summary('root', '/project')).toEqual({ count: 2, rootFound: true, limited: false })
+    expect((await reader.read('root', '/project', undefined, false)).agents).toEqual([])
+    expect((await reader.read('root', '/project')).agents).toHaveLength(2)
+    expect(await reader.summary('root', '/other-project')).toEqual({ count: 0, rootFound: false, limited: false })
+  })
+  it('SSH summary skips transcript tails and preserves explicit nested ownership', () => {
+    const f = fixture()
+    const params = Buffer.from(JSON.stringify({ rootId: 'root', folder: '/project', includeOutput: false })).toString('base64')
+    const encoded = execFileSync('python3', ['-c', REMOTE_SUBAGENT_SCRIPT, params], { encoding: 'utf8', env: { ...process.env, CODEX_HOME: f.root } })
+    const result = JSON.parse(Buffer.from(encoded.trim(), 'base64').toString('utf8'))
+    expect(result.entries).toEqual([])
+    expect(result.total).toBe(2)
+    expect(result.rootFound).toBe(true)
+  })
   it('reads only exact descendants, and rejects a root in another project', async () => {
     const f = fixture()
     const reader = new CodexSubagentReader(f.sessions)

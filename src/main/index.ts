@@ -245,7 +245,7 @@ function registerIpc(): void {
     }
     return terminals.preview(sessionId)
   })
-  ipcMain.handle('terminals:subagents', async (event, sessionId: string) => {
+  const readSubagents = async (event: Electron.IpcMainInvokeEvent, sessionId: string, summaryOnly: boolean) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) {
       throw new Error('Invalid sub-agent viewer sender.')
     }
@@ -260,9 +260,11 @@ function registerIpc(): void {
     const connection = store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
     if (!session.providerSessionId) throw new Error('This terminal has no linked Codex thread yet. Wait for it to connect, then try again.')
-    return codexSubagents.read(session.providerSessionId, project.folder,
+    return codexSubagents[summaryOnly ? 'summary' : 'read'](session.providerSessionId, project.folder,
       connection.kind === 'ssh' ? connection.sshAlias ?? connection.name : undefined)
-  })
+  }
+  ipcMain.handle('terminals:subagents', (event, sessionId: string) => readSubagents(event, sessionId, false))
+  ipcMain.handle('terminals:subagent-summary', (event, sessionId: string) => readSubagents(event, sessionId, true))
   ipcMain.handle('actions:sync', (_event, projectId: string) =>
     terminals.syncActions(projectId)
   )

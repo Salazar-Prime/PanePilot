@@ -134,6 +134,7 @@ import { ArchivedProjectsPage } from './ArchivedProjectsPage'
 import { SubagentOverlay } from './SubagentOverlay'
 import { QuickNotesDialog } from './QuickNotesDialog'
 import { visibleCodexSession } from '../lib/subagents'
+import { AutomaticSubagentAction } from './AutomaticSubagentAction'
 import {
   CommandPalette,
   type CommandPaletteCommand
@@ -2542,6 +2543,11 @@ export function App() {
             <PinnedToolbarActions ids={topToolbarPins} actions={topToolbarActions}
               onReorder={setTopToolbarPins} />
           )}
+          <AutomaticSubagentAction sessionId={subagentSession?.id ?? null}
+            providerSessionId={subagentSession?.providerSessionId ?? null}
+            pinned={topToolbarPins.includes('sub-agents')}
+            active={subagentSessionId === subagentSession?.id}
+            onToggle={() => setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null)} />
           <div className="top-overflow-wrap" ref={topOverflowRef}>
             <button className="icon-button top-overflow-trigger"
               aria-label="More toolbar actions" aria-haspopup="menu"

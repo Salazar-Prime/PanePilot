@@ -4,7 +4,7 @@ import type { ProjectConsoleApi } from '../../shared/types'
 
 declare global {
   interface Window {
-    projectConsole: ProjectConsoleApi // Includes session-wide chat trimming through conversations.list, and read-only previews/sub-agents.
+    projectConsole: ProjectConsoleApi // Includes read-only file previews and lightweight sub-agent presence checks.
   }
 }
 

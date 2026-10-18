@@ -3,7 +3,7 @@ import { open, readdir, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import type { CodexSubagent, CodexSubagentOutput, CodexSubagentSnapshot } from '../shared/types'
+import type { CodexSubagent, CodexSubagentOutput, CodexSubagentSnapshot, CodexSubagentSummary } from '../shared/types'
 
 const execFileAsync = promisify(execFile)
 const READ_BYTES = 256 * 1024
@@ -124,15 +124,20 @@ export class CodexSubagentReader {
 
   constructor(private readonly root = join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'sessions')) {}
 
-  async read(rootId: string, folder: string, alias?: string): Promise<CodexSubagentSnapshot> {
+  async summary(rootId: string, folder: string, alias?: string): Promise<CodexSubagentSummary> {
+    const snapshot = await this.read(rootId, folder, alias, false)
+    return { count: snapshot.total, rootFound: snapshot.rootFound, limited: snapshot.limited }
+  }
+
+  async read(rootId: string, folder: string, alias?: string, includeOutput = true): Promise<CodexSubagentSnapshot> {
     if (!rootId || rootId.length > 200) throw new Error('This terminal has no linked Codex thread yet.')
-    const key = JSON.stringify([alias ?? '', folder, rootId])
+    const key = JSON.stringify([alias ?? '', folder, rootId, includeOutput])
     const cached = this.cache.get(key)
     if (cached && Date.now() - cached.at < 2_500) return cached.snapshot
     const pending = this.pending.get(key)
     if (pending) return pending
     const request = (async () => {
-      const scan = alias ? await this.remote(rootId, folder, alias) : await this.local(rootId, folder)
+      const scan = alias ? await this.remote(rootId, folder, alias, includeOutput) : await this.local(rootId, folder, includeOutput)
       const snapshot = { ...scan, agents: scan.entries.map(parseSubagent) }
       const result: CodexSubagentSnapshot = {
         agents: snapshot.agents, total: scan.total, rootFound: scan.rootFound, limited: scan.limited
@@ -145,7 +150,7 @@ export class CodexSubagentReader {
     try { return await request } finally { this.pending.delete(key) }
   }
 
-  private async local(rootId: string, folder: string): Promise<ArchiveScan> {
+  private async local(rootId: string, folder: string, includeOutput: boolean): Promise<ArchiveScan> {
     const candidates: { header: AgentHeader; file: string; updatedAt: string }[] = []
     let count = 0
     let limited = false
@@ -186,7 +191,7 @@ export class CodexSubagentReader {
     const matches = candidates.filter(({ header }) => descendants.has(header.id))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     const entries: ArchiveEntry[] = []
-    for (const candidate of matches.slice(0, MAX_AGENTS)) {
+    for (const candidate of includeOutput ? matches.slice(0, MAX_AGENTS) : []) {
       const handle = await open(candidate.file, 'r').catch(() => null)
       if (!handle) continue
       try {
@@ -201,10 +206,10 @@ export class CodexSubagentReader {
     return { entries, rootFound, total: matches.length, limited: limited || matches.length > MAX_AGENTS }
   }
 
-  private async remote(rootId: string, folder: string, alias: string): Promise<ArchiveScan> {
+  private async remote(rootId: string, folder: string, alias: string, includeOutput: boolean): Promise<ArchiveScan> {
     if (!alias || alias.startsWith('-') || /[\r\n\0]/.test(alias)) throw new Error('Invalid SSH connection.')
     const encodedScript = Buffer.from(REMOTE_SUBAGENT_SCRIPT).toString('base64')
-    const params = Buffer.from(JSON.stringify({ rootId, folder })).toString('base64')
+    const params = Buffer.from(JSON.stringify({ rootId, folder, includeOutput })).toString('base64')
     const command = `python3 -c 'import base64;exec(base64.b64decode("${encodedScript}"))' '${params}'`
     let stdout: string
     try {
@@ -285,7 +290,7 @@ if root_found:
         related.update(more)
 matches = sorted([c for c in candidates if c[0]["id"] != p["rootId"] and c[0]["id"] in related], key=lambda c: c[2], reverse=True)
 entries = []
-for header, path, updated in matches[:24]:
+for header, path, updated in (matches[:24] if p.get("includeOutput", True) else []):
     try:
         with open(path, "rb") as source:
             size = os.fstat(source.fileno()).st_size
