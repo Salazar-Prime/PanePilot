@@ -59,11 +59,17 @@ if (!process.versions.electron) {
     process.stdout.write('Chat-history mounted.\n')
     await waitFor(`document.querySelectorAll('.chat-conversation-card').length === 2 && document.querySelector('.chat-messages')`)
     assert.equal(await evaluate(`document.querySelector('.chat-detail-summary strong').textContent`), 'Main task')
+    assert.equal(await evaluate(`document.querySelector('.chat-subagent-path')===null`), true)
     await click('Expand 3 subagents for Main task')
     await waitFor(`document.querySelectorAll('.chat-conversation-card').length === 4`)
     await evaluate(`Array.from(document.querySelectorAll('.chat-conversation-card')).find(el=>el.textContent.includes('Reviewer')).click()`)
     await waitFor(`document.querySelector('.chat-messages')?.textContent.includes('Review result')`)
     assert.equal(await evaluate(`document.querySelector('.chat-parent-navigation button').textContent`), '← Main task')
+    assert.equal(await evaluate(`document.querySelector('.chat-subagent-path code').textContent`), '/root/collage_resources')
+    assert.equal(await evaluate(`document.querySelector('.chat-subagent-label[title="Agent path: /root/collage_resources"]')!==null`), true)
+    if (process.env.PANEPILOT_UI_SCREENSHOT) {
+      await writeFile(process.env.PANEPILOT_UI_SCREENSHOT, (await window.webContents.capturePage()).toPNG())
+    }
     await evaluate(`document.querySelector('.chat-detail-copy-button').click()`)
     await waitFor(`window.copied === 'reviewer'`)
     await click('Expand 1 subagent for Reviewer')
@@ -118,9 +124,6 @@ if (!process.versions.electron) {
     await waitFor(`document.querySelector('.chat-conversation-card.selected p').textContent==='Review result'`)
     await evaluate(`window.remountChat()`)
     await waitFor(`document.querySelectorAll('.chat-message').length === 5 && document.querySelector('.chat-message-counter input').value==='1'`)
-    if (process.env.PANEPILOT_UI_SCREENSHOT) {
-      await writeFile(process.env.PANEPILOT_UI_SCREENSHOT, (await window.webContents.capturePage()).toPNG())
-    }
     process.stdout.write('Chat UI passed: subagent hierarchy/search, user-turn navigation, total counts, global sidebar trimming, and session retention after remount.\n')
     window.destroy()
     app.exit(0)
@@ -139,7 +142,7 @@ function fixture() {
     import {ChatHistoryPanel} from './src/renderer/src/components/ChatHistoryPanel';
     import {matchingConversations} from './src/shared/conversation-hierarchy';
     import {conversationDisplayWindow} from './src/shared/conversation-messages';
-    const make=(id,parent,title,content,agentName=null)=>({id,provider:'codex',providerSessionId:id,parentProviderSessionId:parent,agentName,title,
+    const make=(id,parent,title,content,agentName=null)=>({id,provider:'codex',providerSessionId:id,parentProviderSessionId:parent,agentName,agentPath:id==='reviewer'?'/root/collage_resources':parent?'/root/'+id:null,title,
       workingDirectory:'/project',updatedAt:'2026-10-18T10:00:00Z',messageCount:2,snippet:content,matchCount:0,
       messages:[{id:id+'-u',role:'user',content:title,timestamp:null},{id:id+'-a',role:'assistant',content,timestamp:null}]});
     const chats=[make('nested','reviewer','Find needle','Needle found'),make('reviewer','root','Review tests','Review result','Reviewer'),

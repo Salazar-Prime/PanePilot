@@ -21,6 +21,7 @@ interface RemoteConversation {
   providerSessionId: string | null
   parentProviderSessionId?: string | null
   agentName?: string | null
+  agentPath?: string | null
   archiveIdentity?: string
   title: string
   workingDirectory: string
@@ -239,6 +240,7 @@ for provider, root in roots:
                 "providerSessionId": archive_id,
                 "parentProviderSessionId": parent_id,
                 "agentName": agent_name,
+                "agentPath": agent_path[:300] if parent_id and agent_path else None,
                 "archiveIdentity": identity,
                 "title": summary or title_for(messages),
                 "workingDirectory": working_directory,
@@ -380,6 +382,7 @@ function summaryFor(conversation: RemoteConversation, query: string, hiddenCount
   const searchable = [
     conversation.title,
     conversation.agentName ?? '',
+    conversation.agentPath ?? '',
     conversation.workingDirectory,
     ...conversation.messages.map((message) => message.content)
   ]
@@ -389,6 +392,7 @@ function summaryFor(conversation: RemoteConversation, query: string, hiddenCount
     providerSessionId: conversation.providerSessionId,
     parentProviderSessionId: conversation.parentProviderSessionId ?? null,
     agentName: conversation.agentName ?? null,
+    agentPath: conversation.agentPath ?? null,
     title: display.title,
     workingDirectory: conversation.workingDirectory,
     updatedAt: conversation.updatedAt,

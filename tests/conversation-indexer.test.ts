@@ -11,7 +11,7 @@ import {
 describe('conversation archive parsing', () => {
   it('keeps explicit Codex parent identity and excludes inherited messages and reasoning', () => {
     const source = [
-      { type: 'session_meta', timestamp: '2026-10-18T10:00:00Z', payload: { id: 'child', cwd: '/project', source: { subagent: { thread_spawn: { parent_thread_id: 'root', agent_nickname: 'Reviewer' } } } } },
+      { type: 'session_meta', timestamp: '2026-10-18T10:00:00Z', payload: { id: 'child', cwd: '/project', source: { subagent: { thread_spawn: { parent_thread_id: 'root', agent_nickname: 'Reviewer', agent_path: '/root/collage_resources' } } } } },
       { type: 'event_msg', timestamp: '2026-10-18T09:00:00Z', payload: { type: 'user_message', message: 'Inherited parent history' } },
       { type: 'response_item', timestamp: '2026-10-18T10:00:01Z', payload: { type: 'message', role: 'assistant', phase: 'analysis', content: 'Hidden reasoning' } },
       { type: 'response_item', timestamp: '2026-10-18T10:00:02Z', payload: { type: 'message', role: 'user', content: 'Review the tests' } },
@@ -20,6 +20,7 @@ describe('conversation archive parsing', () => {
     const parsed = parseCodexConversation('/tmp/child.jsonl', source, '2026-10-18T10:00:00Z')!
     expect(parsed.parentProviderSessionId).toBe('root')
     expect(parsed.agentName).toBe('Reviewer')
+    expect(parsed.agentPath).toBe('/root/collage_resources')
     expect(parsed.messages.map((message) => message.content)).toEqual(['Review the tests', 'Tests look good'])
   })
 
@@ -31,6 +32,7 @@ describe('conversation archive parsing', () => {
     expect(child.providerSessionId).toBe('worker')
     expect(child.parentProviderSessionId).toBe('root')
     expect(parent.parentProviderSessionId).toBeNull()
+    expect(child.agentPath).toBeNull()
   })
 
   it('recognizes own-path agent messages without treating other agents as the child', () => {
@@ -40,6 +42,7 @@ describe('conversation archive parsing', () => {
       { type: 'response_item', timestamp: '2026-10-18T10:00:02Z', payload: { type: 'agent_message', author: '/root/reviewer', content: 'Own output' } }
     ].map((record) => JSON.stringify(record)).join('\n')
     expect(parseCodexConversation('/tmp/child.jsonl', source, '')?.messages.map((message) => message.content)).toEqual(['Own output'])
+    expect(parseCodexConversation('/tmp/child.jsonl', source, '')?.agentPath).toBe('/root/reviewer')
   })
 
   it('lists and opens worktree subagents, keeps search ancestry, and enforces project scope', () => {

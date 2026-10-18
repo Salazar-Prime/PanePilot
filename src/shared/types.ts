@@ -432,6 +432,8 @@ export interface ConversationSummary {
   providerSessionId: string | null
   parentProviderSessionId?: string | null
   agentName?: string | null
+  /** Provider's agent hierarchy path, distinct from a filesystem directory. */
+  agentPath?: string | null
   title: string
   workingDirectory: string
   updatedAt: string

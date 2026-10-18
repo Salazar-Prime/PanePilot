@@ -26,6 +26,7 @@ interface ParsedConversation {
   providerSessionId: string | null
   parentProviderSessionId: string | null
   agentName: string | null
+  agentPath: string | null
   title: string
   workingDirectory: string
   updatedAt: string
@@ -190,6 +191,7 @@ export function parseCodexConversation(
     providerSessionId: archiveId,
     parentProviderSessionId,
     agentName,
+    agentPath: parentProviderSessionId ? agentPath : null,
     title: defaultTitle(messages),
     workingDirectory,
     updatedAt,
@@ -248,6 +250,7 @@ export function parseClaudeConversation(
     providerSessionId,
     parentProviderSessionId,
     agentName: null,
+    agentPath: null,
     title: summary || defaultTitle(messages),
     workingDirectory,
     updatedAt,
@@ -318,6 +321,7 @@ export class ConversationIndexer {
         const searchable = [
           conversation.title,
           conversation.agentName ?? '',
+          conversation.agentPath ?? '',
           conversation.workingDirectory,
           ...conversation.messages.map((message) => message.content)
         ]
@@ -330,6 +334,7 @@ export class ConversationIndexer {
           providerSessionId: conversation.providerSessionId,
           parentProviderSessionId: conversation.parentProviderSessionId,
           agentName: conversation.agentName,
+          agentPath: conversation.agentPath,
           title: display.title,
           workingDirectory: conversation.workingDirectory,
           updatedAt: conversation.updatedAt,
@@ -351,6 +356,7 @@ export class ConversationIndexer {
     const searchable = [
       conversation.title,
       conversation.agentName ?? '',
+      conversation.agentPath ?? '',
       conversation.workingDirectory,
       ...conversation.messages.map((message) => message.content)
     ]
@@ -360,6 +366,7 @@ export class ConversationIndexer {
       providerSessionId: conversation.providerSessionId,
       parentProviderSessionId: conversation.parentProviderSessionId,
       agentName: conversation.agentName,
+      agentPath: conversation.agentPath,
       title: conversation.title,
       workingDirectory: conversation.workingDirectory,
       updatedAt: conversation.updatedAt,

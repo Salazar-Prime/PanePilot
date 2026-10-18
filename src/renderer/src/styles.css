@@ -2362,6 +2362,11 @@ select:focus-visible {
   cursor: pointer;
 }
 .chat-parent-navigation > span:last-child { flex: 0 0 auto; margin-left: auto; }
+.chat-parent-navigation > span.chat-subagent-info { display: flex; min-width: 0; max-width: 70%; flex: 0 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px; }
+.chat-subagent-info > span:first-child { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-subagent-path { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: 5px; }
+.chat-subagent-path small { flex-shrink: 0; color: #7f8795; font-size: 8px; }
+.chat-subagent-path code { overflow: hidden; color: #9ba9f1; font: 9px "SFMono-Regular", "Cascadia Code", monospace; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
 @media (prefers-reduced-motion: reduce) {
   .chat-subagent-toggle > svg:first-child { transition: none; }
 }

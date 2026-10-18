@@ -19,7 +19,7 @@ describe('remote conversation archive payloads', () => {
       mkdirSync(codex, { recursive: true })
       mkdirSync(join(claude, 'claude-root', 'subagents'), { recursive: true })
       const codexChat = (id: string, cwd: string, parent?: string) => [
-        { type: 'session_meta', timestamp: '2026-10-18T10:00:00Z', payload: { id, cwd, ...(parent ? { source: { subagent: { thread_spawn: { parent_thread_id: parent, agent_nickname: 'Reviewer' } } } } : {}) } },
+        { type: 'session_meta', timestamp: '2026-10-18T10:00:00Z', payload: { id, cwd, ...(parent ? { source: { subagent: { thread_spawn: { parent_thread_id: parent, agent_nickname: 'Reviewer', agent_path: `/root/${id}` } } } } : {}) } },
         { type: 'event_msg', timestamp: '2026-10-18T09:00:00Z', payload: { type: 'user_message', message: parent ? 'Inherited history' : 'Root task' } },
         { type: 'event_msg', timestamp: '2026-10-18T10:00:01Z', payload: { type: 'user_message', message: parent ? 'Searchneedle review' : 'Normal request' } },
         { type: 'event_msg', timestamp: '2026-10-18T10:00:02Z', payload: { type: 'agent_message', message: 'Result' } }
@@ -46,6 +46,10 @@ describe('remote conversation archive payloads', () => {
       expect((await remote.list('fixture', '/srv/project', 'searchneedle')).map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'nested', 'root'])
       expect((await remote.list('fixture', '/srv/project', 'reviewer')).map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'nested', 'root'])
       expect(local.list('/srv/project', 'reviewer').map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'nested', 'root'])
+      expect(remoteList.find((chat) => chat.providerSessionId === 'child')?.agentPath).toBe('/root/child')
+      expect(localList.find((chat) => chat.providerSessionId === 'child')?.agentPath).toBe('/root/child')
+      expect((await remote.list('fixture', '/srv/project', '/root/child')).map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'root'])
+      expect(local.list('/srv/project', '/root/child').map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'root'])
       const trimmedRemote = await remote.list('fixture', '/srv/project', '', 1)
       const trimmedLocal = local.list('/srv/project', '', 1)
       expect(trimmedRemote.map((chat) => [chat.id, chat.title, chat.snippet]).sort()).toEqual(trimmedLocal.map((chat) => [chat.id, chat.title, chat.snippet]).sort())
@@ -60,6 +64,8 @@ describe('remote conversation archive payloads', () => {
       expect((await remote.list('fixture', '/srv/project', 'searchneedle', 1)).some((chat) => chat.providerSessionId === 'child')).toBe(true)
       expect((await remote.list('fixture', '/srv/project', '', 100)).every((chat) => chat.snippet === '' && chat.title === 'All messages hidden')).toBe(true)
       const child = remoteList.find((chat) => chat.providerSessionId === 'child')!
+      expect((await remote.get('fixture', '/srv/project', child.id)).agentPath).toBe('/root/child')
+      expect(local.get('/srv/project', child.id).agentPath).toBe('/root/child')
       expect((await remote.get('fixture', '/srv/project', child.id)).messages.map((message) => message.content)).toEqual(['Searchneedle review', 'Result'])
       expect(result.codexSessions.map((session) => session.id)).toEqual(['root'])
     } finally { rmSync(remoteHome, { recursive: true, force: true }) }

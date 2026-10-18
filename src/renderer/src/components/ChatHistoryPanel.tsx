@@ -225,7 +225,12 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
                 <GitBranch size={12} />
                 {parent ? <button onClick={() => setSelectedId(parent.id)} title={parent.title}>← {parent.agentName || parent.title}</button>
                   : <span>Parent chat not available in this archive</span>}
-                <span>Subagent{detail.agentName ? ` · ${detail.agentName}` : ''}</span>
+                <span className="chat-subagent-info">
+                  <span>Subagent{detail.agentName ? ` · ${detail.agentName}` : ''}</span>
+                  {detail.agentPath && <span className="chat-subagent-path" title={`Agent hierarchy path: ${detail.agentPath} (not a filesystem folder)`}>
+                    <small>Agent path</small><code>{detail.agentPath}</code>
+                  </span>}
+                </span>
               </div>
             )}
             <ConversationMessageControls hiddenCount={hiddenCount} total={detail.messages.length}

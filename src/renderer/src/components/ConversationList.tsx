@@ -32,7 +32,7 @@ function ConversationRow({ node, ...props }: Props & { node: ConversationNode })
       >
         <div className="chat-card-meta">
           <span className={`provider-badge ${conversation.provider}`}>{conversation.provider}</span>
-          {child && <span className="chat-subagent-label"><GitBranch size={10} /> Subagent</span>}
+          {child && <span className="chat-subagent-label" title={conversation.agentPath ? `Agent path: ${conversation.agentPath}` : undefined}><GitBranch size={10} /> Subagent</span>}
           <time>{formatConversationDate(conversation.updatedAt)}</time>
         </div>
         <strong>{conversation.agentName || conversation.title}</strong>
