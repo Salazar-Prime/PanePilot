@@ -231,8 +231,8 @@ function registerIpc(): void {
   )
   ipcMain.handle(
     'git:commits',
-    (_event, projectId: string, offset?: number, limit?: number) =>
-      gitService.commits(projectId, offset, limit)
+    (_event, projectId: string, offset?: number, limit?: number, tipHash?: string) =>
+      gitService.commits(projectId, offset, limit, tipHash)
   )
   ipcMain.handle('git:branches', (_event, projectId: string) =>
     gitService.branches(projectId)

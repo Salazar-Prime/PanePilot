@@ -569,7 +569,7 @@ export interface ProjectConsoleApi {
   git: {
     status(projectId: string): Promise<GitRepositoryStatus>
     repositoryVisibility(projectId: string): Promise<GitHubRepositoryVisibilityStatus>
-    commits(projectId: string, offset?: number, limit?: number): Promise<GitCommitPage>
+    commits(projectId: string, offset?: number, limit?: number, tipHash?: string): Promise<GitCommitPage>
     branches(projectId: string): Promise<GitBranchRef[]>
   }
   terminals: {

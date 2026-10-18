@@ -65,8 +65,8 @@ const api: ProjectConsoleApi = {
     status: (projectId: string) => ipcRenderer.invoke('git:status', projectId),
     repositoryVisibility: (projectId: string) =>
       ipcRenderer.invoke('git:repository-visibility', projectId),
-    commits: (projectId: string, offset?: number, limit?: number) =>
-      ipcRenderer.invoke('git:commits', projectId, offset, limit),
+    commits: (projectId: string, offset?: number, limit?: number, tipHash?: string) =>
+      ipcRenderer.invoke('git:commits', projectId, offset, limit, tipHash),
     branches: (projectId: string) => ipcRenderer.invoke('git:branches', projectId)
   },
   terminals: {

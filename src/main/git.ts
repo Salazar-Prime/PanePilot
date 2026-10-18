@@ -491,8 +491,13 @@ export class GitService {
   async commits(
     projectId: string,
     requestedOffset = 0,
-    requestedLimit = DEFAULT_COMMIT_LIMIT
+    requestedLimit = DEFAULT_COMMIT_LIMIT,
+    requestedTipHash?: string
   ): Promise<GitCommitPage> {
+    if (requestedTipHash != null && (typeof requestedTipHash !== 'string' || !/^[a-f0-9]{40,64}$/i.test(requestedTipHash))) {
+      throw new Error('A branch filter requires an exact commit hash.')
+    }
+    const revisions = requestedTipHash ? [requestedTipHash] : ['--exclude=refs/stash', '--all']
     const offset = Number.isSafeInteger(requestedOffset)
       ? Math.max(0, requestedOffset)
       : 0
@@ -502,7 +507,7 @@ export class GitService {
     const { runner } = this.projectRunner(projectId)
     let total: number
     try {
-      total = Number((await runner.run(['rev-list', '--all', '--count'])).trim()) || 0
+      total = Number((await runner.run(['rev-list', '--count', ...revisions])).trim()) || 0
     } catch (error) {
       if (isNotRepository(error)) {
         return { commits: [], offset, total: 0, hasMore: false }
@@ -515,13 +520,13 @@ export class GitService {
     const raw = await runner.run([
       '--no-pager',
       'log',
-      '--all',
-      '--date-order',
+      '--topo-order',
       '--graph',
       '--decorate=short',
       `--max-count=${limit}`,
       `--skip=${offset}`,
-      `--format=${LOG_RECORD}%H${LOG_FIELD}%h${LOG_FIELD}%P${LOG_FIELD}%D${LOG_FIELD}%an${LOG_FIELD}%aI${LOG_FIELD}%s`
+      `--format=${LOG_RECORD}%H${LOG_FIELD}%h${LOG_FIELD}%P${LOG_FIELD}%D${LOG_FIELD}%an${LOG_FIELD}%aI${LOG_FIELD}%s`,
+      ...revisions
     ])
     const commits = parseGitGraph(raw)
     return {
