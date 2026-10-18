@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import type { GitBranchRef, GitCommit, GitRepositoryStatus } from '@shared/types'
 import { parseGitHubRepositoryReference } from '@shared/git'
-import { buildGitTimeline, gitBranchAncestry } from '../lib/gitTimeline'
+import { buildGitTimeline, projectGitTimeline } from '../lib/gitTimeline'
 import { useModalEscape } from '../lib/modalEscape'
 import '../git-history.css'
 
@@ -57,6 +57,7 @@ export function GitHistoryModal({
   const overviewRef = useRef<HTMLDivElement>(null)
   const commitsRef = useRef(commits)
   const headRef = useRef(status?.head)
+  const scopeTipRef = useRef<string>()
   const requestSequence = useRef(0)
   const branchSequence = useRef(0)
   const loadingRef = useRef(false)
@@ -64,33 +65,26 @@ export function GitHistoryModal({
   const positionedSize = useRef({ width: 0, height: 0 })
   const scrollFrame = useRef(0)
   const copyTimer = useRef<ReturnType<typeof setTimeout>>()
-  const anchorRef = useRef<{ hash: string; x: number; y: number } | null>(null)
+  const anchorRef = useRef<{ hash: string; x: number } | null>(null)
   const dragRef = useRef<{ pointerId: number; x: number; left: number } | null>(null)
   const overviewDragging = useRef(false)
   headRef.current = status?.head
 
-  const model = useMemo(() => buildGitTimeline(commits, status?.head ?? null), [commits, status?.head])
+  const activeBranch = branches.find((branch) => branchKey(branch) === branchFilter)
+  const model = useMemo(() => buildGitTimeline(commits, activeBranch?.hash ?? status?.head ?? null, branches), [commits, status?.head, branches, activeBranch?.hash])
   const modelRef = useRef(model)
   modelRef.current = model
   const paddingX = commits.length > 0 ? Math.max(0, metrics.width / 2 - 84) : 0
-  const paddingY = Math.max(0, (metrics.height - model.height) / 2)
   const canvasWidth = commits.length > 0 ? model.width + paddingX * 2 : metrics.width
-  const canvasHeight = Math.max(model.height, metrics.height)
-  const paddingRef = useRef({ x: paddingX, y: paddingY })
-  paddingRef.current = { x: paddingX, y: paddingY }
+  const canvasHeight = metrics.height
+  const paddingRef = useRef({ x: paddingX })
+  paddingRef.current = { x: paddingX }
   const selected = commits.find((commit) => commit.hash === selectedHash) ?? commits[0] ?? null
-  const activeBranch = branches.find((branch) => branchKey(branch) === branchFilter)
-  const ancestry = useMemo(() => activeBranch ? gitBranchAncestry(activeBranch.hash, commits) : null, [activeBranch, commits])
   const github = parseGitHubRepositoryReference(status?.originUrl) ?? parseGitHubRepositoryReference(repositoryUrl)
-  const visibleNodes = model.nodes.filter((node) =>
-    node.x + paddingX >= metrics.left - 264 && node.x + paddingX <= metrics.left + metrics.width + 264
-  )
+  const slice = useMemo(() => projectGitTimeline(model, metrics.left - paddingX, metrics.width, metrics.height), [model, metrics.left, metrics.width, metrics.height, paddingX])
+  const visibleNodes = slice.nodes
   const nodeMap = useMemo(() => new Map(model.nodes.map((node) => [node.commit.hash, node])), [model])
-  const visibleEdges = model.edges.filter((edge) => {
-    const start = nodeMap.get(edge.parentHash)!.x + paddingX
-    const end = nodeMap.get(edge.childHash)!.x + paddingX
-    return end >= metrics.left - 264 && start <= metrics.left + metrics.width + 264
-  })
+  const visibleEdges = slice.edges
 
   useModalEscape(onClose, open)
 
@@ -102,14 +96,22 @@ export function GitHistoryModal({
   }, [])
 
   const loadPage = useCallback(async (reset: boolean) => {
-    if (loadingRef.current) return
+    if (loadingRef.current && !reset) return
     const request = ++requestSequence.current
     const offset = reset ? 0 : commitsRef.current.length
     loadingRef.current = true
     setLoading(true)
     setError('')
+    if (reset) {
+      commitsRef.current = []
+      setCommits([])
+      setTotal(0)
+      setHasMore(false)
+      initialPositioned.current = false
+      anchorRef.current = null
+    }
     try {
-      const page = await window.projectConsole.git.commits(projectId, offset, PAGE_SIZE)
+      const page = await window.projectConsole.git.commits(projectId, offset, PAGE_SIZE, scopeTipRef.current)
       if (request !== requestSequence.current) return
       if (!reset) {
         const viewport = viewportRef.current
@@ -119,8 +121,7 @@ export function GitHistoryModal({
             !best || Math.abs(node.x - center) < Math.abs(best.x - center) ? node : best, null)
           if (anchor) anchorRef.current = {
             hash: anchor.commit.hash,
-            x: anchor.x + paddingRef.current.x - viewport.scrollLeft,
-            y: anchor.y + paddingRef.current.y - viewport.scrollTop
+            x: anchor.x + paddingRef.current.x - viewport.scrollLeft
           }
         }
       }
@@ -133,7 +134,8 @@ export function GitHistoryModal({
       setHasMore(page.hasMore && page.commits.length > 0)
       if (reset) {
         initialPositioned.current = false
-        setSelectedHash(next.some((commit) => commit.hash === headRef.current) ? headRef.current! : next[0]?.hash ?? null)
+        const tip = scopeTipRef.current ?? headRef.current
+        setSelectedHash(next.some((commit) => commit.hash === tip) ? tip! : next[0]?.hash ?? null)
       }
     } catch (cause) {
       if (request === requestSequence.current) setError(errorMessage(cause))
@@ -167,6 +169,7 @@ export function GitHistoryModal({
     setBranches([])
     setSelectedHash(null)
     setBranchFilter(null)
+    scopeTipRef.current = undefined
     setHasMore(false)
     setTotal(0)
     setCopyMessage('')
@@ -218,26 +221,22 @@ export function GitHistoryModal({
     const node = nodeMap.get(anchor?.hash ?? selectedHash ?? '')
     if (anchor && node) {
       viewport.scrollLeft = node.x + paddingX - anchor.x
-      viewport.scrollTop = node.y + paddingY - anchor.y
       anchorRef.current = null
     } else if (node && (!initialPositioned.current || positionedSize.current.width !== metrics.width || positionedSize.current.height !== metrics.height)) {
       viewport.scrollLeft = node.x + paddingX - viewport.clientWidth / 2
-      viewport.scrollTop = node.y + paddingY - viewport.clientHeight / 2
       initialPositioned.current = true
     }
     positionedSize.current = { width: metrics.width, height: metrics.height }
+    viewport.scrollTop = 0
     updateMetrics()
-  }, [open, model, nodeMap, selectedHash, paddingX, paddingY, metrics.width, metrics.height, updateMetrics])
+  }, [open, model, nodeMap, selectedHash, paddingX, metrics.width, metrics.height, updateMetrics])
 
-  function centerCommit(hash: string) {
-    const node = nodeMap.get(hash)
-    const viewport = viewportRef.current
-    if (!node || !viewport) return
-    viewport.scrollTo({
-      left: node.x + paddingX - viewport.clientWidth / 2,
-      top: node.y + paddingY - viewport.clientHeight / 2,
-      behavior: reducedMotion ? 'instant' : 'smooth'
-    })
+  function filterBranch(branch: GitBranchRef | null) {
+    scopeTipRef.current = branch?.hash
+    setBranchFilter(branch ? branchKey(branch) : null)
+    setCopiedHash(null)
+    setCopyMessage('')
+    void loadPage(true)
   }
 
   async function copyCommit(commit: GitCommit) {
@@ -305,17 +304,17 @@ export function GitHistoryModal({
           <span className="gh-branch-label"><GitBranch size={13} /> Branches</span>
           <nav className="gh-branch-list" aria-label="Focus branch history">
             <button className={`gh-branch-chip ${branchFilter === null ? 'active' : ''}`}
-              aria-pressed={branchFilter === null} onClick={() => setBranchFilter(null)}><i />All</button>
+              aria-pressed={branchFilter === null} onClick={() => filterBranch(null)}><i />All</button>
             {branches.map((branch, index) => <button key={branchKey(branch)}
               className={`gh-branch-chip ${branchFilter === branchKey(branch) ? 'active' : ''} ${branch.remote ? 'remote' : ''}`}
               aria-pressed={branchFilter === branchKey(branch)}
               title={`${branch.remote ? 'Remote' : 'Local'} branch: ${branch.name}${!branch.remote && branch.name === status?.branch ? ' · current branch' : ''}`}
               style={{ '--gh-branch-color': nodeMap.get(branch.hash)?.color ?? ['#aab7f0', '#e2bc86', '#c6a3dc'][index % 3] } as CSSProperties}
-              onClick={() => { setBranchFilter(branchKey(branch)); if (nodeMap.has(branch.hash)) { setSelectedHash(branch.hash); centerCommit(branch.hash) } }}>
+              onClick={() => filterBranch(branch)}>
               <i />{branch.name}{!branch.remote && branch.name === status?.branch && <span className="gh-head-mark">HEAD</span>}
             </button>)}
           </nav>
-          <span className="gh-count" title={branchError || `${total} commits across all refs`}>
+          <span className="gh-count" title={branchError || `${total} commits in ${activeBranch?.name ?? 'all branches'}`}>
             {branches.length} branches <span>·</span> {commits.length}{total > commits.length ? ` / ${total}` : ''} commits
           </span>
           {github && <button className="gh-github-button" title={`Open ${github.nameWithOwner} on GitHub`}
@@ -351,7 +350,7 @@ export function GitHistoryModal({
             <span>Older</span><button aria-label="Scroll to older commits" onClick={() => scrollHistory(-1)}><ArrowLeft size={13} /></button>
             <button aria-label="Scroll to newer commits" onClick={() => scrollHistory(1)}><ArrowRight size={13} /></button><span>Newer</span>
           </div></div>
-          <div className="gh-viewport" ref={viewportRef} tabIndex={0} aria-label="Scroll or drag through commit history"
+          <div className={`gh-viewport ${slice.dense ? 'dense' : ''}`} ref={viewportRef} tabIndex={0} aria-label="Scroll or drag through commit history"
             onScroll={() => {
               cancelAnimationFrame(scrollFrame.current)
               scrollFrame.current = requestAnimationFrame(updateMetrics)
@@ -362,18 +361,18 @@ export function GitHistoryModal({
             onPointerUp={() => { dragRef.current = null }} onPointerCancel={() => { dragRef.current = null }}>
             <div className="gh-graph-content" style={{ width: canvasWidth, height: canvasHeight }}>
               <svg className="gh-edges" width={canvasWidth} height={canvasHeight} aria-hidden="true">
-                <g transform={`translate(${paddingX} ${paddingY})`}>
+                <g transform={`translate(${paddingX} 0)`}>
                   {visibleEdges.map((edge) => <motion.path key={`${edge.parentHash}:${edge.childHash}`} d={edge.path} stroke={edge.color}
-                    animate={{ opacity: ancestry && (!ancestry.has(edge.parentHash) || !ancestry.has(edge.childHash)) ? 0.12 : 0.9 }} transition={transition} />)}
+                    initial={false} animate={{ d: edge.path, opacity: 0.9 }} transition={transition} />)}
                 </g>
               </svg>
-              {visibleNodes.filter((node) => model.nodes.indexOf(node) % 7 === 0).map((node) => <div className="gh-date-guide" key={`date:${node.commit.hash}`} style={{ left: node.x + paddingX }}>
+              {visibleNodes.filter((node) => Math.round((node.x - 84) / 132) % 7 === 0).map((node) => <div className="gh-date-guide" key={`date:${node.commit.hash}`} style={{ left: node.x + paddingX }}>
                 {dateLabel(node.commit.authoredAt)}
               </div>)}
               {visibleNodes.map((node) => <motion.button key={node.commit.hash}
                 className={`gh-node ${node.commit.parents.length > 1 ? 'merge' : ''} ${selected?.hash === node.commit.hash ? 'selected' : ''}`}
-                style={{ left: node.x + paddingX, top: node.y + paddingY, '--gh-node-color': node.color } as CSSProperties}
-                animate={{ opacity: ancestry && !ancestry.has(node.commit.hash) ? 0.18 : 1 }} transition={transition}
+                style={{ left: node.x + paddingX, '--gh-node-color': node.color } as CSSProperties}
+                initial={false} animate={{ top: node.y, opacity: 1 }} transition={transition}
                 aria-label={`${node.commit.shortHash}: ${node.commit.subject}. Click to copy full SHA.`} aria-pressed={selected?.hash === node.commit.hash}
                 title={`${node.commit.subject}\n${node.commit.author} · ${dateLabel(node.commit.authoredAt)}\n${node.commit.hash}`}
                 onClick={() => void copyCommit(node.commit)}>
@@ -383,6 +382,16 @@ export function GitHistoryModal({
             </div>
           </div>
           <div className="gh-slice" aria-hidden="true"><span>Current slice</span></div>
+          <div className="gh-rail-labels" aria-label="Branches in this history window">
+            {slice.labels.map((track) => <motion.div key={`guide:${track.id}`} className="gh-rail-guide"
+              initial={false} animate={{ y: track.y }} transition={transition} />)}
+            {slice.labels.map((track) => <motion.div key={track.id} className="gh-rail-label"
+              style={{ left: track.x, color: track.color }} initial={false}
+              animate={{ y: track.y - 19 }} transition={transition}
+              title={[track.name, ...track.aliases.filter((name) => name !== track.name)].join(' · ')}>
+              {track.name}
+            </motion.div>)}
+          </div>
           <div className="gh-overview" ref={overviewRef} role="slider" tabIndex={0}
             aria-label="Visible history window" aria-valuemin={0} aria-valuemax={100}
             aria-valuenow={Math.round(overviewLeft)} aria-valuetext={`${commits.length} of ${total} commits loaded`}
@@ -390,14 +399,14 @@ export function GitHistoryModal({
             onPointerMove={(event) => { if (overviewDragging.current) moveOverview(event.clientX) }}
             onPointerUp={() => { overviewDragging.current = false }} onPointerCancel={() => { overviewDragging.current = false }}
             onKeyDown={(event) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); scrollHistory(event.key === 'ArrowLeft' ? -1 : 1) } }}>
-            <svg viewBox={`0 0 ${canvasWidth} ${canvasHeight}`} preserveAspectRatio="none" aria-hidden="true"><g transform={`translate(${paddingX} ${paddingY})`}>
+            <svg viewBox={`0 0 ${canvasWidth} ${model.height}`} preserveAspectRatio="none" aria-hidden="true"><g transform={`translate(${paddingX} 0)`}>
               {model.edges.map((edge) => <path key={`${edge.parentHash}:${edge.childHash}`} d={edge.path} stroke={edge.color} />)}
             </g></svg>
             <div className="gh-overview-window" style={{ left: `${overviewLeft}%`, width: `${overviewWidth}%` }} />
           </div>
         </section>
         <footer className="gh-footer">
-          <span role="status">{copyMessage || (activeBranch && !ancestry ? 'This branch tip is outside the loaded window. Load older commits to see it.' : 'Click a commit to copy its full SHA. Scroll or drag to explore.')}</span>
+          <span role="status">{copyMessage || (activeBranch ? `History reachable from ${activeBranch.name}. Click a commit to copy its full SHA.` : 'Click a commit to copy its full SHA. Scroll or drag to explore.')}</span>
           <div>{hasMore && <button onClick={() => void loadPage(false)} disabled={loading}>{loading ? 'Loading…' : 'Load older commits'}</button>}<span>Read only</span></div>
         </footer>
       </motion.section>

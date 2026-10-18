@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GitCommit } from '../src/shared/types'
-import { buildGitTimeline, gitBranchAncestry } from '../src/renderer/src/lib/gitTimeline'
+import { buildGitTimeline, gitBranchAncestry, projectGitTimeline } from '../src/renderer/src/lib/gitTimeline'
 
 function commit(hash: string, ...parents: string[]): GitCommit {
   return { hash, shortHash: hash, parents, decorations: [], author: 'Test', authoredAt: '2026-10-17T12:00:00Z', subject: hash, graph: '*' }
@@ -37,5 +37,30 @@ describe('horizontal Git history', () => {
     expect([...gitBranchAncestry('E', history)!].sort()).toEqual(['A', 'B', 'C', 'D', 'E'])
     expect([...gitBranchAncestry('D', history)!].sort()).toEqual(['A', 'C', 'D'])
     expect(gitBranchAncestry('older-tip-not-loaded', history)).toBeNull()
+  })
+
+  it('reuses ended branch lanes and keeps first-parent integration chains intact', () => {
+    const graph = buildGitTimeline([
+      commit('end', 'merge2'), commit('merge2', 'between', 'side2'), commit('side2', 'between'),
+      commit('between', 'merge1'), commit('merge1', 'main', 'side1'), commit('side1', 'root'),
+      commit('main', 'root'), commit('root')
+    ], 'end', [{ name: 'main', hash: 'end', remote: false }, { name: 'first', hash: 'side1', remote: false }, { name: 'second', hash: 'side2', remote: false }])
+    const nodes = new Map(graph.nodes.map((node) => [node.commit.hash, node]))
+    expect(nodes.get('side1')!.lane).toBe(nodes.get('side2')!.lane)
+    expect(graph.tracks.find((track) => track.name === 'first')).toBeDefined()
+    expect(graph.edges.find((edge) => edge.parentHash === 'side1' && edge.childHash === 'merge1')!.path).toMatch(/H.+C/)
+  })
+
+  it('fits every active branch and its left-edge label into the visible vertical area', () => {
+    const sides = Array.from({ length: 18 }, (_, index) => commit(`side${index}`, 'root'))
+    const graph = buildGitTimeline([commit('merge', 'main', ...sides.map((node) => node.hash)), ...sides, commit('main', 'root'), commit('root')], 'merge',
+      sides.map((node) => ({ name: `feature/${node.hash}`, hash: node.hash, remote: false })))
+    const view = projectGitTimeline(graph, 150, 2200, 330)
+    expect(view.labels.length).toBeGreaterThan(10)
+    expect(new Set(view.labels.map((label) => label.y)).size).toBe(view.labels.length)
+    expect(view.nodes.every((node) => node.y >= 60 && node.y <= 270)).toBe(true)
+    expect(view.labels.every((label) => label.y >= 60 && label.y <= 270 && label.x >= 12)).toBe(true)
+    expect(view.labels.filter((label) => label.start < 150).every((label) => label.x === 12)).toBe(true)
+    expect(view.dense).toBe(true)
   })
 })
