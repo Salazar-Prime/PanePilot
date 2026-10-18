@@ -28,6 +28,8 @@ import type {
 } from '@shared/types'
 import { addFileManagementActions } from '../lib/monacoFinderAction'
 import { isMarkdownPath } from '../lib/markdown'
+import { isHtmlPath } from '../lib/htmlPreview'
+import { HtmlPreview } from './HtmlPreview'
 import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
 import { Editor, monaco } from '../lib/monaco'
 import {
@@ -160,7 +162,9 @@ function FilesPanelInstance({
   const draft = activeFile?.draft ?? ''
   const editing = activeFile?.editing ?? false
   const markdown = Boolean(preview && isMarkdownPath(preview.path))
-  const viewMode = activeFile?.viewMode ?? (markdown ? 'preview' : 'source')
+  const html = Boolean(preview && isHtmlPath(preview.path))
+  const renderedPreview = markdown || html
+  const viewMode = activeFile?.viewMode ?? (renderedPreview ? 'preview' : 'source')
   activeFinderPathRef.current = preview?.path ?? null
 
   useEffect(() => {
@@ -354,7 +358,7 @@ function FilesPanelInstance({
           editing: false,
           viewMode:
             requestedViewMode ??
-            (isMarkdownPath(nextPreview.path) ? 'preview' : 'source')
+            (isMarkdownPath(nextPreview.path) || isHtmlPath(nextPreview.path) ? 'preview' : 'source')
         }
       ]
     })
@@ -517,11 +521,11 @@ function FilesPanelInstance({
   }, [preview?.path, openFileRequest?.requestId, viewMode])
 
   useEffect(() => {
-    if (!markdown || viewMode !== 'preview') return
+    if (!renderedPreview || viewMode !== 'preview') return
     editorRef.current = null
     finderActionRef.current?.dispose()
     finderActionRef.current = null
-  }, [markdown, viewMode, preview?.path])
+  }, [renderedPreview, viewMode, preview?.path])
 
   useEffect(() => {
     setDriveMessage('')
@@ -993,11 +997,11 @@ function FilesPanelInstance({
               {driveMessage && (
                 <small className="drive-upload-result">{driveMessage}</small>
               )}
-              {markdown && (
+              {renderedPreview && (
                 <div
                   className="preview-mode-switch"
                   role="group"
-                  aria-label="Markdown view"
+                  aria-label={html ? 'HTML view' : 'Markdown view'}
                 >
                   <button
                     className={viewMode === 'preview' ? 'active' : ''}
@@ -1201,6 +1205,15 @@ function FilesPanelInstance({
                 onOpenProjectPath={openMarkdownProjectPath}
                 onError={setError}
               />
+            ) : html && viewMode === 'preview' ? (
+              <HtmlPreview
+                projectId={project.id}
+                path={preview.path}
+                content={editing ? draft : preview.content}
+                anchor={markdownAnchor?.path === preview.path ? markdownAnchor : null}
+                onOpenProjectPath={openMarkdownProjectPath}
+                onError={setError}
+              />
             ) : (
               <div className="file-editor-shell">
                 <Editor
@@ -1392,6 +1405,8 @@ function languageForPath(path: string): string {
     css: 'css',
     go: 'go',
     html: 'html',
+    htm: 'html',
+    xhtml: 'html',
     java: 'java',
     js: 'javascript',
     json: 'json',

@@ -2043,6 +2043,40 @@ select:focus-visible {
   flex: 1;
 }
 
+.html-preview-shell {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.html-preview-notice {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #242832;
+  color: #848b9d;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.html-preview-notice > :first-child {
+  color: #d8dbe4;
+}
+
+.html-preview-frame {
+  display: block;
+  min-height: 0;
+  width: 100%;
+  flex: 1;
+  border: 0;
+  background: #fff;
+  color-scheme: light;
+}
+
 .file-entry-modal {
   width: min(450px, 100%);
 }
