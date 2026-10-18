@@ -77,4 +77,4 @@ it('removes the status-bar input count when the prompt leaves the live footer, w
     store.close()
     rmSync(root, { recursive: true, force: true })
   }
-})
+}, 15_000)

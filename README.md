@@ -128,8 +128,9 @@ not update the repository.
 Choose **Open Git history timeline** for the Aperture view: a searchable horizontal
 topology of local and remote branches, commits, forks, and merges. Selecting a branch
 loads history reachable from that branch's exact tip. Selecting a commit reveals its
-details; copying its full SHA requires the explicit copy button. History loading stays
-bounded and read-only.
+details; each node shows its compact authored age, with the full local date, time, and
+timezone on hover. Copying its full SHA requires the explicit copy button. History
+loading stays bounded and read-only.
 
 The top **Repository** action labels a Git repository with no `origin` remote as
 **Local** and opens its read-only Git pane. For GitHub origins, it instead shows

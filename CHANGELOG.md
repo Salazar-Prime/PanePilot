@@ -6,8 +6,10 @@ This release adds deeper read-only Git exploration and makes project history,
 previews, and launch flows easier to navigate:
 
 - The new Aperture timeline explores local and remote branches from their exact tips
-  in a searchable horizontal commit graph, with bounded history loading and an
-  explicit full-SHA copy action. It remains read-only for local and SSH projects.
+  in a searchable horizontal commit graph. Commit nodes show a compact authored age
+  with the full local time on hover; history loading stays bounded, and copying a
+  full SHA remains an explicit action. The timeline is read-only for local and SSH
+  projects.
 - LLM Chats now groups recorded sub-agent conversations beneath their parents,
   preserves searchable agent paths, shares transcript trimming across the current
   app session, and adds previous/next user-message navigation. A contextual
