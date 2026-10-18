@@ -56,7 +56,16 @@ if (!process.versions.electron) {
       await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<html><head><style>${styles.join('\n')}</style></head><body><div id="root"></div></body></html>`)}`)
       await evaluate(await readFile(join(temp, 'fixture.js'), 'utf8'))
       await waitFor(`document.querySelectorAll('.gh-node').length>1 && document.querySelector('.gh-branch-list').scrollWidth>document.querySelector('.gh-branch-list').clientWidth`)
-      await click('.gh-node[aria-pressed="false"]')
+      const timestampsBelowHashes = `Array.from(document.querySelectorAll('.gh-node')).every(node=>{
+        const hash=node.querySelector('code'), time=node.querySelector('.gh-node-time');
+        return time && time.dateTime==='2026-10-18T12:00:00Z' && time.textContent.trim().length>0 &&
+          time.title.includes('2026') && node.title.includes(time.title) &&
+          time.getBoundingClientRect().top>=hash.getBoundingClientRect().bottom &&
+          parseFloat(getComputedStyle(time).fontSize)>=8;
+      })`
+      assert.equal(await evaluate(timestampsBelowHashes), true, 'Each hash has a compact timestamp beneath it and a full hover timestamp')
+      if (process.env.PANEPILOT_GIT_TIME_SCREENSHOT) await writeFile(process.env.PANEPILOT_GIT_TIME_SCREENSHOT, (await window.webContents.capturePage()).toPNG())
+      await click('.gh-node[aria-pressed="false"] .gh-node-time')
       assert.equal(await evaluate('window.copies.length'), 0)
       const selected = await evaluate(`document.querySelector('.gh-copy-hash').title.split(': ')[1]`)
       await click('[aria-label="Copy full commit SHA"]')
@@ -108,9 +117,14 @@ if (!process.versions.electron) {
       await waitFor(`document.querySelector('.gh-branch-picker')`)
       await click('.gh-all-branches')
       await waitFor(`window.gitRequests.at(-1)===null && document.querySelector('.gh-all-branches').getAttribute('aria-pressed')==='true' && !document.querySelector('.gh-branch-picker')`)
+      window.setSize(1150, 780)
+      await evaluate(`window.showDenseHistory()`)
+      await waitFor(`document.querySelector('.gh-viewport.dense') && document.querySelectorAll('.gh-node').length>1`)
+      assert.equal(await evaluate(timestampsBelowHashes), true, 'Dense branch slices keep timestamps beneath their hashes')
+      if (process.env.PANEPILOT_GIT_TIME_SCREENSHOT) await writeFile(`${process.env.PANEPILOT_GIT_TIME_SCREENSHOT}.dense.png`, (await window.webContents.capturePage()).toPNG())
       await escape()
       await waitFor('window.closeCount===1')
-      process.stdout.write('Git UI passed: selection without copying, explicit SHA copy, 251-branch overflow, searchable offscreen refs, narrow layout, and nested Escape.\n')
+      process.stdout.write('Git UI passed: timestamps beneath hashes in normal/dense slices, selection without copying, explicit SHA copy, 251-branch overflow, searchable offscreen refs, narrow layout, and nested Escape.\n')
       window.destroy()
       app.exit(0)
     } catch (error) {
@@ -128,10 +142,13 @@ function fixture() {
     const hash=n=>n.toString(16).padStart(40,'0');
     const commits=Array.from({length:20},(_,i)=>{const n=20-i;return {hash:hash(n),shortHash:hash(n).slice(-7),parents:n>1?[hash(n-1)]:[],decorations:[],author:'UI fixture',authoredAt:'2026-10-18T12:00:00Z',subject:'Commit '+n,graph:'*'};});
     const branches=[{name:'main',hash:hash(20),remote:false},...Array.from({length:250},(_,i)=>({name:(i<125?'feature/':'origin/feature/')+i+'-a-long-branch-name-for-the-overflow-check',hash:hash(i%20+1),remote:i>=125}))];
+    const sides=Array.from({length:18},(_,i)=>({...commits[0],hash:hash(i+3),shortHash:hash(i+3).slice(-7),parents:[hash(1)],subject:'Branch '+i}));
+    const denseCommits=[{...commits[0],hash:hash(21),shortHash:hash(21).slice(-7),parents:[hash(2),...sides.map(c=>c.hash)],subject:'Merge branches'},...sides.reverse(),commits.at(-2),commits.at(-1)];
+    const denseBranches=[{name:'main',hash:hash(21),remote:false},...sides.map((c,i)=>({name:'feature/'+i,hash:c.hash,remote:false}))];
     window.copies=[];window.gitRequests=[];window.closeCount=0;window.targetBranch=branches.at(-1);
-    window.projectConsole={git:{branches:async()=>branches,commits:async(_project,offset,limit,tip)=>{window.gitRequests.push(tip??null);const history=tip?commits.filter(c=>parseInt(c.hash,16)<=parseInt(tip,16)):commits;return {commits:history,offset:0,total:history.length,hasMore:false};}},system:{copyText:async text=>{window.copies.push(text);}},projects:{openRepository:async()=>{}}};
+    window.projectConsole={git:{branches:async(project)=>project==='dense'?denseBranches:branches,commits:async(project,offset,limit,tip)=>{window.gitRequests.push(tip??null);const all=project==='dense'?denseCommits:commits;const history=tip?all.filter(c=>parseInt(c.hash,16)<=parseInt(tip,16)):all;return {commits:history,offset:0,total:history.length,hasMore:false};}},system:{copyText:async text=>{window.copies.push(text);}},projects:{openRepository:async()=>{}}};
     const status={isRepository:true,root:'/fixture',originUrl:'https://github.com/example/fixture.git',branch:'main',detached:false,head:hash(20),upstream:null,ahead:0,behind:0,stashCount:0,clean:true,changes:[],message:null,refreshedAt:'2026-10-18T12:00:00Z'};
-    function Harness(){const[open,setOpen]=useState(true);return <GitHistoryModal open={open} projectId="fixture" projectName="Crowded repository" repositoryUrl={status.originUrl} status={status} onRefreshStatus={async()=>{}} onClose={()=>{window.closeCount++;setOpen(false);}}/>;}
+    function Harness(){const[open,setOpen]=useState(true);const[project,setProject]=useState('fixture');window.showDenseHistory=()=>setProject('dense');return <GitHistoryModal open={open} projectId={project} projectName="Crowded repository" repositoryUrl={status.originUrl} status={{...status,head:project==='dense'?hash(21):status.head}} onRefreshStatus={async()=>{}} onClose={()=>{window.closeCount++;setOpen(false);}}/>;}
     createRoot(document.getElementById('root')).render(<Harness/>);
   `
 }

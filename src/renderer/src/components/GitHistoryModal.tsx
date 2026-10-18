@@ -11,6 +11,7 @@ import {
 import type { GitBranchRef, GitCommit, GitRepositoryStatus } from '@shared/types'
 import { parseGitHubRepositoryReference } from '@shared/git'
 import { buildGitTimeline, projectGitTimeline } from '../lib/gitTimeline'
+import { fullCommitTime, shortCommitTime } from '../lib/gitCommitTime'
 import { useModalEscape } from '../lib/modalEscape'
 import { GitBranchBar } from './GitBranchBar'
 import { gitBranchKey as branchKey } from '../lib/gitBranches'
@@ -52,6 +53,7 @@ export function GitHistoryModal({
   const [copyMessage, setCopyMessage] = useState('')
   const [copiedHash, setCopiedHash] = useState<string | null>(null)
   const [metrics, setMetrics] = useState(emptyMetrics)
+  const [now, setNow] = useState(Date.now)
   const dialogRef = useRef<HTMLElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -89,6 +91,18 @@ export function GitHistoryModal({
   const visibleEdges = slice.edges
 
   useModalEscape(onClose, open)
+
+  useEffect(() => {
+    if (!open) return
+    const updateTime = () => { if (!document.hidden) setNow(Date.now()) }
+    updateTime()
+    const timer = setInterval(updateTime, 60_000)
+    document.addEventListener('visibilitychange', updateTime)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', updateTime)
+    }
+  }, [open])
 
   const updateMetrics = useCallback(() => {
     const element = viewportRef.current
@@ -336,7 +350,7 @@ export function GitHistoryModal({
           <div className="gh-selected-copy">
             <span className="gh-selected-prefix">{projectName}<i />{selected ? (selected.parents.length > 1 ? 'Merge commit' : 'Commit') : 'Repository history'}</span>
             <h2 title={selected?.subject}>{selected?.subject ?? (loading ? 'Reading repository history…' : 'No commits yet')}</h2>
-            {selected && <div className="gh-selected-meta"><span>{selected.author}</span><i /><time dateTime={selected.authoredAt}>{dateLabel(selected.authoredAt)}</time>
+            {selected && <div className="gh-selected-meta"><span>{selected.author}</span><i /><time dateTime={selected.authoredAt} title={fullCommitTime(selected.authoredAt)}>{dateLabel(selected.authoredAt)}</time>
               {selected.decorations.length > 0 && <><i /><span title={selected.decorations.join(', ')}>{selected.decorations.join(' · ')}</span></>}
             </div>}
           </div>
@@ -378,10 +392,16 @@ export function GitHistoryModal({
                 className={`gh-node ${node.commit.parents.length > 1 ? 'merge' : ''} ${selected?.hash === node.commit.hash ? 'selected' : ''}`}
                 style={{ left: node.x + paddingX, '--gh-node-color': node.color } as CSSProperties}
                 initial={false} animate={{ top: node.y, opacity: 1 }} transition={transition}
-                aria-label={`${node.commit.shortHash}: ${node.commit.subject}. Select commit.`} aria-pressed={selected?.hash === node.commit.hash}
-                title={`${node.commit.subject}\n${node.commit.author} · ${dateLabel(node.commit.authoredAt)}\n${node.commit.hash}`}
+                aria-label={`${node.commit.shortHash}: ${node.commit.subject}. ${fullCommitTime(node.commit.authoredAt)}. Select commit.`} aria-pressed={selected?.hash === node.commit.hash}
+                title={`${node.commit.subject}\n${node.commit.author} · ${fullCommitTime(node.commit.authoredAt)}\n${node.commit.hash}`}
                 onClick={() => selectCommit(node.commit)}>
-                <span className="gh-node-dot" /><code>{node.commit.shortHash}</code>
+                <span className="gh-node-dot" />
+                <span className="gh-node-label">
+                  <code>{node.commit.shortHash}</code>
+                  <time className="gh-node-time" dateTime={node.commit.authoredAt} title={fullCommitTime(node.commit.authoredAt)}>
+                    {shortCommitTime(node.commit.authoredAt, now)}
+                  </time>
+                </span>
               </motion.button>)}
               {commits.length === 0 && <div className="gh-empty">{loading ? <><RefreshCw size={22} className="spin" /><span>Reading commits…</span></> : <><GitBranch size={26} /><span>{error ? 'History is unavailable' : 'This repository has no commits yet.'}</span></>}</div>}
             </div>

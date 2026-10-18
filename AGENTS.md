@@ -363,6 +363,7 @@ Known scaling limitation: search currently scans the in-memory parsed conversati
 
 ## File and repository behavior
 
+- Every commit in the horizontal Git timeline shows its compact authored age (for example `5m ago`, `2h ago`, or `3d ago`) directly beneath its short hash, including dense branch slices. Hover exposes the full local date, time, and timezone. Relative ages update once a minute while the modal is open and visible, with an immediate refresh on return; this does not fetch Git data, move the graph, or copy a SHA.
 - Local file operations are bounded to the project folder.
 - Remote file operations execute through SSH.
 - Choosing a folder for a new SSH project browses that host's filesystem, starts at the remote home directory, and also permits direct path entry. Creation validates and stores the canonical remote path. It must never open the local native folder dialog.
