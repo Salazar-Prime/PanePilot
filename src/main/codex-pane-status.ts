@@ -8,10 +8,11 @@ const FULL_THREAD_ID =
   /\b([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\b/i
 const TRUNCATED_THREAD_ID =
   /\b([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{5,8})\.\.\./i
+const QUEUED_QUESTION_TAIL_ROWS = 8
 
 /** Codex can queue a question while its terminal title still says Working. */
 export function codexQueuedQuestionOnScreen(screenText: string): boolean {
-  const lines = screenText.split(/\r?\n/).slice(-12).map((line) => line.trim())
+  const lines = screenText.split(/\r?\n/).slice(-QUEUED_QUESTION_TAIL_ROWS).map((line) => line.trim())
   const header = lines.findIndex((line) => /^[•·]?\s*Queued follow-up inputs$/i.test(line))
   if (header < 0) return false
   const count = lines.findIndex(
@@ -50,11 +51,12 @@ export function codexStateFromPaneSnapshot(
   if (screenText != null && codexQueuedQuestionOnScreen(screenText)) {
     return 'needs-input'
   }
-  // A failed or skipped capture cannot prove a previously queued question ended.
-  if (
-    previous === 'needs-input' && screenText == null &&
-    codexStateFromPaneTitle(paneTitle, 'idle') === 'running'
-  ) return null
+  if (previous === 'needs-input') {
+    // A missing capture is not evidence that the prompt disappeared. A valid
+    // screen without its footer is: resume the title's live state, or idle.
+    if (screenText == null) return null
+    return codexStateFromPaneTitle(paneTitle, 'running') ?? 'idle'
+  }
   return codexStateFromPaneTitle(paneTitle, previous)
 }
 

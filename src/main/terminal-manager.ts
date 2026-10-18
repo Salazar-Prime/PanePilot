@@ -86,8 +86,6 @@ interface Runtime {
   screen: InstanceType<typeof HeadlessTerminal>
   title: string
   detector: ScreenActivityDetector | null
-  questionAnswerPending: boolean
-  queuedQuestionSeen: boolean
   scanTimer: NodeJS.Timeout | null
   providerTimer: NodeJS.Timeout | null
   actionTimer: NodeJS.Timeout | null
@@ -1442,14 +1440,6 @@ export class TerminalManager {
       throw new Error('Terminal input is limited to 2 MB at a time.')
     }
     for (const chunk of terminalInputChunks(data)) runtime.pty.write(chunk)
-    if (runtime.session.profile === 'codex' && data.includes('\r')) {
-      const latest = this.store.getSessionWithoutOutput(sessionId)
-      if (latest?.state === 'needs-input' && runtime.queuedQuestionSeen) {
-        // Submission alone does not prove Codex accepted the answer. Wait for
-        // its queued-question footer to disappear before clearing the alert.
-        runtime.questionAnswerPending = true
-      }
-    }
   }
 
   private readonly previewReads = new TerminalPreviewReads()
@@ -1960,8 +1950,6 @@ export class TerminalManager {
       screen,
       title: '',
       detector: AGENT_PROFILES.has(session.profile) ? new ScreenActivityDetector() : null,
-      questionAnswerPending: false,
-      queuedQuestionSeen: false,
       scanTimer: null,
       providerTimer: null,
       actionTimer: null,
@@ -2305,38 +2293,24 @@ export class TerminalManager {
     runtime.scanTimer = setTimeout(() => {
       runtime.scanTimer = null
       const screenText = this.visibleScreenText(runtime)
+      const latest = this.store.getSessionWithoutOutput(runtime.session.id)
+      if (!latest) return
+      const codex = runtime.session.profile === 'codex'
       const questionVisible =
-        runtime.session.profile === 'codex' && codexQueuedQuestionOnScreen(screenText)
-      const queuedQuestionSeen = runtime.queuedQuestionSeen
-      if (questionVisible) runtime.queuedQuestionSeen = true
+        codex && codexQueuedQuestionOnScreen(screenText)
       const fallbackState = runtime.detector?.inspect(screenText)
-      const nextState = questionVisible
-        ? 'needs-input'
-        : queuedQuestionSeen && runtime.questionAnswerPending
-          ? fallbackState === 'running' ||
-            codexStateFromPaneTitle(runtime.title, 'idle') === 'running'
-            ? 'running'
-            : 'idle'
-          : fallbackState
+      const nextState = codex && (questionVisible || latest.state === 'needs-input')
+        ? codexStateFromPaneSnapshot(runtime.title, screenText, latest.state)
+        : fallbackState
       if (nextState) {
-        const latest = this.store.getSessionWithoutOutput(runtime.session.id)
-        if (!latest) return
-        if (
-          latest.state === 'needs-input' && nextState !== 'needs-input' &&
-          !(queuedQuestionSeen && !questionVisible &&
-            (runtime.questionAnswerPending || nextState === 'running'))
-        ) return
-        if (queuedQuestionSeen && !questionVisible && nextState !== 'needs-input') {
-          runtime.queuedQuestionSeen = false
-          runtime.questionAnswerPending = false
-        }
+        if (!codex && latest.state === 'needs-input' && nextState !== 'needs-input') return
         const message =
           nextState === 'running'
             ? `${latest.name} is working.`
             : nextState === 'needs-input'
               ? `${latest.name} has a queued question for you.`
               : nextState === 'idle'
-                ? `${latest.name} received your answer.`
+                ? `${latest.name} is no longer waiting for a queued answer.`
             : `${latest.name} finished and needs your attention.`
         this.changeState(latest, nextState, message)
       }
@@ -2949,7 +2923,7 @@ export class TerminalManager {
         await resolveRemoteTmuxAsync(connection.sshAlias ?? connection.name).catch(() => null)
     if (!tmuxPath) return null
     if (connection.kind === 'ssh') this.remoteTmuxPaths.set(connection.id, tmuxPath)
-    const args = ['capture-pane', '-p', '-J', '-t', `=${name}:`]
+    const args = ['capture-pane', '-p', '-t', `=${name}:`]
     try {
       const result = connection.kind === 'local'
         ? await execFileAsync(tmuxPath, args, {
@@ -2960,7 +2934,8 @@ export class TerminalManager {
             connection.sshAlias ?? connection.name,
             `${quote(tmuxPath)} ${args.map(quote).join(' ')}`
           ], { encoding: 'utf8', timeout: 5_000, maxBuffer: 64 * 1024 })
-      return result.stdout
+      // Normalize tmux's record-ending newline, retaining actual blank rows.
+      return result.stdout.replace(/\r?\n$/, '')
     } catch {
       return null
     }
@@ -2998,13 +2973,15 @@ export class TerminalManager {
     const liveByName = new Map(listed.map((session) => [session.name, session]))
 
     // A Codex follow-up question is visible in its composer, but its title can
-    // still say Working. Sample only a bounded, rotating set of detached active
-    // panes per discovery so SSH hosts with many sessions remain responsive.
+    // still say Working. Recheck previous input alerts even after Ready so an
+    // old queued footer cannot latch the status. Sample a bounded, rotating set
+    // of panes per discovery so SSH hosts with many sessions remain responsive.
     const codexCandidates = listed.filter((session) =>
       session.metadata?.profile === 'codex' &&
       !session.paneDead &&
       !this.runtimes.has(session.metadata.terminalId) &&
-      codexStateFromPaneTitle(session.paneTitle, 'idle') === 'running'
+      (codexStateFromPaneTitle(session.paneTitle, 'idle') === 'running' ||
+        this.store.getSessionWithoutOutput(session.metadata.terminalId)?.state === 'needs-input')
     )
     const screenSnapshots = new Map<string, string | null>()
     if (codexCandidates.length > 0) {

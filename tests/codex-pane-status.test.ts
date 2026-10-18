@@ -36,6 +36,27 @@ describe('Codex tmux pane status', () => {
     expect(codexStateFromPaneSnapshot('Working', 'No question', 'needs-input')).toBe('running')
   })
 
+  it('limits the complete footer to the last eight rendered rows', () => {
+    const footer = '• Queued follow-up inputs\n? 1 question\nshift+← to answer'
+    const laterRows = (count: number) => Array.from({ length: count }, () => 'New output').join('\n')
+    expect(codexQueuedQuestionOnScreen(`${footer}\n${laterRows(5)}`)).toBe(true)
+    expect(codexQueuedQuestionOnScreen(`${footer}\n${laterRows(5)}\n`)).toBe(false)
+    expect(codexQueuedQuestionOnScreen(`${footer}\n${laterRows(6)}\n`)).toBe(false)
+    // Blank terminal rows still occupy space; do not pull an old prompt down
+    // into the footer by trimming away all trailing whitespace.
+    expect(codexQueuedQuestionOnScreen(`${footer}${'\n'.repeat(10)}`)).toBe(false)
+    expect(codexQueuedQuestionOnScreen(`${footer}\n› Answer here\nReady\n`)).toBe(true)
+  })
+
+  it('clears a queued alert when a valid snapshot no longer contains its footer', () => {
+    expect(codexStateFromPaneSnapshot('Ready', '› Ask anything', 'needs-input')).toBe('response-ready')
+    expect(codexStateFromPaneSnapshot('', '› Ask anything', 'needs-input')).toBe('idle')
+    expect(codexStateFromPaneSnapshot('Working', '', 'needs-input')).toBe('running')
+    expect(codexStateFromPaneSnapshot('Ready', null, 'needs-input')).toBeNull()
+    expect(codexStateFromPaneSnapshot('Ready', undefined, 'needs-input')).toBeNull()
+    expect(codexStateFromPaneSnapshot('Approval required', 'Confirm command', 'needs-input')).toBe('needs-input')
+  })
+
   it('maps Codex run-state and action-required titles', () => {
     expect(codexStateFromPaneTitle('Thinking · 2/4 tasks', 'idle')).toBe('running')
     expect(codexStateFromPaneTitle('Working · validating build', 'idle')).toBe('running')

@@ -159,7 +159,7 @@ Important lifecycle rules:
   - Otherwise it becomes `response-ready`.
 - `PermissionRequest` always becomes `needs-input`.
 - Claude `Notification` events for `permission_prompt` and `idle_prompt` become `needs-input`.
-- `needs-input` is sticky. It must not be replaced by an unrelated `Stop` or screen update. It clears only when terminal input is submitted or a later structured event proves execution continued.
+- `needs-input` is sticky. It must not be replaced by an unrelated `Stop` or screen update. It clears only when terminal input is submitted or a later structured event proves execution continued. Codex's queued-footer alert is the visibility-based exception described below.
 - An open shell terminal must never cause an LLM-specific working indicator.
 - `completed` means the terminal ended. It does not mean merely that one answer finished.
 
@@ -300,12 +300,16 @@ previously running state maps to `response-ready`.
 
 Codex's `Queued follow-up inputs` footer can show a pending question while
 the pane title still says `Working`. An attached Codex screen recognizes the
-full footer (heading, positive question count, and answer shortcut) and marks
-the session `needs-input`. Each visible-connection discovery pass also checks
-a bounded, rotating set of detached working Codex panes through read-only tmux
-screen captures. A submitted answer alone does not clear the alert while the
-footer remains visible; a later screen/title continuation does. Do not treat
-ordinary scrollback text or non-Codex terminals as queued questions.
+full footer (heading, positive question count, and answer shortcut) only within
+the last eight rendered screen rows and marks the session `needs-input`.
+Each visible-connection discovery pass also checks a bounded, rotating set of
+detached working Codex panes and existing input alerts, including Ready panes,
+through read-only captures that preserve physical rows. A valid screen without
+the footer clears the queued-question alert to the title's running/ready state,
+or idle when no title state is available; local Enter input is not required.
+A failed or skipped capture cannot clear it, and an explicit approval-required
+title retains its independent alert. Do not treat ordinary scrollback text or
+non-Codex terminals as queued questions.
 
 `task-progress` is the latest progress emitted by Codex `update_plan`; it is useful
 context but is not by itself proof that a turn is running. Local and legacy sessions
@@ -540,7 +544,7 @@ For any change:
 1. Preserve local and remote connection behavior.
 2. Check whether it is base-project behavior, type-specific behavior, or a reusable capability.
 3. Keep provider lifecycle state separate from terminal-process existence.
-4. Keep `needs-input` sticky until a real response/continuation.
+4. Keep permission/input states sticky until a real response/continuation; Codex queued-footer alerts instead follow the last-eight-row visibility rule.
 5. Avoid destructive actions without confirmation and stopped-session validation.
 6. Update shared types, main IPC, preload, renderer declarations, and UI together.
 7. Add a forward-compatible SQLite migration.
