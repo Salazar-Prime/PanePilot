@@ -289,7 +289,7 @@ function countMatches(text: string, query: string): number {
 }
 
 function snippetFor(conversation: ParsedConversation, query: string): string {
-  const fallback = conversation.messages.at(-1)?.content ?? ''
+  const fallback = conversation.messages[0]?.content ?? ''
   if (!query) return fallback.replace(/\s+/g, ' ').slice(0, 180)
   const matching = conversation.messages.find((message) =>
     message.content.toLocaleLowerCase().includes(query)

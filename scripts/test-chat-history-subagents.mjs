@@ -39,7 +39,9 @@ if (!process.versions.electron) {
   void app.whenReady().then(async () => {
   process.stdout.write('Isolated Electron ready.\n')
   const window = new BrowserWindow({ width: 1200, height: 800, show: false, webPreferences: { backgroundThrottling: false, sandbox: true } })
-  const evaluate = (code) => window.webContents.executeJavaScript(code)
+  const evaluate = (code) => window.webContents.executeJavaScript(code).catch((error) => {
+    throw new Error(`Chat UI evaluation failed: ${code}\n${error.message}`)
+  })
   const waitFor = async (code) => {
     for (let attempt = 0; attempt < 100; attempt++) {
       if (await evaluate(code)) return
@@ -60,7 +62,7 @@ if (!process.versions.electron) {
     await click('Expand 3 subagents for Main task')
     await waitFor(`document.querySelectorAll('.chat-conversation-card').length === 4`)
     await evaluate(`Array.from(document.querySelectorAll('.chat-conversation-card')).find(el=>el.textContent.includes('Reviewer')).click()`)
-    await waitFor(`document.querySelector('.chat-messages').textContent.includes('Review result')`)
+    await waitFor(`document.querySelector('.chat-messages')?.textContent.includes('Review result')`)
     assert.equal(await evaluate(`document.querySelector('.chat-parent-navigation button').textContent`), '← Main task')
     await evaluate(`document.querySelector('.chat-detail-copy-button').click()`)
     await waitFor(`window.copied === 'reviewer'`)
@@ -73,7 +75,7 @@ if (!process.versions.electron) {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'needle');
       input.dispatchEvent(new Event('input',{bubbles:true}));
     }`)
-    await waitFor(`document.querySelectorAll('.chat-conversation-card').length === 3 && document.querySelector('.chat-messages').textContent.includes('Needle found')`)
+    await waitFor(`document.querySelectorAll('.chat-conversation-card').length === 3 && document.querySelector('.chat-messages')?.textContent.includes('Needle found')`)
     assert.equal(await evaluate(`document.querySelectorAll('.chat-subagent-toggle[aria-expanded="true"]').length`), 2)
     assert.equal(await evaluate(`document.querySelector('.chat-detail-summary strong').textContent`), 'Find needle')
     await evaluate(`{
@@ -99,8 +101,21 @@ if (!process.versions.electron) {
       input.dispatchEvent(new Event('input',{bubbles:true}));
     }`)
     await waitFor(`document.querySelectorAll('.chat-message').length === 5 && !Array.from(document.querySelectorAll('.chat-conversation-card strong')).some(el=>el.textContent==='Main task')`)
+    await waitFor(`document.querySelector('.chat-conversation-card.selected p').textContent.startsWith('Main result line')`)
+    await evaluate(`{
+      const input=document.querySelector('.chat-message-counter input');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'2');
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+    }`)
+    await waitFor(`document.querySelector('.chat-conversation-card.selected p').textContent==='Second user turn'`)
+    await evaluate(`{
+      const input=document.querySelector('.chat-message-counter input');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'1');
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+    }`)
     await evaluate(`Array.from(document.querySelectorAll('.chat-conversation-card')).find(el=>el.textContent.includes('Reviewer')).click()`)
     await waitFor(`document.querySelectorAll('.chat-message').length === 1 && document.querySelector('.chat-message-counter input').value==='1'`)
+    await waitFor(`document.querySelector('.chat-conversation-card.selected p').textContent==='Review result'`)
     await evaluate(`window.remountChat()`)
     await waitFor(`document.querySelectorAll('.chat-message').length === 5 && document.querySelector('.chat-message-counter input').value==='1'`)
     if (process.env.PANEPILOT_UI_SCREENSHOT) {
@@ -136,7 +151,7 @@ function fixture() {
     chats.find(c=>c.id==='root').messages[1].content=('Main result line\\n').repeat(24);
     for(const chat of chats)chat.messageCount=chat.messages.length;
     window.projectConsole={conversations:{
-      list:async (_project,query,hiddenCount)=>{const items=chats.map(c=>{const display=conversationDisplayWindow(c,hiddenCount);return {...c,title:display.title,snippet:display.messages.at(-1)?.content??'',matchCount:query&&JSON.stringify(c.messages).toLowerCase().includes(query.toLowerCase())?1:0};});return query?matchingConversations(items):items;},
+      list:async (_project,query,hiddenCount)=>{const items=chats.map(c=>{const display=conversationDisplayWindow(c,hiddenCount);return {...c,title:display.title,snippet:display.messages[0]?.content??'',matchCount:query&&JSON.stringify(c.messages).toLowerCase().includes(query.toLowerCase())?1:0};});return query?matchingConversations(items):items;},
       get:async (_project,id)=>chats.find(c=>c.id===id)
     },system:{copyText:async text=>{window.copied=text;}}};
     const root=createRoot(document.getElementById('root'));let revision=0;

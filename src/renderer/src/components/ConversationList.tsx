@@ -36,7 +36,7 @@ function ConversationRow({ node, ...props }: Props & { node: ConversationNode })
           <time>{formatConversationDate(conversation.updatedAt)}</time>
         </div>
         <strong>{conversation.agentName || conversation.title}</strong>
-        <p>{conversation.agentName ? conversation.title : conversation.snippet}</p>
+        <p>{conversation.snippet}</p>
         <small>
           {conversation.messageCount} messages
           {props.searching && (conversation.matchCount ? ` · ${conversation.matchCount} matches` : ' · Parent chat')}

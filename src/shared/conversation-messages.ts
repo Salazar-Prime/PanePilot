@@ -18,7 +18,7 @@ export function conversationDisplayWindow(
   requested: number
 ) {
   const window = conversationMessageWindow(conversation.messages, requested)
-  const first = window.messages.find((message) => message.role === 'user') ?? window.messages[0]
+  const first = window.messages[0]
   const title = window.hiddenCount
     ? first?.content.replace(/\s+/g, ' ').trim() || 'All messages hidden'
     : conversation.title

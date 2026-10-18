@@ -38,7 +38,8 @@ describe('conversation rendering counter', () => {
       { role: 'assistant' as const, content: 'Answer to follow-up' }
     ])
     const conversation = { title: 'Opening boilerplate', messages }
-    expect(conversationDisplayWindow(conversation, 1).title).toBe('Actual follow-up question')
+    expect(conversationDisplayWindow(conversation, 1).title).toBe('Initial response')
+    expect(conversationDisplayWindow(conversation, 2).title).toBe('Actual follow-up question')
     expect(conversationDisplayWindow(conversation, 3).title).toBe('Answer to follow-up')
     expect(conversationDisplayWindow(conversation, 100).title).toBe('All messages hidden')
     expect(conversationDisplayWindow(conversation, 0).title).toBe('Opening boilerplate')
