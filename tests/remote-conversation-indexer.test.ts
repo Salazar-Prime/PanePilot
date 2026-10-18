@@ -8,8 +8,50 @@ import {
   REMOTE_SCAN_SCRIPT,
   RemoteConversationIndexer
 } from '../src/main/remote-conversation-indexer'
+import { ConversationIndexer } from '../src/main/conversation-indexer'
 
 describe('remote conversation archive payloads', () => {
+  it('matches local subagent identities and project/search scoping using the real host scanner', async () => {
+    const remoteHome = mkdtempSync(join(tmpdir(), 'panepilot-remote-subagent-chats-'))
+    try {
+      const codex = join(remoteHome, '.codex', 'sessions')
+      const claude = join(remoteHome, '.claude', 'projects', 'project')
+      mkdirSync(codex, { recursive: true })
+      mkdirSync(join(claude, 'claude-root', 'subagents'), { recursive: true })
+      const codexChat = (id: string, cwd: string, parent?: string) => [
+        { type: 'session_meta', timestamp: '2026-10-18T10:00:00Z', payload: { id, cwd, ...(parent ? { source: { subagent: { thread_spawn: { parent_thread_id: parent, agent_nickname: 'Reviewer' } } } } : {}) } },
+        { type: 'event_msg', timestamp: '2026-10-18T09:00:00Z', payload: { type: 'user_message', message: parent ? 'Inherited history' : 'Root task' } },
+        { type: 'event_msg', timestamp: '2026-10-18T10:00:01Z', payload: { type: 'user_message', message: parent ? 'Searchneedle review' : 'Normal request' } },
+        { type: 'event_msg', timestamp: '2026-10-18T10:00:02Z', payload: { type: 'agent_message', message: 'Result' } }
+      ].map((record) => JSON.stringify(record)).join('\n')
+      writeFileSync(join(codex, 'root.jsonl'), codexChat('root', '/srv/project'))
+      writeFileSync(join(codex, 'child.jsonl'), codexChat('child', '/worktree', 'root'))
+      writeFileSync(join(codex, 'nested.jsonl'), codexChat('nested', '/worktree', 'child'))
+      writeFileSync(join(codex, 'foreign.jsonl'), codexChat('foreign', '/worktree'))
+      const claudeChat = (agentId?: string) => JSON.stringify({ type: 'user', cwd: '/srv/project', sessionId: 'claude-root', agentId, timestamp: '2026-10-18T10:00:00Z', message: { content: agentId ? 'Claude child task' : 'Claude main task' } })
+      writeFileSync(join(claude, 'claude-root.jsonl'), claudeChat())
+      writeFileSync(join(claude, 'claude-root', 'subagents', 'agent-worker.jsonl'), claudeChat('worker'))
+      const encoded = execFileSync('python3', ['-c', REMOTE_SCAN_SCRIPT, Buffer.from(JSON.stringify({ folder: '/srv/project' })).toString('base64')], {
+        encoding: 'utf8', env: { ...process.env, HOME: remoteHome }
+      }).trim()
+      const result = decodeRemoteScan(encoded)
+      const remote = new RemoteConversationIndexer()
+      const harness = remote as unknown as { scan: () => Promise<typeof result> }
+      harness.scan = async () => result
+      const local = new ConversationIndexer([{ provider: 'codex', path: codex }, { provider: 'claude', path: claude }])
+      const localList = local.list('/srv/project')
+      const remoteList = await remote.list('fixture', '/srv/project')
+      expect(remoteList.map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'claude-root', 'nested', 'root', 'worker'])
+      expect(remoteList.map((chat) => [chat.id, chat.parentProviderSessionId]).sort()).toEqual(localList.map((chat) => [chat.id, chat.parentProviderSessionId]).sort())
+      expect((await remote.list('fixture', '/srv/project', 'searchneedle')).map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'nested', 'root'])
+      expect((await remote.list('fixture', '/srv/project', 'reviewer')).map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'nested', 'root'])
+      expect(local.list('/srv/project', 'reviewer').map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'nested', 'root'])
+      const child = remoteList.find((chat) => chat.providerSessionId === 'child')!
+      expect((await remote.get('fixture', '/srv/project', child.id)).messages.map((message) => message.content)).toEqual(['Searchneedle review', 'Result'])
+      expect(result.codexSessions.map((session) => session.id)).toEqual(['root'])
+    } finally { rmSync(remoteHome, { recursive: true, force: true }) }
+  })
+
   it('decodes normalized remote Codex and Claude metadata', () => {
     const payload = {
       conversations: [

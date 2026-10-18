@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Bot, Check, Copy, MessageSquareText, Search } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Bot, Check, Copy, GitBranch, MessageSquareText, RefreshCw, Search } from 'lucide-react'
+import { conversationForest } from '@shared/conversation-hierarchy'
 import type {
   ConversationDetail,
   ConversationSummary,
@@ -7,10 +8,15 @@ import type {
 } from '@shared/types'
 import { copyConversationSessionId } from '../lib/conversationSessionId'
 import { conversationMessageWindow } from '../lib/conversationMessageWindow'
+import { formatConversationDate as formatDate } from '../lib/conversationDate'
+import { ConversationList } from './ConversationList'
 
 export function ChatHistoryPanel({ project }: { project: Project }) {
   const [query, setQuery] = useState('')
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
+  const forest = useMemo(() => conversationForest(conversations), [conversations])
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [refresh, setRefresh] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loadedDetail, setDetail] = useState<ConversationDetail | null>(null)
   const detail = loadedDetail?.id === selectedId ? loadedDetail : null
@@ -25,6 +31,7 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
   }
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [detailError, setDetailError] = useState('')
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null)
   const copiedTimer = useRef<number | null>(null)
 
@@ -36,6 +43,9 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
     setSelectedId(null)
     setDetail(null)
     setQuery('')
+    setConversations([])
+    setExpanded(new Set())
+    setDetailError('')
     setCopiedSessionId(null)
   }, [project.id])
 
@@ -57,9 +67,9 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
           if (!active) return
           setConversations(items)
           setSelectedId((current) =>
-            current && items.some((item) => item.id === current)
+            current && items.some((item) => item.id === current && (!query.trim() || item.matchCount > 0))
               ? current
-              : items[0]?.id ?? null
+              : (query.trim() ? items.find((item) => item.matchCount > 0) : conversationForest(items)[0]?.conversation)?.id ?? null
           )
           if (!items.length) setDetail(null)
         })
@@ -74,24 +84,50 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
       active = false
       window.clearTimeout(timer)
     }
-  }, [project.id, query])
+  }, [project.id, query, refresh])
+
+  useEffect(() => {
+    const ancestors: string[] = []
+    const pending = forest.map((node) => ({ node, path: [] as string[] }))
+    while (pending.length) {
+      const { node, path } = pending.pop()!
+      if (node.conversation.id === selectedId) { ancestors.push(...path); break }
+      pending.push(...node.children.map((child) => ({ node: child, path: [...path, node.conversation.id] })))
+    }
+    if (!ancestors.length) return
+    setExpanded((current) => ancestors.every((id) => current.has(id)) ? current : new Set([...current, ...ancestors]))
+  }, [forest, selectedId])
 
   useEffect(() => {
     let active = true
     if (!selectedId) return
     setCopiedSessionId(null)
+    setDetailError('')
     void window.projectConsole.conversations
       .get(project.id, selectedId, query)
       .then((conversation) => {
         if (active) setDetail(conversation)
       })
       .catch((caught) => {
-        if (active) setError(caught instanceof Error ? caught.message : String(caught))
+        if (active) setDetailError(caught instanceof Error ? caught.message : String(caught))
       })
     return () => {
       active = false
     }
-  }, [project.id, query, selectedId])
+  }, [project.id, query, selectedId, refresh])
+
+  const parent = useMemo(() => detail?.parentProviderSessionId
+    ? conversations.find((item) => item.provider === detail.provider && item.providerSessionId === detail.parentProviderSessionId)
+    : undefined, [detail, conversations])
+
+  function toggleSubagents(id: string) {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function copySessionId(): Promise<void> {
     const sessionId = detail?.providerSessionId
@@ -120,7 +156,12 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
             <span className="eyebrow">LLM ARCHIVES</span>
             <strong>Chat history</strong>
           </div>
-          <small>{conversations.length}</small>
+          <div className="chat-list-heading-actions">
+            <small title={`${forest.length} chats · ${conversations.length - forest.length} subagents`}>{forest.length}</small>
+            <button className="icon-button" aria-label="Refresh chat archives" title="Refresh chat archives" disabled={loading} onClick={() => setRefresh((value) => value + 1)}>
+              <RefreshCw size={13} className={loading ? 'spin' : ''} />
+            </button>
+          </div>
         </div>
         <label className="chat-search">
           <Search size={14} />
@@ -136,26 +177,8 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
           ) : loading && !conversations.length ? (
             <p className="chat-list-message">Indexing provider archives…</p>
           ) : conversations.length ? (
-            conversations.map((conversation) => (
-              <button
-                key={conversation.id}
-                className={conversation.id === selectedId ? 'selected' : ''}
-                onClick={() => setSelectedId(conversation.id)}
-              >
-                <div className="chat-card-meta">
-                  <span className={`provider-badge ${conversation.provider}`}>
-                    {conversation.provider}
-                  </span>
-                  <time>{formatDate(conversation.updatedAt)}</time>
-                </div>
-                <strong>{conversation.title}</strong>
-                <p>{conversation.snippet}</p>
-                <small>
-                  {conversation.messageCount} messages
-                  {query && ` · ${conversation.matchCount} matches`}
-                </small>
-              </button>
-            ))
+            <ConversationList nodes={forest} selectedId={selectedId} expanded={expanded}
+              searching={Boolean(query.trim())} onSelect={setSelectedId} onToggle={toggleSubagents} />
           ) : (
             <p className="chat-list-message">
               {query
@@ -177,14 +200,14 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
                 <span>
                   {detail.provider} · {detail.workingDirectory}
                   {detail.providerSessionId &&
-                    ` · session ${detail.providerSessionId.slice(0, 8)}…`}
+                    ` · ${detail.provider === 'claude' && detail.parentProviderSessionId ? 'agent' : 'session'} ${detail.providerSessionId.slice(0, 8)}…`}
                 </span>
               </div>
               {detail.providerSessionId && (
                 <button
                   className="secondary-button chat-detail-copy-button"
                   onClick={() => void copySessionId()}
-                  title={`Copy the exact ${detail.provider === 'claude' ? 'Claude session' : 'Codex thread'} ID`}
+                  title={`Copy the exact ${detail.provider === 'claude' ? detail.parentProviderSessionId ? 'Claude agent' : 'Claude session' : 'Codex thread'} ID`}
                   aria-live="polite"
                 >
                   {copiedSessionId === detail.providerSessionId ? (
@@ -194,10 +217,18 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
                   )}
                   {copiedSessionId === detail.providerSessionId
                     ? 'Copied'
-                    : 'Copy session ID'}
+                    : detail.provider === 'claude' && detail.parentProviderSessionId ? 'Copy agent ID' : 'Copy session ID'}
                 </button>
               )}
             </header>
+            {detail.parentProviderSessionId && (
+              <div className="chat-parent-navigation">
+                <GitBranch size={12} />
+                {parent ? <button onClick={() => setSelectedId(parent.id)} title={parent.title}>← {parent.agentName || parent.title}</button>
+                  : <span>Parent chat not available in this archive</span>}
+                <span>Subagent{detail.agentName ? ` · ${detail.agentName}` : ''}</span>
+              </div>
+            )}
             <div className="chat-render-controls">
               <label title="Hide the first messages in this view only. Nothing is deleted from the archive.">
                 Hide first
@@ -224,7 +255,7 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
               {rendered.messages.map((message) => (
                 <article className={`chat-message ${message.role}`} key={message.id}>
                   <header>
-                    <span>{message.role === 'user' ? 'You' : detail.provider}</span>
+                    <span>{message.role === 'user' ? detail.parentProviderSessionId ? 'Instruction' : 'You' : detail.agentName || detail.provider}</span>
                     {message.timestamp && <time>{formatDate(message.timestamp)}</time>}
                   </header>
                   <div>{highlight(message.content, query)}</div>
@@ -235,25 +266,13 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
         ) : (
           <div className="preview-empty">
             <MessageSquareText size={32} />
-            <p>Select a conversation.</p>
-            <span>Activity events remain in the separate Activity tab.</span>
+            <p>{detailError || (selectedId ? 'Loading conversation…' : 'Select a conversation.')}</p>
+            <span>Expand a chat’s subagents to read their conversations.</span>
           </div>
         )}
       </main>
     </div>
   )
-}
-
-function formatDate(value: string): string {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : parsed.toLocaleString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit'
-      })
 }
 
 function highlight(content: string, query: string): ReactNode {

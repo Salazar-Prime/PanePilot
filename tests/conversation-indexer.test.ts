@@ -1,10 +1,69 @@
 import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
+  ConversationIndexer,
   parseClaudeConversation,
   parseCodexConversation
 } from '../src/main/conversation-indexer'
 
 describe('conversation archive parsing', () => {
+  it('keeps explicit Codex parent identity and excludes inherited messages and reasoning', () => {
+    const source = [
+      { type: 'session_meta', timestamp: '2026-10-18T10:00:00Z', payload: { id: 'child', cwd: '/project', source: { subagent: { thread_spawn: { parent_thread_id: 'root', agent_nickname: 'Reviewer' } } } } },
+      { type: 'event_msg', timestamp: '2026-10-18T09:00:00Z', payload: { type: 'user_message', message: 'Inherited parent history' } },
+      { type: 'response_item', timestamp: '2026-10-18T10:00:01Z', payload: { type: 'message', role: 'assistant', phase: 'analysis', content: 'Hidden reasoning' } },
+      { type: 'response_item', timestamp: '2026-10-18T10:00:02Z', payload: { type: 'message', role: 'user', content: 'Review the tests' } },
+      { type: 'response_item', timestamp: '2026-10-18T10:00:03Z', payload: { type: 'message', role: 'assistant', content: 'Tests look good' } }
+    ].map((record) => JSON.stringify(record)).join('\n')
+    const parsed = parseCodexConversation('/tmp/child.jsonl', source, '2026-10-18T10:00:00Z')!
+    expect(parsed.parentProviderSessionId).toBe('root')
+    expect(parsed.agentName).toBe('Reviewer')
+    expect(parsed.messages.map((message) => message.content)).toEqual(['Review the tests', 'Tests look good'])
+  })
+
+  it('gives Claude subagents their own identities instead of reusing the parent session ID', () => {
+    const source = JSON.stringify({ type: 'user', cwd: '/project', sessionId: 'root', agentId: 'worker', message: { content: 'Review tests' } })
+    const parent = parseClaudeConversation('/tmp/root.jsonl', source, '2026-10-18T10:00:00Z')!
+    const child = parseClaudeConversation('/tmp/root/subagents/agent-worker.jsonl', source, '2026-10-18T10:00:00Z')!
+    expect(child.id).not.toBe(parent.id)
+    expect(child.providerSessionId).toBe('worker')
+    expect(child.parentProviderSessionId).toBe('root')
+    expect(parent.parentProviderSessionId).toBeNull()
+  })
+
+  it('recognizes own-path agent messages without treating other agents as the child', () => {
+    const source = [
+      { type: 'session_meta', timestamp: '2026-10-18T10:00:00Z', payload: { id: 'child', cwd: '/project', thread_source: 'subagent', parent_thread_id: 'root', agent_path: '/root/reviewer' } },
+      { type: 'response_item', timestamp: '2026-10-18T10:00:01Z', payload: { type: 'agent_message', author: '/root', content: 'Parent output' } },
+      { type: 'response_item', timestamp: '2026-10-18T10:00:02Z', payload: { type: 'agent_message', author: '/root/reviewer', content: 'Own output' } }
+    ].map((record) => JSON.stringify(record)).join('\n')
+    expect(parseCodexConversation('/tmp/child.jsonl', source, '')?.messages.map((message) => message.content)).toEqual(['Own output'])
+  })
+
+  it('lists and opens worktree subagents, keeps search ancestry, and enforces project scope', () => {
+    const root = mkdtempSync(join(tmpdir(), 'panepilot-conversation-tree-'))
+    try {
+      const codex = join(root, 'codex')
+      mkdirSync(codex)
+      const write = (id: string, cwd: string, parent?: string) => writeFileSync(join(codex, `${id}.jsonl`), [
+        JSON.stringify({ type: 'session_meta', timestamp: '2026-10-18T10:00:00Z', payload: { id, cwd, ...(parent ? { thread_source: 'subagent', parent_thread_id: parent } : {}) } }),
+        JSON.stringify({ type: 'event_msg', timestamp: '2026-10-18T10:00:01Z', payload: { type: 'user_message', message: id === 'child' ? 'Searchneedle findings' : 'Ordinary task' } })
+      ].join('\n'))
+      write('root', '/project')
+      write('child', '/worktree', 'root')
+      write('unrelated', '/worktree')
+      const indexer = new ConversationIndexer([{ provider: 'codex', path: codex }])
+      const list = indexer.list('/project')
+      expect(list.map((item) => item.providerSessionId).sort()).toEqual(['child', 'root'])
+      expect(indexer.list('/project', 'searchneedle').map((item) => item.providerSessionId).sort()).toEqual(['child', 'root'])
+      const child = list.find((item) => item.providerSessionId === 'child')!
+      expect(indexer.get('/project', child.id).messages[0].content).toBe('Searchneedle findings')
+      expect(() => indexer.get('/unrelated', child.id)).toThrow('not found')
+    } finally { rmSync(root, { recursive: true, force: true }) }
+  })
+
   it('normalizes Codex user and assistant messages', () => {
     const source = [
       JSON.stringify({

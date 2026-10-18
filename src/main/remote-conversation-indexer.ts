@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { promisify } from 'node:util'
+import { matchingConversations } from '../shared/conversation-hierarchy'
 import type {
   ConversationDetail,
   ConversationMessage,
@@ -17,6 +18,9 @@ type RemoteMessage = Omit<ConversationMessage, 'id'>
 interface RemoteConversation {
   provider: ConversationProvider
   providerSessionId: string | null
+  parentProviderSessionId?: string | null
+  agentName?: string | null
+  archiveIdentity?: string
   title: string
   workingDirectory: string
   updatedAt: string
@@ -62,6 +66,9 @@ def clean(value):
         return None
     value = value.strip()
     return value or None
+
+def obj(value):
+    return value if isinstance(value, dict) else {}
 
 def content_text(value):
     if isinstance(value, str):
@@ -117,6 +124,10 @@ for provider, root in roots:
             fallback_messages = []
             working_directory = ""
             archive_id = None
+            parent_id = None
+            agent_name = None
+            agent_path = None
+            agent_id = None
             summary = ""
             updated_at = mtime_iso(path)
             started_at = updated_at
@@ -132,6 +143,9 @@ for provider, root in roots:
                         timestamp = clean(record.get("timestamp"))
                         if timestamp:
                             updated_at = timestamp
+
+                        if provider == "codex" and parent_id and (not timestamp or timestamp < started_at):
+                            continue
 
                         if provider == "codex":
                             payload = record.get("payload")
@@ -150,15 +164,27 @@ for provider, root in roots:
                                     or timestamp
                                     or started_at
                                 )
+                                spawn = obj(obj(obj(payload.get("source")).get("subagent")).get("thread_spawn"))
+                                parent_id = clean(spawn.get("parent_thread_id")) or (
+                                    clean(payload.get("parent_thread_id")) if payload.get("thread_source") == "subagent" else None
+                                )
+                                agent_path = clean(payload.get("agent_path")) or clean(spawn.get("agent_path"))
+                                agent_name = clean(payload.get("agent_nickname")) or clean(spawn.get("agent_nickname")) or (
+                                    agent_path.rstrip("/").split("/")[-1] if agent_path else None
+                                )
+                                if not parent_id:
+                                    agent_name = None
                             elif event_type == "response_item" and payload.get("type") == "message":
                                 role = payload.get("role")
-                                if role in ("user", "assistant"):
+                                if role in ("user", "assistant") and payload.get("phase") != "analysis":
                                     push(
                                         fallback_messages,
                                         role,
                                         content_text(payload.get("content")),
                                         timestamp,
                                     )
+                            elif event_type == "response_item" and payload.get("type") == "agent_message" and parent_id and agent_path and payload.get("author") == agent_path:
+                                push(fallback_messages, "assistant", content_text(payload.get("content")), timestamp)
                             elif event_type == "event_msg":
                                 nested_type = clean(payload.get("type"))
                                 if nested_type == "user_message":
@@ -168,6 +194,7 @@ for provider, root in roots:
                         else:
                             working_directory = clean(record.get("cwd")) or working_directory
                             archive_id = clean(record.get("sessionId")) or archive_id
+                            agent_id = clean(record.get("agentId")) or agent_id
                             event_type = clean(record.get("type"))
                             if event_type == "summary":
                                 summary = clean(record.get("summary")) or summary
@@ -183,9 +210,9 @@ for provider, root in roots:
             except Exception:
                 continue
 
-            if not working_directory or os.path.normpath(working_directory) != project_folder:
+            if not working_directory:
                 continue
-            if provider == "codex" and archive_id:
+            if provider == "codex" and archive_id and not parent_id and os.path.normpath(working_directory) == project_folder:
                 codex_sessions.append({
                     "id": archive_id,
                     "workingDirectory": working_directory,
@@ -195,14 +222,47 @@ for provider, root in roots:
                 messages = fallback_messages
             if not messages:
                 continue
+            identity = archive_id
+            if provider == "claude" and os.path.basename(directory) == "subagents":
+                parent_id = os.path.basename(os.path.dirname(directory))
+                archive_id = agent_id or filename[:-6]
+                if not agent_id and archive_id.startswith("agent-"):
+                    archive_id = archive_id[6:]
+                identity = parent_id + ":agent:" + archive_id
+            # Only subagents can cross project folders through explicit links.
+            # Do not retain all unrelated main transcripts while resolving them.
+            if not parent_id and os.path.normpath(working_directory) != project_folder:
+                continue
             conversations.append({
                 "provider": provider,
                 "providerSessionId": archive_id,
+                "parentProviderSessionId": parent_id,
+                "agentName": agent_name,
+                "archiveIdentity": identity,
                 "title": summary or title_for(messages),
                 "workingDirectory": working_directory,
                 "updatedAt": updated_at,
                 "messages": messages,
             })
+
+# A subagent may work in a different worktree. Include only explicit descendants
+# of this project's chats, not unrelated conversations that share another cwd.
+children = {}
+for conversation in conversations:
+    if conversation["parentProviderSessionId"]:
+        key = (conversation["provider"], conversation["parentProviderSessionId"])
+        children.setdefault(key, []).append(conversation)
+pending = [c for c in conversations if os.path.normpath(c["workingDirectory"]) == project_folder]
+included = set()
+while pending:
+    conversation = pending.pop()
+    identity = id(conversation)
+    if identity in included:
+        continue
+    included.add(identity)
+    key = (conversation["provider"], conversation["providerSessionId"])
+    pending.extend(children.get(key, []))
+conversations = [c for c in conversations if id(c) in included]
 
 payload = json.dumps(
     {"conversations": conversations, "codexSessions": codex_sessions},
@@ -317,13 +377,16 @@ function snippetFor(conversation: RemoteConversation, query: string): string {
 function summaryFor(conversation: RemoteConversation, query: string): ConversationSummary {
   const searchable = [
     conversation.title,
+    conversation.agentName ?? '',
     conversation.workingDirectory,
     ...conversation.messages.map((message) => message.content)
   ]
   return {
-    id: stableId(conversation.provider, conversation.providerSessionId),
+    id: stableId(conversation.provider, conversation.archiveIdentity ?? conversation.providerSessionId),
     provider: conversation.provider,
     providerSessionId: conversation.providerSessionId,
+    parentProviderSessionId: conversation.parentProviderSessionId ?? null,
+    agentName: conversation.agentName ?? null,
     title: conversation.title,
     workingDirectory: conversation.workingDirectory,
     updatedAt: conversation.updatedAt,
@@ -401,10 +464,10 @@ export class RemoteConversationIndexer {
   async list(alias: string, projectFolder: string, query = ''): Promise<ConversationSummary[]> {
     const normalizedQuery = query.trim().toLocaleLowerCase()
     const scan = await this.scan(alias, projectFolder)
-    return scan.conversations
+    const summaries = scan.conversations
       .map((conversation) => summaryFor(conversation, normalizedQuery))
-      .filter((conversation) => !normalizedQuery || conversation.matchCount > 0)
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+    return normalizedQuery ? matchingConversations(summaries) : summaries
   }
 
   async get(
@@ -415,7 +478,7 @@ export class RemoteConversationIndexer {
   ): Promise<ConversationDetail> {
     const scan = await this.scan(alias, projectFolder)
     const conversation = scan.conversations.find(
-      (candidate) => stableId(candidate.provider, candidate.providerSessionId) === id
+      (candidate) => stableId(candidate.provider, candidate.archiveIdentity ?? candidate.providerSessionId) === id
     )
     if (!conversation) throw new Error('Conversation not found for this remote project.')
     const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -487,6 +550,7 @@ export class RemoteConversationIndexer {
           const timestamp = Date.parse(conversation.updatedAt)
           return (
             conversation.provider === provider &&
+            !conversation.parentProviderSessionId &&
             Boolean(conversation.providerSessionId) &&
             !excludedIds.has(conversation.providerSessionId!) &&
             (!Number.isFinite(timestamp) || timestamp >= earliest)

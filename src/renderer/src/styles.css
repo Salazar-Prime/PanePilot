@@ -2216,7 +2216,7 @@ select:focus-visible {
   padding: 0 7px 10px;
 }
 
-.chat-list > button {
+.chat-conversation-card {
   display: flex;
   width: 100%;
   padding: 11px 10px;
@@ -2229,11 +2229,11 @@ select:focus-visible {
   text-align: left;
 }
 
-.chat-list > button:hover {
+.chat-conversation-card:hover {
   background: #14171e;
 }
 
-.chat-list > button.selected {
+.chat-conversation-card.selected {
   border-color: #2d3444;
   background: #191d27;
 }
@@ -2268,7 +2268,7 @@ select:focus-visible {
   background: #352117;
 }
 
-.chat-list > button > strong {
+.chat-conversation-card > strong {
   width: 100%;
   overflow: hidden;
   color: #bdc2cd;
@@ -2277,7 +2277,7 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-.chat-list > button > p {
+.chat-conversation-card > p {
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
@@ -2288,9 +2288,82 @@ select:focus-visible {
   -webkit-line-clamp: 2;
 }
 
-.chat-list > button > small {
+.chat-conversation-card > small {
   color: #505865;
   font-size: 8px;
+}
+
+.chat-list-heading .chat-list-heading-actions {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.chat-tree-node { min-width: 0; }
+.chat-tree-node + .chat-tree-node { margin-top: 3px; }
+.chat-subagent-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  color: #9ba9f1;
+  font-size: 8px;
+}
+.chat-subagent-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 6px 9px;
+  padding: 5px 8px 5px 4px;
+  border: 1px solid #2d3444;
+  border-radius: 12px;
+  background: #14171e;
+  color: #9ca8c6;
+  font-size: 9px;
+  cursor: pointer;
+}
+.chat-subagent-toggle:hover { background: #1c2231; color: #dce0e8; }
+.chat-subagent-toggle:disabled { cursor: default; opacity: 0.75; }
+.chat-subagent-toggle > svg:first-child { transition: transform 180ms ease; }
+.chat-subagent-toggle.expanded > svg:first-child { transform: rotate(90deg); }
+.chat-subagent-disclosure { overflow: hidden; }
+.chat-subagent-children {
+  margin: 0 0 8px 14px;
+  padding-left: 8px;
+  border-left: 1px solid #35416c;
+}
+.chat-conversation-card:focus-visible,
+.chat-subagent-toggle:focus-visible,
+.chat-parent-navigation button:focus-visible {
+  outline: 2px solid #9ba9f1;
+  outline-offset: -2px;
+}
+.chat-parent-navigation {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 17px;
+  border-bottom: 1px solid #222630;
+  color: #7f8795;
+  font-size: 9px;
+}
+.chat-parent-navigation > svg { flex-shrink: 0; color: #9ba9f1; }
+.chat-parent-navigation button {
+  min-width: 0;
+  overflow: hidden;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: #9ba9f1;
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chat-parent-navigation > span:last-child { flex: 0 0 auto; margin-left: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .chat-subagent-toggle > svg:first-child { transition: none; }
 }
 
 .chat-list-message {

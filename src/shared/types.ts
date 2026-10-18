@@ -430,6 +430,8 @@ export interface ConversationSummary {
   id: string
   provider: ConversationProvider
   providerSessionId: string | null
+  parentProviderSessionId?: string | null
+  agentName?: string | null
   title: string
   workingDirectory: string
   updatedAt: string

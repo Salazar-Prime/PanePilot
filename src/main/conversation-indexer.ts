@@ -9,7 +9,9 @@ import {
   statSync
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
+import { conversationsWithDescendants, matchingConversations } from '../shared/conversation-hierarchy'
+import { subagentHeader } from './codex-subagents'
 import type {
   ConversationDetail,
   ConversationMessage,
@@ -21,6 +23,8 @@ interface ParsedConversation {
   id: string
   provider: ConversationProvider
   providerSessionId: string | null
+  parentProviderSessionId: string | null
+  agentName: string | null
   title: string
   workingDirectory: string
   updatedAt: string
@@ -118,13 +122,19 @@ export function parseCodexConversation(
   const responseMessages: ConversationMessage[] = []
   let workingDirectory = ''
   let archiveId: string | null = null
+  let parentProviderSessionId: string | null = null
+  let agentName: string | null = null
+  let agentPath: string | null = null
+  let subagentStartedAt = NaN
   let updatedAt = fileUpdatedAt
 
   for (const line of source.split(/\r?\n/)) {
     if (!line.trim()) continue
     let record: JsonRecord
     try {
-      record = JSON.parse(line) as JsonRecord
+      const parsed = object(JSON.parse(line))
+      if (!parsed) continue
+      record = parsed
     } catch {
       continue
     }
@@ -137,14 +147,25 @@ export function parseCodexConversation(
     if (type === 'session_meta') {
       workingDirectory = string(payload.cwd) ?? workingDirectory
       archiveId = string(payload.id) ?? string(payload.session_id) ?? archiveId
+      const header = subagentHeader(line)
+      parentProviderSessionId = header?.parentId ?? null
+      agentPath = header?.path || null
+      agentName = parentProviderSessionId ? header?.name || agentPath?.split('/').filter(Boolean).at(-1) || null : null
+      subagentStartedAt = parentProviderSessionId ? Date.parse(header?.startedAt ?? '') : NaN
       continue
     }
 
+    if (Number.isFinite(subagentStartedAt) && (!timestamp || Date.parse(timestamp) < subagentStartedAt)) continue
+
     if (type === 'response_item' && payload.type === 'message') {
       const role = payload.role
-      if (role === 'user' || role === 'assistant') {
+      if ((role === 'user' || role === 'assistant') && payload.phase !== 'analysis') {
         pushMessage(responseMessages, role, contentText(payload.content), timestamp)
       }
+      continue
+    }
+    if (type === 'response_item' && payload.type === 'agent_message' && parentProviderSessionId && agentPath && payload.author === agentPath) {
+      pushMessage(responseMessages, 'assistant', contentText(payload.content), timestamp)
       continue
     }
 
@@ -166,6 +187,8 @@ export function parseCodexConversation(
     id: stableId('codex', path, archiveId),
     provider: 'codex',
     providerSessionId: archiveId,
+    parentProviderSessionId,
+    agentName,
     title: defaultTitle(messages),
     workingDirectory,
     updatedAt,
@@ -181,6 +204,7 @@ export function parseClaudeConversation(
   const messages: ConversationMessage[] = []
   let workingDirectory = ''
   let archiveId: string | null = null
+  let agentId: string | null = null
   let summary = ''
   let updatedAt = fileUpdatedAt
 
@@ -188,7 +212,9 @@ export function parseClaudeConversation(
     if (!line.trim()) continue
     let record: JsonRecord
     try {
-      record = JSON.parse(line) as JsonRecord
+      const parsed = object(JSON.parse(line))
+      if (!parsed) continue
+      record = parsed
     } catch {
       continue
     }
@@ -196,6 +222,7 @@ export function parseClaudeConversation(
     if (timestamp) updatedAt = timestamp
     workingDirectory = string(record.cwd) ?? workingDirectory
     archiveId = string(record.sessionId) ?? archiveId
+    agentId = string(record.agentId) ?? agentId
     const type = string(record.type)
 
     if (type === 'summary') {
@@ -209,10 +236,17 @@ export function parseClaudeConversation(
   }
 
   if (!workingDirectory || !messages.length) return null
+  // Claude stores child transcripts below <parent-session>/subagents/agent-<id>.jsonl.
+  // Their sessionId is the parent's, so it cannot identify the child's archive.
+  const isSubagent = basename(dirname(path)) === 'subagents'
+  const parentProviderSessionId = isSubagent ? basename(dirname(dirname(path))) : null
+  const providerSessionId = isSubagent ? agentId || basename(path, '.jsonl').replace(/^agent-/, '') : archiveId
   return {
-    id: stableId('claude', path, archiveId),
+    id: stableId('claude', path, isSubagent ? `${parentProviderSessionId}:agent:${providerSessionId}` : archiveId),
     provider: 'claude',
-    providerSessionId: archiveId,
+    providerSessionId,
+    parentProviderSessionId,
+    agentName: null,
     title: summary || defaultTitle(messages),
     workingDirectory,
     updatedAt,
@@ -269,19 +303,19 @@ function snippetFor(conversation: ParsedConversation, query: string): string {
 
 export class ConversationIndexer {
   private readonly cache = new Map<string, CacheEntry>()
-  private readonly roots: Array<{ provider: ConversationProvider; path: string }> = [
+  constructor(private readonly roots: Array<{ provider: ConversationProvider; path: string }> = [
     { provider: 'codex', path: join(homedir(), '.codex', 'sessions') },
     { provider: 'claude', path: join(homedir(), '.claude', 'projects') }
-  ]
+  ]) {}
 
   list(projectFolder: string, query = ''): ConversationSummary[] {
     const normalizedFolder = resolve(projectFolder)
     const normalizedQuery = query.trim().toLocaleLowerCase()
-    return this.indexAll()
-      .filter((conversation) => resolve(conversation.workingDirectory) === normalizedFolder)
+    const summaries = this.projectConversations(normalizedFolder)
       .map((conversation) => {
         const searchable = [
           conversation.title,
+          conversation.agentName ?? '',
           conversation.workingDirectory,
           ...conversation.messages.map((message) => message.content)
         ]
@@ -292,6 +326,8 @@ export class ConversationIndexer {
           id: conversation.id,
           provider: conversation.provider,
           providerSessionId: conversation.providerSessionId,
+          parentProviderSessionId: conversation.parentProviderSessionId,
+          agentName: conversation.agentName,
           title: conversation.title,
           workingDirectory: conversation.workingDirectory,
           updatedAt: conversation.updatedAt,
@@ -300,21 +336,19 @@ export class ConversationIndexer {
           matchCount
         }
       })
-      .filter((conversation) => !normalizedQuery || conversation.matchCount > 0)
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+    return normalizedQuery ? matchingConversations(summaries) : summaries
   }
 
   get(projectFolder: string, id: string, query = ''): ConversationDetail {
-    const conversation = this.indexAll().find((candidate) => candidate.id === id)
-    if (
-      !conversation ||
-      resolve(conversation.workingDirectory) !== resolve(projectFolder)
-    ) {
+    const conversation = this.projectConversations(projectFolder).find((candidate) => candidate.id === id)
+    if (!conversation) {
       throw new Error('Conversation not found for this project.')
     }
     const normalizedQuery = query.trim().toLocaleLowerCase()
     const searchable = [
       conversation.title,
+      conversation.agentName ?? '',
       conversation.workingDirectory,
       ...conversation.messages.map((message) => message.content)
     ]
@@ -322,6 +356,8 @@ export class ConversationIndexer {
       id: conversation.id,
       provider: conversation.provider,
       providerSessionId: conversation.providerSessionId,
+      parentProviderSessionId: conversation.parentProviderSessionId,
+      agentName: conversation.agentName,
       title: conversation.title,
       workingDirectory: conversation.workingDirectory,
       updatedAt: conversation.updatedAt,
@@ -432,6 +468,7 @@ export class ConversationIndexer {
           const timestamp = Date.parse(conversation.updatedAt)
           return (
             conversation.provider === provider &&
+            !conversation.parentProviderSessionId &&
             Boolean(conversation.providerSessionId) &&
             !excludedIds.has(conversation.providerSessionId!) &&
             resolve(conversation.workingDirectory) === normalizedFolder &&
@@ -477,5 +514,11 @@ export class ConversationIndexer {
       if (!livePaths.has(path)) this.cache.delete(path)
     }
     return found
+  }
+
+  private projectConversations(projectFolder: string): ParsedConversation[] {
+    const normalizedFolder = resolve(projectFolder)
+    return conversationsWithDescendants(this.indexAll(), (conversation) =>
+      resolve(conversation.workingDirectory) === normalizedFolder)
   }
 }
