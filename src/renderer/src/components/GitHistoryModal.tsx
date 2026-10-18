@@ -12,6 +12,8 @@ import type { GitBranchRef, GitCommit, GitRepositoryStatus } from '@shared/types
 import { parseGitHubRepositoryReference } from '@shared/git'
 import { buildGitTimeline, projectGitTimeline } from '../lib/gitTimeline'
 import { useModalEscape } from '../lib/modalEscape'
+import { GitBranchBar } from './GitBranchBar'
+import { gitBranchKey as branchKey } from '../lib/gitBranches'
 import '../git-history.css'
 
 interface Props {
@@ -27,7 +29,6 @@ interface Props {
 const PAGE_SIZE = 80
 const emptyMetrics = { left: 0, top: 0, width: 1000, height: 420 }
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
-const branchKey = (branch: GitBranchRef) => `${branch.remote ? 'remote' : 'local'}:${branch.name}`
 const dateLabel = (value: string) => {
   const date = new Date(value)
   return Number.isFinite(date.getTime())
@@ -65,6 +66,7 @@ export function GitHistoryModal({
   const positionedSize = useRef({ width: 0, height: 0 })
   const scrollFrame = useRef(0)
   const copyTimer = useRef<ReturnType<typeof setTimeout>>()
+  const copySequence = useRef(0)
   const anchorRef = useRef<{ hash: string; x: number } | null>(null)
   const dragRef = useRef<{ pointerId: number; x: number; left: number } | null>(null)
   const overviewDragging = useRef(false)
@@ -174,6 +176,7 @@ export function GitHistoryModal({
     setTotal(0)
     setCopyMessage('')
     setCopiedHash(null)
+    copySequence.current += 1
     initialPositioned.current = false
     positionedSize.current = { width: 0, height: 0 }
     anchorRef.current = null
@@ -185,6 +188,7 @@ export function GitHistoryModal({
       branchSequence.current += 1
       loadingRef.current = false
       clearTimeout(copyTimer.current)
+      copySequence.current += 1
       cancelAnimationFrame(scrollFrame.current)
     }
   }, [open, projectId, loadPage, loadBranches])
@@ -236,17 +240,28 @@ export function GitHistoryModal({
     setBranchFilter(branch ? branchKey(branch) : null)
     setCopiedHash(null)
     setCopyMessage('')
+    copySequence.current += 1
     void loadPage(true)
   }
 
-  async function copyCommit(commit: GitCommit) {
+  function selectCommit(commit: GitCommit) {
     setSelectedHash(commit.hash)
+    copySequence.current += 1
+    clearTimeout(copyTimer.current)
+    setCopyMessage('')
+    setCopiedHash(null)
+  }
+
+  async function copyCommit(commit: GitCommit) {
+    const request = ++copySequence.current
     clearTimeout(copyTimer.current)
     try {
       await window.projectConsole.system.copyText(commit.hash)
+      if (request !== copySequence.current) return
       setCopiedHash(commit.hash)
       setCopyMessage(`Copied ${commit.shortHash}`)
     } catch (cause) {
+      if (request !== copySequence.current) return
       setCopiedHash(null)
       setCopyMessage(`Copy failed: ${errorMessage(cause)}`)
     }
@@ -275,7 +290,7 @@ export function GitHistoryModal({
 
   function trapFocus(event: KeyboardEvent<HTMLElement>) {
     if (event.key !== 'Tab') return
-    const elements = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), [tabindex="0"]') ?? [])]
+    const elements = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex="0"]') ?? [])]
       .filter((element) => element.getClientRects().length > 0)
     const first = elements[0], last = elements.at(-1)
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
@@ -301,19 +316,9 @@ export function GitHistoryModal({
         initial={{ opacity: 0, y: reducedMotion ? 0 : 16, scale: reducedMotion ? 1 : 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: reducedMotion ? 0 : 8 }} transition={transition}>
         <div className="gh-branch-row">
-          <span className="gh-branch-label"><GitBranch size={13} /> Branches</span>
-          <nav className="gh-branch-list" aria-label="Focus branch history">
-            <button className={`gh-branch-chip ${branchFilter === null ? 'active' : ''}`}
-              aria-pressed={branchFilter === null} onClick={() => filterBranch(null)}><i />All</button>
-            {branches.map((branch, index) => <button key={branchKey(branch)}
-              className={`gh-branch-chip ${branchFilter === branchKey(branch) ? 'active' : ''} ${branch.remote ? 'remote' : ''}`}
-              aria-pressed={branchFilter === branchKey(branch)}
-              title={`${branch.remote ? 'Remote' : 'Local'} branch: ${branch.name}${!branch.remote && branch.name === status?.branch ? ' · current branch' : ''}`}
-              style={{ '--gh-branch-color': nodeMap.get(branch.hash)?.color ?? ['#aab7f0', '#e2bc86', '#c6a3dc'][index % 3] } as CSSProperties}
-              onClick={() => filterBranch(branch)}>
-              <i />{branch.name}{!branch.remote && branch.name === status?.branch && <span className="gh-head-mark">HEAD</span>}
-            </button>)}
-          </nav>
+          <GitBranchBar key={projectId} branches={branches} selectedKey={branchFilter} currentBranch={status?.branch ?? null}
+            colorFor={(branch, index) => nodeMap.get(branch.hash)?.color ?? ['#aab7f0', '#e2bc86', '#c6a3dc'][index % 3]}
+            onSelect={filterBranch} />
           <span className="gh-count" title={branchError || `${total} commits in ${activeBranch?.name ?? 'all branches'}`}>
             {branches.length} branches <span>·</span> {commits.length}{total > commits.length ? ` / ${total}` : ''} commits
           </span>
@@ -337,7 +342,7 @@ export function GitHistoryModal({
           </div>
           <div className="gh-selection-actions">
             {selected && selected.parents.length > 1 && <span className="gh-merge-label"><GitMerge size={12} />{selected.parents.length} parents merged</span>}
-            {selected && <button className="gh-copy-hash" title={`Copy full commit SHA: ${selected.hash}`} onClick={() => void copyCommit(selected)}>
+            {selected && <button className="gh-copy-hash" aria-label="Copy full commit SHA" title={`Copy full commit SHA: ${selected.hash}`} onClick={() => void copyCommit(selected)}>
               <code>{selected.shortHash}</code>{copiedHash === selected.hash ? <Check size={13} /> : <Copy size={13} />}
             </button>}
           </div>
@@ -373,9 +378,9 @@ export function GitHistoryModal({
                 className={`gh-node ${node.commit.parents.length > 1 ? 'merge' : ''} ${selected?.hash === node.commit.hash ? 'selected' : ''}`}
                 style={{ left: node.x + paddingX, '--gh-node-color': node.color } as CSSProperties}
                 initial={false} animate={{ top: node.y, opacity: 1 }} transition={transition}
-                aria-label={`${node.commit.shortHash}: ${node.commit.subject}. Click to copy full SHA.`} aria-pressed={selected?.hash === node.commit.hash}
+                aria-label={`${node.commit.shortHash}: ${node.commit.subject}. Select commit.`} aria-pressed={selected?.hash === node.commit.hash}
                 title={`${node.commit.subject}\n${node.commit.author} · ${dateLabel(node.commit.authoredAt)}\n${node.commit.hash}`}
-                onClick={() => void copyCommit(node.commit)}>
+                onClick={() => selectCommit(node.commit)}>
                 <span className="gh-node-dot" /><code>{node.commit.shortHash}</code>
               </motion.button>)}
               {commits.length === 0 && <div className="gh-empty">{loading ? <><RefreshCw size={22} className="spin" /><span>Reading commits…</span></> : <><GitBranch size={26} /><span>{error ? 'History is unavailable' : 'This repository has no commits yet.'}</span></>}</div>}
@@ -406,7 +411,7 @@ export function GitHistoryModal({
           </div>
         </section>
         <footer className="gh-footer">
-          <span role="status">{copyMessage || (activeBranch ? `History reachable from ${activeBranch.name}. Click a commit to copy its full SHA.` : 'Click a commit to copy its full SHA. Scroll or drag to explore.')}</span>
+          <span role="status">{copyMessage || (activeBranch ? `History reachable from ${activeBranch.name}. Select a commit to inspect it.` : 'Select a commit to inspect it. Use the SHA button to copy. Scroll or drag to explore.')}</span>
           <div>{hasMore && <button onClick={() => void loadPage(false)} disabled={loading}>{loading ? 'Loading…' : 'Load older commits'}</button>}<span>Read only</span></div>
         </footer>
       </motion.section>
