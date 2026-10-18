@@ -217,8 +217,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('remote-folders:list', connectionId, path)
   },
   conversations: {
-    list: (projectId: string, query = '') =>
-      ipcRenderer.invoke('conversations:list', projectId, query),
+    list: (projectId: string, query = '', hiddenCount = 0) =>
+      ipcRenderer.invoke('conversations:list', projectId, query, hiddenCount),
     get: (projectId: string, conversationId: string, query = '') =>
       ipcRenderer.invoke('conversations:get', projectId, conversationId, query)
   },

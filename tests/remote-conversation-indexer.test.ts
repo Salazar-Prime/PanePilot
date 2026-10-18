@@ -46,6 +46,13 @@ describe('remote conversation archive payloads', () => {
       expect((await remote.list('fixture', '/srv/project', 'searchneedle')).map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'nested', 'root'])
       expect((await remote.list('fixture', '/srv/project', 'reviewer')).map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'nested', 'root'])
       expect(local.list('/srv/project', 'reviewer').map((chat) => chat.providerSessionId).sort()).toEqual(['child', 'nested', 'root'])
+      const trimmedRemote = await remote.list('fixture', '/srv/project', '', 1)
+      const trimmedLocal = local.list('/srv/project', '', 1)
+      expect(trimmedRemote.map((chat) => [chat.id, chat.title, chat.snippet]).sort()).toEqual(trimmedLocal.map((chat) => [chat.id, chat.title, chat.snippet]).sort())
+      expect(trimmedRemote.find((chat) => chat.providerSessionId === 'child')?.title).toBe('Result')
+      expect(trimmedRemote.find((chat) => chat.providerSessionId === 'child')?.messageCount).toBe(2)
+      expect((await remote.list('fixture', '/srv/project', 'searchneedle', 1)).some((chat) => chat.providerSessionId === 'child')).toBe(true)
+      expect((await remote.list('fixture', '/srv/project', '', 100)).every((chat) => chat.snippet === '' && chat.title === 'All messages hidden')).toBe(true)
       const child = remoteList.find((chat) => chat.providerSessionId === 'child')!
       expect((await remote.get('fixture', '/srv/project', child.id)).messages.map((message) => message.content)).toEqual(['Searchneedle review', 'Result'])
       expect(result.codexSessions.map((session) => session.id)).toEqual(['root'])

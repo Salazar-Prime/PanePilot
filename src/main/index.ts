@@ -664,17 +664,18 @@ function registerIpc(): void {
     }
   )
 
-  ipcMain.handle('conversations:list', async (_event, projectId: string, query = '') => {
+  ipcMain.handle('conversations:list', async (_event, projectId: string, query = '', hiddenCount = 0) => {
     const project = store.getProjectForRuntime(projectId)
     if (!project) throw new Error('Project not found.')
     const connection = store.getConnection(project.connectionId)
     if (!connection) throw new Error('Project connection not found.')
     return connection.kind === 'local'
-      ? conversations.list(project.folder, query)
+      ? conversations.list(project.folder, query, hiddenCount)
       : remoteConversations.list(
           connection.sshAlias ?? connection.name,
           project.folder,
-          query
+          query,
+          hiddenCount
         )
   })
   ipcMain.handle(

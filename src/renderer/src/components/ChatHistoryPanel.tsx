@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Bot, Check, Copy, GitBranch, MessageSquareText, RefreshCw, Search } from 'lucide-react'
 import { conversationForest } from '@shared/conversation-hierarchy'
 import type {
@@ -10,6 +10,9 @@ import { copyConversationSessionId } from '../lib/conversationSessionId'
 import { conversationMessageWindow } from '../lib/conversationMessageWindow'
 import { formatConversationDate as formatDate } from '../lib/conversationDate'
 import { ConversationList } from './ConversationList'
+import { ConversationMessageControls } from './ConversationMessageControls'
+import { getConversationHiddenCount, setConversationHiddenCount, subscribeConversationHiddenCount } from '../lib/conversationViewSession'
+import { useConversationUserNavigation } from '../lib/useConversationUserNavigation'
 
 export function ChatHistoryPanel({ project }: { project: Project }) {
   const [query, setQuery] = useState('')
@@ -20,15 +23,11 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loadedDetail, setDetail] = useState<ConversationDetail | null>(null)
   const detail = loadedDetail?.id === selectedId ? loadedDetail : null
-  const [hiddenByConversation, setHiddenByConversation] = useState<Record<string, number>>({})
+  const hiddenCount = useSyncExternalStore(subscribeConversationHiddenCount, getConversationHiddenCount)
   const messagesRef = useRef<HTMLDivElement | null>(null)
   const renderKey = JSON.stringify([project.id, detail?.id ?? null])
-  const rendered = conversationMessageWindow(detail?.messages ?? [], hiddenByConversation[renderKey] ?? 0)
-
-  function setHiddenCount(value: number) {
-    const count = conversationMessageWindow(detail?.messages ?? [], value).hiddenCount
-    setHiddenByConversation((current) => ({ ...current, [renderKey]: count }))
-  }
+  const rendered = useMemo(() => conversationMessageWindow(detail?.messages ?? [], hiddenCount), [detail?.messages, hiddenCount])
+  const navigation = useConversationUserNavigation(messagesRef, rendered.messages)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [detailError, setDetailError] = useState('')
@@ -62,7 +61,7 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
       setLoading(true)
       setError('')
       void window.projectConsole.conversations
-        .list(project.id, query)
+        .list(project.id, query, hiddenCount)
         .then((items) => {
           if (!active) return
           setConversations(items)
@@ -84,7 +83,7 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
       active = false
       window.clearTimeout(timer)
     }
-  }, [project.id, query, refresh])
+  }, [project.id, query, refresh, hiddenCount])
 
   useEffect(() => {
     const ancestors: string[] = []
@@ -229,31 +228,16 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
                 <span>Subagent{detail.agentName ? ` · ${detail.agentName}` : ''}</span>
               </div>
             )}
-            <div className="chat-render-controls">
-              <label title="Hide the first messages in this view only. Nothing is deleted from the archive.">
-                Hide first
-                <input
-                  type="number"
-                  min={0}
-                  max={detail.messages.length}
-                  step={1}
-                  value={rendered.hiddenCount}
-                  onChange={(event) => setHiddenCount(event.target.valueAsNumber)}
-                  aria-label="Number of messages to hide from the top"
-                />
-                messages
-              </label>
-              <span role="status">Showing {rendered.messages.length} of {detail.messages.length}</span>
-              <button className="secondary-button" disabled={!rendered.hiddenCount} onClick={() => setHiddenCount(0)}>
-                Show all
-              </button>
-            </div>
+            <ConversationMessageControls hiddenCount={hiddenCount} total={detail.messages.length}
+              previous={navigation.previous} next={navigation.next}
+              onChange={setConversationHiddenCount} onJump={navigation.jump} />
             <div className="chat-messages" ref={messagesRef}>
               {rendered.hiddenCount > 0 && !rendered.messages.length && (
-                <p className="chat-list-message">All messages are hidden. Choose Show all or lower the counter to see them again.</p>
+                <p className="chat-list-message">All messages are hidden. Lower the number above to see them again.</p>
               )}
               {rendered.messages.map((message) => (
-                <article className={`chat-message ${message.role}`} key={message.id}>
+                <article className={`chat-message ${message.role}${message.id === navigation.activeId ? ' navigation-target' : ''}`} key={message.id}
+                  data-message-id={message.id} data-message-role={message.role}>
                   <header>
                     <span>{message.role === 'user' ? detail.parentProviderSessionId ? 'Instruction' : 'You' : detail.agentName || detail.provider}</span>
                     {message.timestamp && <time>{formatDate(message.timestamp)}</time>}

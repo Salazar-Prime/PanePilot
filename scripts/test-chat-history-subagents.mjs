@@ -82,10 +82,31 @@ if (!process.versions.electron) {
       input.dispatchEvent(new Event('input',{bubbles:true}));
     }`)
     await waitFor(`document.querySelectorAll('.chat-conversation-card').length === 5`)
+    await evaluate(`Array.from(document.querySelectorAll('.chat-conversation-card')).find(el=>el.textContent.includes('Main task')).click()`)
+    await waitFor(`document.querySelectorAll('.chat-message').length === 6`)
+    assert.equal(await evaluate(`document.querySelector('.chat-message-counter span').textContent`), '6 messages')
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).some(el=>el.textContent==='Show all')`), false)
+    await click('Next user message')
+    await waitFor(`document.querySelector('.chat-message.navigation-target')?.dataset.messageId === 'root-u2' && document.querySelector('.chat-messages').scrollTop > 0`)
+    await click('Next user message')
+    await waitFor(`document.querySelector('.chat-message.navigation-target')?.dataset.messageId === 'root-u3'`)
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Next user message"]').disabled`), true)
+    await click('Previous user message')
+    await waitFor(`document.querySelector('.chat-message.navigation-target')?.dataset.messageId === 'root-u2'`)
+    await evaluate(`{
+      const input=document.querySelector('.chat-message-counter input');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'1');
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+    }`)
+    await waitFor(`document.querySelectorAll('.chat-message').length === 5 && !Array.from(document.querySelectorAll('.chat-conversation-card strong')).some(el=>el.textContent==='Main task')`)
+    await evaluate(`Array.from(document.querySelectorAll('.chat-conversation-card')).find(el=>el.textContent.includes('Reviewer')).click()`)
+    await waitFor(`document.querySelectorAll('.chat-message').length === 1 && document.querySelector('.chat-message-counter input').value==='1'`)
+    await evaluate(`window.remountChat()`)
+    await waitFor(`document.querySelectorAll('.chat-message').length === 5 && document.querySelector('.chat-message-counter input').value==='1'`)
     if (process.env.PANEPILOT_UI_SCREENSHOT) {
       await writeFile(process.env.PANEPILOT_UI_SCREENSHOT, (await window.webContents.capturePage()).toPNG())
     }
-    process.stdout.write('Subagent UI passed: collapsed defaults, nested expansion, exact transcript/ID, parent navigation, and search reveal.\n')
+    process.stdout.write('Chat UI passed: subagent hierarchy/search, user-turn navigation, total counts, global sidebar trimming, and session retention after remount.\n')
     window.destroy()
     app.exit(0)
   } catch (error) {
@@ -102,15 +123,24 @@ function fixture() {
     import {createRoot} from 'react-dom/client';
     import {ChatHistoryPanel} from './src/renderer/src/components/ChatHistoryPanel';
     import {matchingConversations} from './src/shared/conversation-hierarchy';
+    import {conversationDisplayWindow} from './src/shared/conversation-messages';
     const make=(id,parent,title,content,agentName=null)=>({id,provider:'codex',providerSessionId:id,parentProviderSessionId:parent,agentName,title,
       workingDirectory:'/project',updatedAt:'2026-10-18T10:00:00Z',messageCount:2,snippet:content,matchCount:0,
       messages:[{id:id+'-u',role:'user',content:title,timestamp:null},{id:id+'-a',role:'assistant',content,timestamp:null}]});
     const chats=[make('nested','reviewer','Find needle','Needle found'),make('reviewer','root','Review tests','Review result','Reviewer'),
       make('worker','root','Implement change','Change done','Builder'),make('root',null,'Main task','Main result'),make('other',null,'Unrelated chat','Other result')];
+    chats.find(c=>c.id==='root').messages.push({id:'root-u2',role:'user',content:'Second user turn',timestamp:null},
+      {id:'root-a2',role:'assistant',content:'Second answer',timestamp:null},
+      {id:'root-u3',role:'user',content:'Third user turn',timestamp:null},
+      {id:'root-a3',role:'assistant',content:'Third answer',timestamp:null});
+    chats.find(c=>c.id==='root').messages[1].content=('Main result line\\n').repeat(24);
+    for(const chat of chats)chat.messageCount=chat.messages.length;
     window.projectConsole={conversations:{
-      list:async (_project,query)=>{const items=chats.map(c=>({...c,matchCount:query&&JSON.stringify(c.messages).toLowerCase().includes(query.toLowerCase())?1:0}));return query?matchingConversations(items):items;},
+      list:async (_project,query,hiddenCount)=>{const items=chats.map(c=>{const display=conversationDisplayWindow(c,hiddenCount);return {...c,title:display.title,snippet:display.messages.at(-1)?.content??'',matchCount:query&&JSON.stringify(c.messages).toLowerCase().includes(query.toLowerCase())?1:0};});return query?matchingConversations(items):items;},
       get:async (_project,id)=>chats.find(c=>c.id===id)
     },system:{copyText:async text=>{window.copied=text;}}};
-    createRoot(document.getElementById('root')).render(<ChatHistoryPanel project={{id:'fixture',folder:'/project'}}/>);
+    const root=createRoot(document.getElementById('root'));let revision=0;
+    window.remountChat=()=>root.render(<ChatHistoryPanel key={++revision} project={{id:'fixture',folder:'/project'}}/>);
+    root.render(<ChatHistoryPanel key={revision} project={{id:'fixture',folder:'/project'}}/>);
   `
 }

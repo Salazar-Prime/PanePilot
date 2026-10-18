@@ -656,7 +656,7 @@ export interface ProjectConsoleApi {
     list(connectionId: string, path?: string): Promise<RemoteFolderListing>
   }
   conversations: {
-    list(projectId: string, query?: string): Promise<ConversationSummary[]>
+    list(projectId: string, query?: string, hiddenCount?: number): Promise<ConversationSummary[]>
     get(projectId: string, conversationId: string, query?: string): Promise<ConversationDetail>
   }
   latex: {

@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { promisify } from 'node:util'
 import { matchingConversations } from '../shared/conversation-hierarchy'
+import { conversationDisplayWindow } from '../shared/conversation-messages'
 import type {
   ConversationDetail,
   ConversationMessage,
@@ -374,7 +375,8 @@ function snippetFor(conversation: RemoteConversation, query: string): string {
   return `${start > 0 ? '…' : ''}${content.slice(start, end)}${end < content.length ? '…' : ''}`
 }
 
-function summaryFor(conversation: RemoteConversation, query: string): ConversationSummary {
+function summaryFor(conversation: RemoteConversation, query: string, hiddenCount = 0): ConversationSummary {
+  const display = conversationDisplayWindow(conversation, hiddenCount)
   const searchable = [
     conversation.title,
     conversation.agentName ?? '',
@@ -387,11 +389,11 @@ function summaryFor(conversation: RemoteConversation, query: string): Conversati
     providerSessionId: conversation.providerSessionId,
     parentProviderSessionId: conversation.parentProviderSessionId ?? null,
     agentName: conversation.agentName ?? null,
-    title: conversation.title,
+    title: display.title,
     workingDirectory: conversation.workingDirectory,
     updatedAt: conversation.updatedAt,
     messageCount: conversation.messages.length,
-    snippet: snippetFor(conversation, query),
+    snippet: snippetFor({ ...conversation, messages: conversation.messages.slice(display.hiddenCount) }, query),
     matchCount: query
       ? searchable.reduce((total, value) => total + countMatches(value, query), 0)
       : 0
@@ -461,11 +463,11 @@ export class RemoteConversationIndexer {
   private readonly cache = new Map<string, CachedScan>()
   private readonly codexSessionCache = new Map<string, CachedCodexSessions>()
 
-  async list(alias: string, projectFolder: string, query = ''): Promise<ConversationSummary[]> {
+  async list(alias: string, projectFolder: string, query = '', hiddenCount = 0): Promise<ConversationSummary[]> {
     const normalizedQuery = query.trim().toLocaleLowerCase()
     const scan = await this.scan(alias, projectFolder)
     const summaries = scan.conversations
-      .map((conversation) => summaryFor(conversation, normalizedQuery))
+      .map((conversation) => summaryFor(conversation, normalizedQuery, hiddenCount))
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
     return normalizedQuery ? matchingConversations(summaries) : summaries
   }

@@ -11,6 +11,7 @@ import {
 import { homedir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { conversationsWithDescendants, matchingConversations } from '../shared/conversation-hierarchy'
+import { conversationDisplayWindow } from '../shared/conversation-messages'
 import { subagentHeader } from './codex-subagents'
 import type {
   ConversationDetail,
@@ -308,11 +309,12 @@ export class ConversationIndexer {
     { provider: 'claude', path: join(homedir(), '.claude', 'projects') }
   ]) {}
 
-  list(projectFolder: string, query = ''): ConversationSummary[] {
+  list(projectFolder: string, query = '', hiddenCount = 0): ConversationSummary[] {
     const normalizedFolder = resolve(projectFolder)
     const normalizedQuery = query.trim().toLocaleLowerCase()
     const summaries = this.projectConversations(normalizedFolder)
       .map((conversation) => {
+        const display = conversationDisplayWindow(conversation, hiddenCount)
         const searchable = [
           conversation.title,
           conversation.agentName ?? '',
@@ -328,11 +330,11 @@ export class ConversationIndexer {
           providerSessionId: conversation.providerSessionId,
           parentProviderSessionId: conversation.parentProviderSessionId,
           agentName: conversation.agentName,
-          title: conversation.title,
+          title: display.title,
           workingDirectory: conversation.workingDirectory,
           updatedAt: conversation.updatedAt,
           messageCount: conversation.messages.length,
-          snippet: snippetFor(conversation, normalizedQuery),
+          snippet: snippetFor({ ...conversation, messages: conversation.messages.slice(display.hiddenCount) }, normalizedQuery),
           matchCount
         }
       })
