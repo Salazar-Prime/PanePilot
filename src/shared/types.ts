@@ -399,6 +399,17 @@ export interface FilePreview {
   imageDataUrl: string | null
 }
 
+export interface OpenInteractiveHtmlInput {
+  projectId: string
+  path: string
+  content: string
+}
+
+export interface InteractiveHtmlPreview {
+  id: string
+  url: string
+}
+
 export interface FileOpenResult {
   kind: 'file' | 'directory'
   path: string
@@ -640,6 +651,8 @@ export interface ProjectConsoleApi {
     ): Promise<string>
     rename(projectId: string, relativePath: string, name: string): Promise<string>
     preview(projectId: string, relativePath: string): Promise<FilePreview>
+    openInteractiveHtml(input: OpenInteractiveHtmlInput): Promise<InteractiveHtmlPreview>
+    closeInteractiveHtml(id: string): Promise<void>
     open(projectId: string, relativePath: string): Promise<FileOpenResult>
     save(projectId: string, relativePath: string, content: string): Promise<void>
     download(projectId: string, relativePath: string): Promise<boolean>

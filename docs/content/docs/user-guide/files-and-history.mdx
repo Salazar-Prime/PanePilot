@@ -28,6 +28,24 @@ iframe without scripts, forms, popups, downloads, or top navigation. Project-rel
 images and stylesheets use the bounded local/SSH preview API; remote web assets and CSS
 imports are blocked. Each HTML preview allows at most 16 relative assets totaling 16
 MB and reflects the current unsaved draft.
+
+For a trusted HTML demo that builds its content with JavaScript, choose **Interactive**
+in the preview. The page can load supported scripts, styles, images, and data from its
+project on the local or SSH host. Its controls, DOM, SVG, and canvas can then run;
+**Reload** starts it again with fresh assets. Static remains the default when the
+preview is reopened, and unsaved source is rendered without saving it to disk.
+
+Interactive uses a separate opaque browser origin with no PanePilot bridge or Node
+APIs. Project reads are bounded and read-only; external web resources, forms, popups,
+downloads, workers, and navigation into the app are blocked. Use only HTML you trust:
+browser sandboxing is not an OS-level network jail. Fonts, media, and libraries that
+require `eval` are not supported. Each preview allows at most 64 supported assets,
+32 MB of cached content, three concurrent reads, and 512 resource requests. At most
+eight interactive previews can be open. Return to Static or close the preview to
+revoke its temporary project access.
+Reloading PanePilot or recovering from a renderer crash also revokes previous preview
+access; Interactive must be selected again.
+
 Folder navigation, the selected preview, editor scroll position, and unsaved draft stay
 mounted while switching to another project tab. This state lasts only for the current
 PanePilot renderer lifetime.

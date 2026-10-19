@@ -1207,6 +1207,7 @@ function FilesPanelInstance({
               />
             ) : html && viewMode === 'preview' ? (
               <HtmlPreview
+                key={`${project.id}:${preview.path}`}
                 projectId={project.id}
                 path={preview.path}
                 content={editing ? draft : preview.content}

@@ -2067,6 +2067,10 @@ select:focus-visible {
   color: #d8dbe4;
 }
 
+.html-preview-notice .preview-mode-switch { margin-left: 0; }
+.html-preview-reload { margin-left: auto; padding: 2px 4px; border: 0; background: transparent; color: #b4bfd4; font-size: 10px; cursor: pointer; }
+.html-preview-reload:hover { color: #edf1fc; }
+
 .html-preview-frame {
   display: block;
   min-height: 0;

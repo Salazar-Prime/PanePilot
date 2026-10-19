@@ -6,6 +6,7 @@ import {
   dialog,
   ipcMain,
   powerMonitor,
+  protocol,
   shell
 } from 'electron'
 import type {
@@ -32,6 +33,7 @@ import {
   listLocalFiles,
   openLocalPath,
   previewLocalFile,
+  previewLocalFileAsync,
   resolveLocalFilePath,
   renameLocalEntry,
   searchLocalFiles,
@@ -62,6 +64,10 @@ import { discoverSshAliases } from './ssh-config'
 import { Store } from './store'
 import { TerminalManager } from './terminal-manager'
 import { TerminalDropService } from './terminal-drop-service'
+import { HTML_PREVIEW_SCHEME, HTML_PREVIEW_PRIVILEGES, InteractiveHtmlPreviewService, guardInteractiveHtmlNavigation, isInteractiveHtmlUrl } from './html-interactive-preview'
+import type { OpenInteractiveHtmlInput } from '../shared/types'
+
+protocol.registerSchemesAsPrivileged([{ scheme: HTML_PREVIEW_SCHEME, privileges: HTML_PREVIEW_PRIVILEGES }])
 
 let mainWindow: BrowserWindow | null = null
 let store: Store
@@ -70,6 +76,14 @@ let terminalDrops: TerminalDropService
 let conversations: ConversationIndexer
 let remoteConversations: RemoteConversationIndexer
 const codexSubagents = new CodexSubagentReader()
+const interactiveHtml = new InteractiveHtmlPreviewService(async (projectId, path) => {
+  const project = store.getProjectForRuntime(projectId)
+  if (!project || project.archived) throw new Error('Project not found.')
+  const connection = store.getConnection(project.connectionId)
+  if (!connection) throw new Error('Project connection not found.')
+  return connection.kind === 'local' ? previewLocalFileAsync(project.folder, path)
+    : previewRemoteFileAsync(connection.sshAlias ?? connection.name, project.folder, path)
+})
 let portForwards: PortForwardManager
 let latex: LatexProjectService
 let metadata: ProjectMetadataService
@@ -101,6 +115,7 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
       contextIsolation: true,
+      nodeIntegrationInSubFrames: false,
       nodeIntegration: false
     }
   })
@@ -114,7 +129,9 @@ function createWindow(): void {
   mainWindow.webContents.on('did-start-loading', () => {
     mainWindow?.webContents.setIgnoreMenuShortcuts(false)
   })
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  guardInteractiveHtmlNavigation(mainWindow.webContents, interactiveHtml)
+  mainWindow.webContents.setWindowOpenHandler(({ url, referrer }) => {
+    if (isInteractiveHtmlUrl(referrer.url) || isInteractiveHtmlUrl(url)) return { action: 'deny' }
     void openExternalWebUrl(url).catch((error) => {
       console.error('Could not open external URL.', error)
     })
@@ -129,6 +146,14 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('files:interactive-html:open', (event, input: OpenInteractiveHtmlInput) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid HTML preview sender.')
+    return interactiveHtml.open(event.sender.id, input)
+  })
+  ipcMain.handle('files:interactive-html:close', (event, id: string) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame || typeof id !== 'string') throw new Error('Invalid HTML preview sender.')
+    interactiveHtml.close(event.sender.id, id)
+  })
   ipcMain.handle('quick-notes:get', (event) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid quick notes sender.')
     return store.getQuickNotes()
@@ -712,6 +737,7 @@ if (!ownsSingleInstanceLock) {
   app
     .whenReady()
     .then(() => {
+      protocol.handle(HTML_PREVIEW_SCHEME, (request) => interactiveHtml.handle(request))
       store = new Store(app.getPath('userData'))
       terminalDrops = new TerminalDropService(store, (progress) => {
         if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('terminal-drops:progress', progress)

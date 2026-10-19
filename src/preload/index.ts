@@ -179,6 +179,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('files:rename', projectId, relativePath, name),
     preview: (projectId: string, relativePath: string) =>
       ipcRenderer.invoke('files:preview', projectId, relativePath),
+    openInteractiveHtml: (input) => ipcRenderer.invoke('files:interactive-html:open', input),
+    closeInteractiveHtml: (id) => ipcRenderer.invoke('files:interactive-html:close', id),
     open: (projectId: string, relativePath: string) =>
       ipcRenderer.invoke('files:open', projectId, relativePath),
     save: (projectId: string, relativePath: string, content: string) =>
@@ -292,4 +294,4 @@ const api: ProjectConsoleApi = {
   }
 }
 
-contextBridge.exposeInMainWorld('projectConsole', api)
+if (process.isMainFrame) contextBridge.exposeInMainWorld('projectConsole', api)

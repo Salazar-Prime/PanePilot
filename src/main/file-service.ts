@@ -1,5 +1,6 @@
 import {
   copyFileSync,
+  constants,
   closeSync,
   existsSync,
   lstatSync,
@@ -197,6 +198,28 @@ export function previewLocalFile(root: string, requested: string): FilePreview {
     imageMimeType,
     imageDataUrl
   }
+}
+
+/** Interactive HTML asset reads must not block the main loop while scripts request siblings. */
+export async function previewLocalFileAsync(root: string, requested: string): Promise<FilePreview> {
+  const realRoot = await fs.realpath(root)
+  const filePath = await fs.realpath(resolve(realRoot, requested))
+  if (filePath !== realRoot && !filePath.startsWith(`${realRoot}${sep}`)) throw new Error('The requested path is outside the project folder.')
+  if (!(await fs.stat(filePath)).isFile()) throw new Error('The requested path is not a file.')
+  const descriptor = await fs.open(filePath, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW)
+  try {
+    const stat = await descriptor.stat()
+    if (!stat.isFile()) throw new Error('The requested path is not a file.')
+    const imageMimeType = IMAGE_MIME_TYPES[extname(filePath).toLowerCase()] ?? null
+    const limit = imageMimeType ? IMAGE_PREVIEW_LIMIT : TEXT_PREVIEW_LIMIT
+    const buffer = Buffer.allocUnsafe(Math.min(stat.size, limit))
+    const { bytesRead } = await descriptor.read(buffer, 0, buffer.length, 0)
+    const bytes = buffer.subarray(0, bytesRead)
+    const binary = Boolean(imageMimeType) || bytes.includes(0)
+    return { path: requested, content: binary ? '' : bytes.toString('utf8'), binary,
+      truncated: stat.size > limit, imageMimeType,
+      imageDataUrl: imageMimeType && stat.size <= limit ? `data:${imageMimeType};base64,${bytes.toString('base64')}` : null }
+  } finally { await descriptor.close() }
 }
 
 export function openLocalPath(root: string, requested: string): FileOpenResult {
