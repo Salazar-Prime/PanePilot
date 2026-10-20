@@ -6,6 +6,7 @@ import {
   type QuickNotesContent
 } from '@shared/quickNotes'
 import { useModalEscape } from '../lib/modalEscape'
+import { useUpdateRestartGuard } from '../lib/updateRestartGuards'
 import { QuickNotesDraft, quickNoteId } from '../lib/quickNotesDraft'
 import '../quick-notes.css'
 
@@ -21,6 +22,7 @@ export function QuickNotesDialog({ open, onClose }: { open: boolean; onClose(): 
   const panel = useRef<HTMLElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const newItem = useRef<string | null>(null)
+  useUpdateRestartGuard(model.current!.dirty || closing ? 'Wait for Quick Notes to save before updating PanePilot.' : null)
 
   useEffect(() => {
     if (!open || model.current!.value) return

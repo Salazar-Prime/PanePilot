@@ -1,4 +1,5 @@
 import { basename, join } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import {
   app,
   BrowserWindow,
@@ -64,6 +65,7 @@ import { discoverSshAliases } from './ssh-config'
 import { Store } from './store'
 import { TerminalManager } from './terminal-manager'
 import { TerminalDropService } from './terminal-drop-service'
+import { AppUpdateService } from './app-update-service'
 import { HTML_PREVIEW_SCHEME, HTML_PREVIEW_PRIVILEGES, InteractiveHtmlPreviewService, guardInteractiveHtmlNavigation, isInteractiveHtmlUrl } from './html-interactive-preview'
 import type { OpenInteractiveHtmlInput } from '../shared/types'
 
@@ -89,6 +91,13 @@ let latex: LatexProjectService
 let metadata: ProjectMetadataService
 let googleDrive: GoogleDriveService
 let gitService: GitService
+const appUpdates = new AppUpdateService({
+  platform: process.platform, packaged: app.isPackaged, currentVersion: app.getVersion(),
+  readConfig: async () => JSON.parse(await readFile(join(process.resourcesPath, 'panepilot-updates.json'), 'utf8')),
+  loadBridge: async () => (await import('electron-sparkle-updater')).loadSparkleBridgeForApp(),
+  notify: (state) => { if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('updates:changed', state) },
+  restartBlocker: () => terminalDrops?.hasActiveTransfers() ? 'Wait for file transfers to finish before updating.' : terminals?.updateRestartBlocker() ?? null
+})
 
 // Keep the existing application-data identity when the packaged product name is PanePilot.
 app.setName('PanePilot')
@@ -146,6 +155,12 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  const updateSender = (event: Electron.IpcMainInvokeEvent) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid update sender.')
+  }
+  ipcMain.handle('updates:get', (event) => { updateSender(event); return appUpdates.get() })
+  ipcMain.handle('updates:check', (event) => { updateSender(event); return appUpdates.check() })
+  ipcMain.handle('updates:restart', (event) => { updateSender(event); return appUpdates.restart() })
   ipcMain.handle('files:interactive-html:open', (event, input: OpenInteractiveHtmlInput) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid HTML preview sender.')
     return interactiveHtml.open(event.sender.id, input)
@@ -347,7 +362,7 @@ function registerIpc(): void {
     latex.getPdf(projectId)
   )
   ipcMain.handle('latex:compile', (_event, projectId: string) =>
-    latex.compile(projectId)
+    appUpdates.protectRestartWhile(() => latex.compile(projectId))
   )
   ipcMain.handle('latex:print-pdf', (_event, input: PrintLatexPdfInput) =>
     printLatexPdf(input)
@@ -370,14 +385,14 @@ function registerIpc(): void {
   ipcMain.handle(
     'latex:send-inline-edit',
     (_event, input: SendLatexInlineEditInput) => {
-      return latex.sendInlineEdit(input)
+      return appUpdates.protectRestartWhile(() => latex.sendInlineEdit(input))
     }
   )
   ipcMain.handle('latex:list-inline-edits', (_event, projectId: string) =>
     latex.listInlineEdits(projectId)
   )
   ipcMain.handle('latex:rollback-inline-edit', (_event, editId: string) =>
-    latex.rollbackInlineEdit(editId)
+    appUpdates.protectRestartWhile(() => latex.rollbackInlineEdit(editId))
   )
   ipcMain.handle('latex:delete-inline-edit', (_event, editId: string) => {
     latex.deleteInlineEdit(editId)
@@ -387,12 +402,12 @@ function registerIpc(): void {
   )
   ipcMain.handle(
     'latex:create-comment',
-    (_event, input: CreateLatexCommentInput) => latex.createComment(input)
+    (_event, input: CreateLatexCommentInput) => appUpdates.protectRestartWhile(() => latex.createComment(input))
   )
   ipcMain.handle(
     'latex:delete-comment',
     (_event, projectId: string, commentId: string) =>
-      latex.deleteComment(projectId, commentId)
+      appUpdates.protectRestartWhile(() => latex.deleteComment(projectId, commentId))
   )
   ipcMain.handle('latex:changes', (_event, sessionId: string) =>
     latex.changes(sessionId)
@@ -519,7 +534,7 @@ function registerIpc(): void {
     metadata.listNotes(projectId)
   )
   ipcMain.handle('notes:create', (_event, projectId: string, name: string) =>
-    metadata.createNote(projectId, name)
+    appUpdates.protectRestartWhile(() => metadata.createNote(projectId, name))
   )
   ipcMain.handle('notes:read', (_event, projectId: string, path: string) =>
     metadata.readNote(projectId, path)
@@ -527,15 +542,15 @@ function registerIpc(): void {
   ipcMain.handle(
     'notes:write',
     (_event, projectId: string, path: string, content: string) =>
-      metadata.writeNote(projectId, path, content)
+      appUpdates.protectRestartWhile(() => metadata.writeNote(projectId, path, content))
   )
   ipcMain.handle(
     'notes:rename',
     (_event, projectId: string, path: string, name: string) =>
-      metadata.renameNote(projectId, path, name)
+      appUpdates.protectRestartWhile(() => metadata.renameNote(projectId, path, name))
   )
   ipcMain.handle('notes:delete', (_event, projectId: string, path: string) => {
-    metadata.deleteNote(projectId, path)
+    return appUpdates.protectRestartWhile(() => metadata.deleteNote(projectId, path))
   })
   ipcMain.handle('files:preview', async (_event, projectId: string, relativePath: string) => {
     const project = store.getProjectForRuntime(projectId)
@@ -557,7 +572,7 @@ function registerIpc(): void {
   })
   ipcMain.handle(
     'files:save',
-    async (_event, projectId: string, relativePath: string, content: string) => {
+    async (_event, projectId: string, relativePath: string, content: string) => appUpdates.protectRestartWhile(async () => {
       const project = store.getProjectForRuntime(projectId)
       if (!project) throw new Error('Project not found.')
       const connection = store.getConnection(project.connectionId)
@@ -572,7 +587,7 @@ function registerIpc(): void {
           content
         )
       }
-    }
+    })
   )
   ipcMain.handle(
     'files:download',
@@ -767,6 +782,7 @@ if (!ownsSingleInstanceLock) {
       })
       registerIpc()
       createWindow()
+      void appUpdates.initialize()
       setTimeout(() => {
         void terminals.removeLegacyProjectQnaSessions().catch((error) => {
           console.warn('Could not retire legacy Project Q&A sessions:', error)
@@ -793,6 +809,7 @@ if (!ownsSingleInstanceLock) {
 }
 
 app.on('before-quit', () => {
+  appUpdates.dispose()
   terminalDrops?.shutdown()
   terminals?.shutdown()
   portForwards?.shutdown()

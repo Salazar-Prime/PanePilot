@@ -30,6 +30,7 @@ import { addFileManagementActions } from '../lib/monacoFinderAction'
 import { isMarkdownPath } from '../lib/markdown'
 import { isHtmlPath } from '../lib/htmlPreview'
 import { HtmlPreview } from './HtmlPreview'
+import { cachedUpdateRestartGuard, useUpdateRestartGuard } from '../lib/updateRestartGuards'
 import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
 import { Editor, monaco } from '../lib/monaco'
 import {
@@ -164,6 +165,9 @@ function FilesPanelInstance({
   const markdown = Boolean(preview && isMarkdownPath(preview.path))
   const html = Boolean(preview && isHtmlPath(preview.path))
   const renderedPreview = markdown || html
+  useUpdateRestartGuard(openFiles.some((file) => file.draft !== file.preview.content)
+    ? `Save unsaved files in ${project.name} before updating PanePilot.`
+    : saving || uploadingToDrive || changingDriveSharing ? 'Wait for file operations to finish before updating.' : null)
   const viewMode = activeFile?.viewMode ?? (renderedPreview ? 'preview' : 'source')
   activeFinderPathRef.current = preview?.path ?? null
 
@@ -291,6 +295,8 @@ function FilesPanelInstance({
       searchQuery,
       searchResults
     })
+    cachedUpdateRestartGuard(`files:${project.id}`, openFiles.some((file) => file.draft !== file.preview.content)
+      ? `Save unsaved files in ${project.name} before updating PanePilot.` : null)
   }, [
     activeFilePath,
     listing,

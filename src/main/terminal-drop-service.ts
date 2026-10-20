@@ -212,6 +212,7 @@ export class TerminalDropService {
   ) {}
 
   list(): TerminalDropProgress[] { return [...this.history.values()] }
+  hasActiveTransfers(): boolean { return this.active.size > 0 }
   shutdown(): void { for (const controller of this.active) controller.abort() }
 
   async drop(sessionId: string, paths: string[]): Promise<TerminalDropResult> {

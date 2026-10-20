@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Clipboard,
   Cloud,
+  Download,
   Columns2,
   ExternalLink,
   FileText,
@@ -71,6 +72,9 @@ import type {
 } from '@shared/types'
 import { isAttentionState } from '../lib/status'
 import { useAppearanceScale } from '../lib/appearanceScale'
+import { useAppUpdates } from '../lib/useAppUpdates'
+import { forgetProjectUpdateRestartGuards } from '../lib/updateRestartGuards'
+import { AppUpdatesDialog } from './AppUpdatesDialog'
 import { useOpenSessions } from '../lib/openSessions'
 import { isPaneSwapShortcut } from '../lib/projectShortcuts'
 import { isOriginlessGitRepository } from '../lib/gitPane'
@@ -273,6 +277,8 @@ async function getRendererProject(projectId: string): Promise<Project | null> {
 export function App() {
   const [, startBackgroundTransition] = useTransition()
   useAppearanceScale()
+  const updates = useAppUpdates()
+  const [showAppUpdates, setShowAppUpdates] = useState(false)
   const [subagentSessionId, setSubagentSessionId] = useState<string | null>(null)
   const [showQuickNotes, setShowQuickNotes] = useState(false)
   const [visibleDestinations, setVisibleDestinations] = useState<Record<WorkspacePane, WorkspaceDestination | null>>({ a: null, b: null })
@@ -1634,6 +1640,7 @@ export function App() {
     )
       return
     await window.projectConsole.projects.delete(target.id)
+    forgetProjectUpdateRestartGuards(target.id)
     await refresh()
   }
 
@@ -1802,6 +1809,11 @@ export function App() {
     project, paneDestinationsRef.current[focusedPane], focusedSession
   )
   const commandPaletteCommands: CommandPaletteCommand[] = [
+    {
+      id: 'action:app-updates', section: 'Actions', label: 'Check for PanePilot updates…',
+      detail: 'Download signed updates and restart when ready', keywords: ['sparkle', 'upgrade', 'version', 'install'],
+      icon: <Download size={15} />, action: () => setShowAppUpdates(true)
+    },
     ...(project && paletteSession
       ? contextualCommands(
           contextItems({ kind: 'session', project, session: paletteSession, x: 0, y: 0 })
@@ -2361,6 +2373,11 @@ export function App() {
   const gitBadge = gitToolbarBadge(gitStatus)
   const localRepository = isOriginlessGitRepository(gitStatus)
   const topToolbarActions: TopToolbarAction[] = [
+    {
+      id: 'app-updates', label: updates.state.phase === 'ready' ? 'Install PanePilot update…' : 'Check for updates…',
+      icon: <Download size={15} />, group: 'general', available: true, visibleInMenu: true,
+      run: () => setShowAppUpdates(true)
+    },
     {
       id: 'quick-notes', label: 'Quick Notes', icon: <StickyNote size={15} />,
       group: 'general', available: true, visibleInMenu: true,
@@ -3178,6 +3195,12 @@ export function App() {
         </div>
         <div id="status-workspace-nav" className="status-workspace-nav" />
         <div className="status-right">
+          {['checking', 'downloading', 'ready', 'restarting', 'error'].includes(updates.state.phase) &&
+            <button className={`app-update-status ${updates.state.phase}`} aria-label="PanePilot update status" onClick={() => setShowAppUpdates(true)} title={updates.state.message}>
+              <Download size={11} /><span>{updates.state.phase === 'error' ? 'Update unavailable' : updates.state.phase === 'ready' ? 'Update ready' : updates.state.phase === 'downloading'
+                ? `${updates.state.stage === 'verify' ? 'Preparing' : 'Update'}${updates.state.percent == null ? '…' : ` ${Math.floor(updates.state.percent)}%`}`
+                : updates.state.phase === 'checking' ? 'Checking updates…' : 'Restarting…'}</span>
+            </button>}
           <TerminalDropStatus />
           <StatusSessionMenu projects={activeProjects} connections={connections}
             onSelect={openStatusSession} />
@@ -3273,6 +3296,8 @@ export function App() {
         onError={showError}
       />
       <QuickNotesDialog open={showQuickNotes} onClose={() => setShowQuickNotes(false)} />
+      <AppUpdatesDialog open={showAppUpdates} state={updates.state} onClose={() => setShowAppUpdates(false)}
+        onCheck={updates.check} onRestart={updates.restart} />
       {projectSortMenu &&
         (() => {
           const targetConnection = connections.find(

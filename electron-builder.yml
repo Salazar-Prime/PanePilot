@@ -10,11 +10,25 @@ files:
   - out/**/*
   - package.json
   - "!**/*.map"
+  - "!node_modules/electron-sparkle-updater/native/vendor/**/*"
+  - "!node_modules/electron-sparkle-updater/native/sparkle-chain.tar.xz"
+  - "!node_modules/electron-sparkle-updater/native/build/Release/obj*/**/*"
 
 asar: true
 asarUnpack:
   - node_modules/node-pty/**/*
+  - node_modules/electron-sparkle-updater/native/build/Release/*.node
 npmRebuild: false
+beforePack: scripts/sparkle-before-pack.cjs
+afterPack: scripts/sparkle-after-pack.cjs
+extraFiles:
+  - from: node_modules/electron-sparkle-updater/native/vendor/Sparkle.framework
+    to: Frameworks/Sparkle.framework
+extraResources:
+  - from: build/sparkle-config.json
+    to: panepilot-updates.json
+  - from: node_modules/electron-sparkle-updater/native/vendor/LICENSE
+    to: Sparkle-LICENSE.txt
 
 mac:
   category: public.app-category.developer-tools
@@ -25,6 +39,7 @@ mac:
   artifactName: ${productName}-${version}-macOS-${arch}.${ext}
 
 dmg:
+  writeUpdateInfo: false
   title: ${productName} ${version}
   iconSize: 128
   window:

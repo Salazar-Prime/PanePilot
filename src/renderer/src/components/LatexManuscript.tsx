@@ -6,6 +6,7 @@ import htmlWorker from 'monaco-editor/language/html/html.worker.js?worker'
 import jsonWorker from 'monaco-editor/language/json/json.worker.js?worker'
 import tsWorker from 'monaco-editor/language/typescript/ts.worker.js?worker'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { cachedUpdateRestartGuard, useUpdateRestartGuard } from '../lib/updateRestartGuards'
 import {
   BookOpenText,
   Check,
@@ -108,10 +109,12 @@ function rememberSourceSnapshot(
   const key = sourceSnapshotKey(projectId, path)
   latexSourceSnapshots.delete(key)
   latexSourceSnapshots.set(key, snapshot)
+  cachedUpdateRestartGuard(`latex:${key}`, snapshot.draft !== snapshot.savedContent ? 'Save your LaTeX source before updating PanePilot.' : null)
   while (latexSourceSnapshots.size > MAX_CACHED_LATEX_SOURCES) {
     const oldest = latexSourceSnapshots.keys().next().value
     if (typeof oldest !== 'string') break
     latexSourceSnapshots.delete(oldest)
+    cachedUpdateRestartGuard(`latex:${oldest}`, null)
   }
 }
 
@@ -333,6 +336,7 @@ export function LatexManuscript({
   const viewMemoryFrameRef = useRef(0)
   const dirty = draft !== savedContent
   const inlineBusy = sendingInlineEdit || inlineRunning
+  useUpdateRestartGuard(dirty || inlineBusy || saving || savingComment || !!commentComposer?.body.trim() ? 'Save LaTeX changes and wait for editor operations to finish before updating PanePilot.' : null)
   activeFinderPathRef.current = path
   const selectedSection =
     workspace.sections.find((section) => section.id === selectedSectionId) ?? null

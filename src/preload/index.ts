@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
 import type { TerminalDropProgress } from '../shared/terminalDrops'
+import type { AppUpdateState } from '../shared/appUpdates'
 import type {
   ConnectGoogleDriveInput,
   CreateLatexCommentInput,
@@ -22,6 +23,16 @@ import type {
 } from '../shared/types'
 
 const api: ProjectConsoleApi = {
+  updates: {
+    get: () => ipcRenderer.invoke('updates:get'),
+    check: () => ipcRenderer.invoke('updates:check'),
+    restart: () => ipcRenderer.invoke('updates:restart'),
+    onChanged: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: AppUpdateState) => listener(state)
+      ipcRenderer.on('updates:changed', handler)
+      return () => ipcRenderer.removeListener('updates:changed', handler)
+    }
+  },
   quickNotes: {
     get: () => ipcRenderer.invoke('quick-notes:get'),
     save: (document) => ipcRenderer.invoke('quick-notes:save', document)

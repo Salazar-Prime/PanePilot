@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useUpdateRestartGuard } from '../lib/updateRestartGuards'
 import {
   FilePlus2,
   FileText,
@@ -58,6 +59,7 @@ export function NotesPanel({ project, onOpenFile }: NotesPanelProps) {
   const activeFinderPathRef = useRef<string | null>(null)
   const markdownLinkRequestRef = useRef(0)
   const dirty = note != null && draft !== saved
+  useUpdateRestartGuard(dirty || saving ? 'Save your project note before updating PanePilot.' : null)
   const viewMode = note ? viewModes[note.path] ?? 'preview' : 'preview'
   activeFinderPathRef.current = note
     ? `.panepilot/notes/${note.path}`

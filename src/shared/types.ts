@@ -560,6 +560,7 @@ export interface CodexSubagentSummary {
 }
 
 export interface ProjectConsoleApi {
+  updates: import('./appUpdates').AppUpdatesApi
   quickNotes: {
     get(): Promise<import('./quickNotes').QuickNotesDocument>
     save(document: import('./quickNotes').QuickNotesDocument): Promise<import('./quickNotes').QuickNotesDocument>

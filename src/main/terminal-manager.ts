@@ -1889,6 +1889,14 @@ export class TerminalManager {
     }
   }
 
+  updateRestartBlocker(): string | null {
+    if (this.latexInlineExecWaiters.size) return 'Wait for the inline edit to finish before updating.'
+    if ([...this.runtimes.values()].some((runtime) => runtime.session.backend !== 'tmux')) {
+      return 'Stop non-tmux terminals before updating; they cannot survive an app restart.'
+    }
+    return null
+  }
+
   shutdown(): void {
     if (this.shuttingDown) return
     this.shuttingDown = true
