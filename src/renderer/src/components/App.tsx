@@ -3165,7 +3165,7 @@ export function App() {
       )}
 
       <footer className="status-bar">
-        <div className="status-brand">
+        <div id="status-transfer-actions" className="status-brand">
           {focusedSession?.dangerousMode && (
             <span
               className="status-unsafe"

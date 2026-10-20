@@ -738,7 +738,8 @@ select:focus-visible {
 .terminal-drop-status.failed { color: #ff8192; }
 .terminal-drop-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .terminal-drop-status progress { width: 65px; height: 5px; accent-color: #8b9cff; }
-.terminal-drop-status button {
+.terminal-drop-status button,
+.terminal-drop-copy {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -748,6 +749,12 @@ select:focus-visible {
   border: 1px solid #30394e;
   border-radius: 3px;
   font-size: 9px;
+}
+.terminal-drop-copy {
+  order: 1;
+  flex-shrink: 0;
+  color: #adb9e5;
+  white-space: nowrap;
 }
 .status-right {
   display: flex;
@@ -792,6 +799,8 @@ select:focus-visible {
 
 .status-brand {
   justify-self: start;
+  flex-shrink: 0;
+  gap: 6px;
 }
 
 .status-brand:empty { display: none; }
