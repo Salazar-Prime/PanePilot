@@ -54,6 +54,20 @@ must be used only for trusted HTML because not every browser networking primitiv
 guaranteed to be air-gapped. Fonts, media, workers, and libraries that require `eval`
 are unsupported.
 
+## Application updates
+
+Packaged macOS builds use Sparkle with a fixed, packaged HTTPS feed and public
+verification key. Only the main app frame may request a check, inspect status, or
+request restart; renderer input cannot supply feeds, keys, archives, or commands.
+Both the appcast and update archive require Ed25519 signatures, with verification
+before extraction. The private signing key stays in the maintainer's Keychain.
+
+Checks are manual, system-profile reporting is disabled, and installation requires
+an explicit restart action. Ordinary Quit does not authorize a pending update.
+Restart checks protect drafts, transfers, inline edits, and non-persistent terminals.
+This signing mechanism does not provide Apple Developer ID identity or notarization.
+See [Sparkle updates](../development/sparkle-updates) for release and privacy details.
+
 ## Remote execution
 
 SSH host configuration remains in OpenSSH. PanePilot uses aliases instead of accepting

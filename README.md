@@ -27,6 +27,20 @@ packaged desktop app supports Apple silicon Macs running macOS 12 or newer.
 The `.zip` contains the same application for users who prefer an archive. Verify either
 download against `SHA256SUMS.txt` attached to the release.
 
+### App updates
+
+This source tree includes Sparkle updates for packaged macOS builds. Open the top
+toolbar’s **More toolbar actions → Check for updates…**, or search for updates in
+Command-K. Checking downloads an available signed update; **Restart to update** is
+required to install it. Downloads can continue while you work. Restart is blocked
+for unsaved editor drafts, active file transfers, inline edits, and plain PTY terminals.
+
+The first Sparkle-enabled release must still be installed manually; existing releases
+cannot acquire an updater they do not contain. No update feed has been published as
+part of this implementation. Builds remain ad-hoc signed and not Apple-notarized;
+Sparkle’s update signatures do not establish Apple developer identity.
+See [update preparation and signing](docs/content/docs/development/sparkle-updates.mdx).
+
 ## Documentation
 
 The complete product, user, architecture, and development documentation lives in the
@@ -45,7 +59,7 @@ Then open <http://localhost:3000>. The documentation site requires Node.js 22 or
 Requirements:
 
 - macOS or Linux
-- Node.js 20.18+
+- Node.js 20.19+
 - `tmux` for persistent terminals (PanePilot falls back to a plain PTY)
 - `codex` and/or `claude` on `PATH` for agent launch profiles
 - Optional: `rclone` for project-scoped Google Drive uploads

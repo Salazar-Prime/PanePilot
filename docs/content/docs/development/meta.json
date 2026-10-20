@@ -5,6 +5,7 @@
   "pages": [
     "index",
     "setup-and-validation",
+    "sparkle-updates",
     "engineering-invariants",
     "adding-project-types",
     "testing",

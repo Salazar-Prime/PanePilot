@@ -1,0 +1,146 @@
+---
+title: Sparkle updates
+description: Free macOS updates, signing-key ownership, release preparation, and isolated validation.
+icon: Download
+---
+
+PanePilot uses the official, unmodified Sparkle 2.10.0 framework with a pinned
+`electron-sparkle-updater` 0.5.3 Node-API bridge. It retains the existing Electron
+version and macOS 12 deployment target. The framework download is pinned by SHA-256;
+the bridge package's custom delta-chain framework is never packaged.
+
+This implementation has not published an update feed or changed an installed copy.
+Existing releases require one manual installation of a Sparkle-enabled release.
+Only later releases can arrive through that updater.
+
+## User experience
+
+Use **More toolbar actions → Check for updates…** or Command-K. The menu command can
+be pinned and reordered like the other toolbar tools. The dialog shows the running
+version, download/preparation progress, and **Restart to update**. A compact status-bar
+button keeps an in-progress or ready update accessible after the dialog closes.
+
+Checks are manual. There is no startup check, periodic check, automatic restart, or
+install-on-quit mode. Checking downloads an available update in the background.
+Ordinary Quit discards a pending installation rather than authorizing it. An update
+must pass both signed-feed verification and archive-signature verification before
+extraction. The user then explicitly requests installation and relaunch.
+
+Restart is blocked by unsaved Files, Notes, Quick Notes, or LaTeX drafts, including
+cached Files/LaTeX drafts in other projects. File operations, terminal/Files transfers,
+inline edit runs, and active non-tmux terminals also block it. Save or finish these
+operations and retry. Persistent tmux sessions are not stopped, but plain PTYs cannot
+survive an application exit. SSH port forwards stop on exit and must be reopened.
+
+Development and non-macOS builds show an explanation instead of loading native code.
+Update errors remain non-fatal to the workspace.
+
+## Signing and cost
+
+No paid Apple membership or update-service subscription is required for this ad-hoc
+distribution path. Sparkle verifies updates using a maintainer-controlled Ed25519 key.
+This is separate from Apple Developer ID signing and notarization: first-launch
+Gatekeeper approval may still be required, and managed Macs can refuse the app.
+Do not promise an Apple-trusted or notarized build.
+
+The public key and HTTPS feed address live in `build/sparkle-config.json`. Packaging
+copies this configuration and embeds matching `SUPublicEDKey` and `SUFeedURL` values
+in the app's Info.plist before electron-builder signs the completed bundle. Missing
+or invalid public keys fail packaging rather than shipping an unverified updater.
+
+### Set up a maintainer machine
+
+```bash
+npm install
+npm run updates:setup
+```
+
+The setup tool creates or reuses the dedicated
+`com.salazarprime.panepilot.sparkle` account in the login Keychain using Sparkle's
+official `generate_keys`. Only its public key is written to the repository. It refuses
+to replace an established public key with a different key from another Mac.
+
+Keep a protected backup of the private key using Sparkle's documented key-export
+procedure. Do not commit it, paste it in a conversation, include it in an app/archive,
+or print it in logs. Another release machine needs that same private key imported
+securely into the matching Keychain account. Losing it prevents existing installs
+from accepting new updates through this trust chain. Do not regenerate it casually.
+
+macOS may ask you to allow `generate_appcast` or `sign_update` to access this Keychain
+entry. Approve that prompt locally; never share a password with an agent or paste it
+into a command. Signing commands time out after two minutes if approval is unavailable.
+Production signing with the maintainer's Keychain key remains unverified. Its local
+test was stopped while apparently waiting for Keychain approval; the successful
+end-to-end test uses a separate ephemeral key.
+
+## Prepare, but do not publish, an update
+
+Use the repository's normal version and release-note process first. All app version
+and build fields must match `package.json`.
+
+```bash
+npm run dist:mac
+npm run updates:release -- release/PanePilot-VERSION-macOS-arm64.zip .github/release-notes/vVERSION.md
+```
+
+Replace VERSION with the actual release version. The second command verifies the
+archive's code signature, bundle identity, version, key, feed, and signature settings.
+It creates a new `release/sparkle/vVERSION` staging folder, generates and verifies a
+signed `appcast.xml` with the Keychain key, and writes checksums. It never overwrites
+an already-prepared staging folder, creates tags, uploads assets, or publishes releases.
+
+The production feed address is:
+
+```text
+https://github.com/Salazar-Prime/PanePilot/releases/latest/download/appcast.xml
+```
+
+The feed references immutable versioned ZIP URLs under the matching `vVERSION`
+GitHub release. Publish the exact referenced ZIP and notes before publishing the
+appcast that references them. Attach the signed appcast to the stable latest release;
+do not edit signed XML or signed notes afterward. Keep referenced assets available.
+The first implementation uses full archives rather than delta updates.
+
+Publication remains a separate, explicitly authorized action. Before publishing,
+test an installed older release against the prepared newer release and verify the
+public feed and all referenced downloads. Do not announce updates as live until the
+feed and assets actually exist.
+
+## Validation
+
+```bash
+npm run typecheck
+npm run build
+npm test
+node scripts/test-app-updates-ui.mjs
+npm run test:updates
+```
+
+The native test constructs two temporary, ad-hoc-signed Electron application bundles
+containing the real updater service and native bridge. It uses a random test identity,
+an ephemeral test signing key, and a loopback feed. It tests signed-feed rejection,
+corrupted-archive rejection, a valid update, restart blocking, explicit install, and
+relaunch into the new version. Loopback HTTP is allowed only inside the throwaway
+fixture; production configuration requires HTTPS. The installed PanePilot and provider
+sessions are never launched, replaced, or stopped by this test.
+
+The fixture does not prove Gatekeeper behavior on every supported macOS version or
+workspace recovery for every user configuration. Test those separately before a
+public rollout. Set `PANEPILOT_KEEP_UPDATE_TEST=1` to retain fixture files for diagnosis;
+otherwise temporary fixtures and test keys are deleted.
+
+## Network and storage
+
+Only an explicit check starts update networking. The app fetches the GitHub-hosted
+appcast and any referenced signed update assets; the hosting service sees ordinary
+request metadata such as IP address and User-Agent. Project files, terminal output,
+provider archives, and app credentials are not uploaded by the updater. Sparkle
+system-profile reporting is disabled.
+
+Sparkle owns temporary downloads/installation staging in its per-bundle macOS cache
+and its update preferences in macOS user defaults. No private signing key is shipped
+to users. Failed checks or signature validation do not replace the application.
+
+See the upstream [Sparkle setup](https://sparkle-project.org/documentation/),
+[publishing guide](https://sparkle-project.org/documentation/publishing/), and
+[bridge source](https://github.com/Innei/electron-sparkle-updater).

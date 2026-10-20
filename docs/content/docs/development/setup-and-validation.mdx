@@ -8,7 +8,7 @@ icon: Wrench
 
 Requirements:
 
-- Node.js 20.18 or newer.
+- Node.js 20.19 or newer.
 - npm.
 - A supported build toolchain for `node-pty`.
 
@@ -34,6 +34,11 @@ posix_spawnp failed
 `postinstall`, `predev`, and `prestart` run
 `scripts/prepare-node-pty.mjs`. Keep all three guards. `predev` and `prestart` also run
 `scripts/prepare-electron.mjs`.
+
+Packaging macOS runs `scripts/prepare-sparkle.mjs` through the before-pack hook.
+It verifies and extracts the pinned official Sparkle distribution and compiles its
+Node-API bridge for the selected Electron version and architecture. It requires
+macOS, Xcode Command Line Tools, and Python. See [Sparkle updates](./sparkle-updates).
 
 ## Restart requirements
 
