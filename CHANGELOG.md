@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.15.0 — 2026-10-20
+
+This release adds an explicit interactive mode for trusted project HTML and makes
+transferred-file paths easier to copy:
+
+- HTML files remain in sanitized, script-free **Static** preview by default. The new
+  opt-in **Interactive** mode runs project JavaScript, loads bounded sibling assets
+  from local or SSH projects, reflects the unsaved draft, and supports DOM, SVG,
+  canvas, and controls with an explicit reload action.
+- Interactive previews use a temporary opaque browser origin without Node, the
+  preload bridge, or PanePilot APIs. Project reads are bounded and read-only, while
+  external web assets, workers, subframes, forms, popups, and top navigation are
+  blocked. This is browser isolation, not an operating-system network jail; use it
+  only for trusted HTML. Fonts, media, and libraries that depend on `eval` are not
+  supported.
+- File-transfer **Copy paths** now appears in the left status area beside **YOLO
+  agent** when present, while progress and counts remain on the right. Successful
+  paths remain copyable after a partially failed batch.
+
+The v0.15.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed, not Apple-notarized, and has no automatic update channel. PanePilot
+Remote remains source-only in this release.
+
 ## 0.14.0 — 2026-10-18
 
 This release adds deeper read-only Git exploration and makes project history,

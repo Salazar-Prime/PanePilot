@@ -34,6 +34,26 @@ Writes are limited to existing regular files no larger than 1 MB. The 1 MB limit
 checked in both renderer behavior and trusted services; the service-side check is the
 actual security boundary.
 
+## Interactive HTML preview
+
+HTML files open in sanitized, script-free **Static** preview by default. A user must
+explicitly choose **Interactive** before project JavaScript can run. Interactive mode
+uses a temporary capability URL in an opaque-origin iframe with `allow-scripts`, but
+without `allow-same-origin`, Node, the preload bridge, or PanePilot APIs.
+
+The capability provides read-only access to bounded, supported files beneath the
+canonical local or SSH project root. It limits cache size, transferred bytes,
+concurrent reads, request count, and simultaneous previews. It rejects hidden paths,
+unsupported file types, traversal, and symlink escape. Workers, subframes, forms,
+popups, downloads, top navigation, and ordinary external web assets are blocked. The
+capability is revoked when its preview changes mode, reloads, changes draft or path,
+unmounts, crashes, or closes.
+
+This is browser isolation, not an operating-system network jail. Interactive preview
+must be used only for trusted HTML because not every browser networking primitive is
+guaranteed to be air-gapped. Fonts, media, workers, and libraries that require `eval`
+are unsupported.
+
 ## Remote execution
 
 SSH host configuration remains in OpenSSH. PanePilot uses aliases instead of accepting

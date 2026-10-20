@@ -159,6 +159,18 @@ Project-relative images and stylesheets may load through the existing bounded lo
 SSH preview path; remote web assets and CSS imports do not load. Preview reflects the
 current unsaved draft and is capped at 16 relative assets totaling 16 MB.
 
+For trusted project pages, choose **Interactive** explicitly to run project JavaScript
+and load sibling scripts, styles, images, and data from the current local or SSH
+project. Interactive previews run in a temporary opaque browser origin without Node,
+the preload bridge, or PanePilot APIs. Project-file reads are read-only and bounded;
+workers, subframes, forms, popups, top navigation, and external web assets are blocked.
+The preview uses the current unsaved draft and provides an explicit **Reload** action.
+
+Interactive mode is browser isolation, not an operating-system network jail. Use it
+only for HTML you trust. Some browser networking APIs may still be available even
+though the preview blocks ordinary external assets, and fonts, media, workers, and
+libraries that depend on `eval` are unsupported.
+
 The Files explorer toolbar can create an empty file or folder in the current
 directory. Right-click an explorer entry for copy-path, rename, download, or nested
 creation actions. The same copy-path, rename, and download commands are available in
