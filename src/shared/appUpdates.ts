@@ -7,6 +7,8 @@ export interface AppUpdateState {
   percent: number | null
   stage: 'download' | 'verify'
   message: string
+  /** Background checks stay quiet until an update is actually found. */
+  background?: boolean
 }
 
 export interface AppUpdatesApi {

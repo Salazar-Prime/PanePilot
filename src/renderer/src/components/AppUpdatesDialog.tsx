@@ -49,7 +49,7 @@ export function AppUpdatesDialog({ open, state, onClose, onCheck, onRestart }: {
       {state.phase === 'downloading' && <div className="app-updates-progress"><progress aria-label="Update progress" max={100} value={state.percent ?? undefined} />
         <span>{state.stage === 'verify' ? 'Preparing' : 'Downloading'}{state.percent == null ? '' : ` · ${Math.floor(state.percent)}%`}</span></div>}
       <div className="app-updates-trust"><ShieldCheck size={14} /><span>Updates verified with PanePilot’s signing key</span></div>
-      <p className="app-updates-detail">Checking downloads an available update in the background. Installation requires your restart action. Save your work first; plain PTY terminals must be stopped. SSH port forwards must be reopened after restarting.</p>
+      <p className="app-updates-detail">PanePilot checks shortly after launch and every six hours, downloading available updates in the background. Installation still requires Restart to update. Save your work first; plain PTY terminals must be stopped. SSH port forwards must be reopened after restarting.</p>
       {error && <p className="form-error" role="alert">{error}</p>}
       <footer><button className="secondary-button" disabled={restarting} onClick={onClose}>Later</button>
         {state.phase === 'ready' || state.phase === 'restarting'

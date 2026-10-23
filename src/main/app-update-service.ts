@@ -3,6 +3,9 @@ import type { AppUpdateState } from '../shared/appUpdates'
 
 export interface SparkleConfig { feedUrl: string; publicEdKey: string }
 
+export const UPDATE_STARTUP_DELAY_MS = 30_000
+export const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000
+
 export function validateSparkleConfig(value: unknown): SparkleConfig {
   const config = value as Partial<SparkleConfig> | null
   if (!config || typeof config.feedUrl !== 'string' || typeof config.publicEdKey !== 'string') throw new Error('This build has no Sparkle update configuration.')
@@ -21,10 +24,13 @@ export class AppUpdateService {
   private installing = false
   private pendingOperations = 0
   private progressTimer: ReturnType<typeof setTimeout> | null = null
+  private checkTimer: ReturnType<typeof setTimeout> | null = null
   private state: AppUpdateState
 
   constructor(private options: {
     platform: string; packaged: boolean; currentVersion: string
+    /** Isolated native fixtures can explicitly disable the application scheduler. */
+    automaticChecks?: boolean
     readConfig(): Promise<unknown>
     loadBridge(): Promise<SparkleBridge | null>
     notify(state: AppUpdateState): void
@@ -78,8 +84,9 @@ export class AppUpdateService {
       this.bridge = bridge
       bridge.setEventHandler((event) => this.receive(event))
       if (!bridge.init({ appcastUrl: config.feedUrl, publicEdKey: config.publicEdKey })) throw new Error('Sparkle could not initialize. Check this build’s signing configuration.')
-      // No startup networking, system-profile reporting, or unattended installation.
+      // Own the schedule: native automatic installation/quit behavior stays disabled.
       bridge.setAutomaticChecks(false)
+      this.scheduleCheck(UPDATE_STARTUP_DELAY_MS)
     } catch (error) {
       this.bridge?.setEventHandler(null)
       this.bridge = null
@@ -88,9 +95,28 @@ export class AppUpdateService {
   }
 
   async check(): Promise<AppUpdateState> {
+    return this.runCheck(false)
+  }
+
+  private scheduleCheck(delay: number): void {
+    if (this.disposed || !this.bridge || this.options.automaticChecks === false) return
+    if (this.checkTimer) clearTimeout(this.checkTimer)
+    this.checkTimer = setTimeout(() => {
+      this.checkTimer = null
+      void this.runCheck(true)
+    }, delay)
+    this.checkTimer.unref?.()
+  }
+
+  private async runCheck(background: boolean): Promise<AppUpdateState> {
     await this.initialize()
-    if (this.disposed || !this.bridge || ['checking', 'downloading', 'ready', 'restarting'].includes(this.state.phase)) return this.get()
-    this.patch({ phase: 'checking', version: null, percent: null, stage: 'download', message: 'Checking for updates…' })
+    if (this.disposed || !this.bridge) return this.get()
+    this.scheduleCheck(UPDATE_CHECK_INTERVAL_MS)
+    if (['checking', 'downloading', 'ready', 'restarting'].includes(this.state.phase)) {
+      if (!background && this.state.background) this.patch({ background: false })
+      return this.get()
+    }
+    this.patch({ phase: 'checking', version: null, percent: null, stage: 'download', background, message: 'Checking for updates…' })
     try { this.bridge.checkForUpdates() }
     catch (error) { this.patch({ phase: 'error', message: error instanceof Error ? error.message : String(error) }) }
     return this.get()
@@ -137,6 +163,8 @@ export class AppUpdateService {
     this.disposed = true
     if (this.progressTimer) clearTimeout(this.progressTimer)
     this.progressTimer = null
+    if (this.checkTimer) clearTimeout(this.checkTimer)
+    this.checkTimer = null
     // An ordinary Quit must not silently authorize a downloaded update.
     if (!this.installing) this.bridge?.discardDownloadedUpdate()
     this.bridge?.setEventHandler(null)

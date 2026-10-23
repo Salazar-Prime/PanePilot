@@ -139,6 +139,7 @@ import { SubagentOverlay } from './SubagentOverlay'
 import { QuickNotesDialog } from './QuickNotesDialog'
 import { visibleCodexSession } from '../lib/subagents'
 import { AutomaticSubagentAction } from './AutomaticSubagentAction'
+import { AppUpdateIcon, AppUpdateToolbarAction } from './AppUpdateToolbarAction'
 import {
   CommandPalette,
   type CommandPaletteCommand
@@ -2375,7 +2376,7 @@ export function App() {
   const topToolbarActions: TopToolbarAction[] = [
     {
       id: 'app-updates', label: updates.state.phase === 'ready' ? 'Install PanePilot update…' : 'Check for updates…',
-      icon: <Download size={15} />, group: 'general', available: true, visibleInMenu: true,
+      icon: <AppUpdateIcon state={updates.state} />, group: 'general', available: true, visibleInMenu: true,
       run: () => setShowAppUpdates(true)
     },
     {
@@ -2565,6 +2566,8 @@ export function App() {
             pinned={topToolbarPins.includes('sub-agents')}
             active={subagentSessionId === subagentSession?.id}
             onToggle={() => setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null)} />
+          <AppUpdateToolbarAction state={updates.state} pinned={topToolbarPins.includes('app-updates')}
+            onOpen={() => setShowAppUpdates(true)} />
           <div className="top-overflow-wrap" ref={topOverflowRef}>
             <button className="icon-button top-overflow-trigger"
               aria-label="More toolbar actions" aria-haspopup="menu"
@@ -3196,6 +3199,7 @@ export function App() {
         <div id="status-workspace-nav" className="status-workspace-nav" />
         <div className="status-right">
           {['checking', 'downloading', 'ready', 'restarting', 'error'].includes(updates.state.phase) &&
+            !(updates.state.background && ['checking', 'error'].includes(updates.state.phase)) &&
             <button className={`app-update-status ${updates.state.phase}`} aria-label="PanePilot update status" onClick={() => setShowAppUpdates(true)} title={updates.state.message}>
               <Download size={11} /><span>{updates.state.phase === 'error' ? 'Update unavailable' : updates.state.phase === 'ready' ? 'Update ready' : updates.state.phase === 'downloading'
                 ? `${updates.state.stage === 'verify' ? 'Preparing' : 'Update'}${updates.state.percent == null ? '…' : ` ${Math.floor(updates.state.percent)}%`}`

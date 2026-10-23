@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SparkleBridge, SparkleBridgeEvent } from 'electron-sparkle-updater'
-import { AppUpdateService, validateSparkleConfig } from '../src/main/app-update-service'
+import { AppUpdateService, validateSparkleConfig, UPDATE_CHECK_INTERVAL_MS, UPDATE_STARTUP_DELAY_MS } from '../src/main/app-update-service'
 import { cachedUpdateRestartGuard, forgetProjectUpdateRestartGuards, updateRestartBlocker } from '../src/renderer/src/lib/updateRestartGuards'
 import { readFileSync } from 'node:fs'
 
@@ -36,7 +36,7 @@ describe('Sparkle configuration and lifecycle', () => {
     expect(options.readConfig).not.toHaveBeenCalled()
     expect(options.loadBridge).not.toHaveBeenCalled()
   })
-  it('initializes once without checking, downloading, or installing on startup', async () => {
+  it('initializes once without an immediate check or unattended installation', async () => {
     const { service, bridge, options } = fixture()
     await Promise.all([service.initialize(), service.initialize()])
     expect(options.loadBridge).toHaveBeenCalledTimes(1)
@@ -45,6 +45,63 @@ describe('Sparkle configuration and lifecycle', () => {
     expect(bridge.checkForUpdates).not.toHaveBeenCalled()
     expect(bridge.installUpdateNow).not.toHaveBeenCalled()
     expect(bridge.installUpdateOnQuit).not.toHaveBeenCalled()
+    service.dispose()
+  })
+  it('automatically checks after launch and every six hours, staying quiet until an update is found', async () => {
+    vi.useFakeTimers()
+    const { service, bridge, emit } = fixture()
+    try {
+      await service.initialize()
+      await vi.advanceTimersByTimeAsync(UPDATE_STARTUP_DELAY_MS - 1)
+      expect(bridge.checkForUpdates).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(1)
+      expect(bridge.checkForUpdates).toHaveBeenCalledTimes(1)
+      expect(service.get()).toMatchObject({ phase: 'checking', background: true })
+      emit({ type: 'error', message: 'Offline' })
+      expect(service.get()).toMatchObject({ phase: 'error', background: true })
+      await vi.advanceTimersByTimeAsync(UPDATE_CHECK_INTERVAL_MS)
+      expect(bridge.checkForUpdates).toHaveBeenCalledTimes(2)
+      emit({ type: 'update-available', version: '0.16.0' })
+      emit({ type: 'update-downloaded' })
+      await vi.advanceTimersByTimeAsync(UPDATE_CHECK_INTERVAL_MS)
+      expect(bridge.checkForUpdates).toHaveBeenCalledTimes(2)
+      expect(bridge.installUpdateNow).not.toHaveBeenCalled()
+      expect(bridge.installUpdateOnQuit).not.toHaveBeenCalled()
+    } finally { service.dispose(); vi.useRealTimers() }
+  })
+  it('manual checks postpone the next scheduled check and promote an in-flight background check', async () => {
+    vi.useFakeTimers()
+    const { service, bridge, emit } = fixture()
+    try {
+      await service.initialize()
+      await vi.advanceTimersByTimeAsync(UPDATE_STARTUP_DELAY_MS)
+      await service.check()
+      expect(service.get().background).toBe(false)
+      expect(bridge.checkForUpdates).toHaveBeenCalledTimes(1)
+      emit({ type: 'update-not-available' })
+      await vi.advanceTimersByTimeAsync(10_000)
+      await service.check()
+      emit({ type: 'update-not-available' })
+      await vi.advanceTimersByTimeAsync(UPDATE_CHECK_INTERVAL_MS - 1)
+      expect(bridge.checkForUpdates).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(bridge.checkForUpdates).toHaveBeenCalledTimes(3)
+      expect(service.get().background).toBe(true)
+      service.dispose()
+      await vi.advanceTimersByTimeAsync(UPDATE_CHECK_INTERVAL_MS * 2)
+      expect(bridge.checkForUpdates).toHaveBeenCalledTimes(3)
+    } finally { service.dispose(); vi.useRealTimers() }
+  })
+  it('allows isolated native fixtures to disable scheduling without changing production defaults', async () => {
+    vi.useFakeTimers()
+    const { service, bridge } = fixture({ automaticChecks: false })
+    try {
+      await service.initialize()
+      await vi.advanceTimersByTimeAsync(UPDATE_CHECK_INTERVAL_MS * 2)
+      expect(bridge.checkForUpdates).not.toHaveBeenCalled()
+      await service.check()
+      expect(bridge.checkForUpdates).toHaveBeenCalledTimes(1)
+    } finally { service.dispose(); vi.useRealTimers() }
   })
   it('reports missing native code or configuration without crashing the application', async () => {
     for (const override of [{ loadBridge: async () => null }, { readConfig: async () => ({}) }]) {

@@ -43,6 +43,23 @@ if (!process.versions.electron) {
       await evaluate(await readFile(join(temp, 'fixture.js'), 'utf8'))
       await waitFor(`window.subscriptions===1`)
       await evaluate(`window.emit({phase:'idle'})`)
+      assert.equal(await evaluate(`!!document.querySelector('.app-update-toolbar-action')`), false)
+      await evaluate(`window.emit({phase:'checking',background:true})`)
+      assert.equal(await evaluate(`!!document.querySelector('.app-update-toolbar-action')`), false)
+      await evaluate(`window.emit({phase:'error'})`)
+      assert.equal(await evaluate(`!!document.querySelector('.app-update-toolbar-action')`), false)
+      await evaluate(`window.emit({phase:'downloading',version:'0.16.0'})`)
+      await waitFor(`!!document.querySelector('button[aria-label="Update available"]')`)
+      await evaluate(`document.querySelector('.app-update-toolbar-action').click()`)
+      await waitFor(`!!document.querySelector('[role="dialog"]')`)
+      assert.equal(await evaluate(`window.checks`), 0, 'The automatic action opens controls without restarting or checking again')
+      await escape()
+      await evaluate(`window.pin(true)`)
+      await waitFor(`!!document.querySelector('[data-pinned-action="app-updates"]')`)
+      assert.equal(await evaluate(`!!document.querySelector('.app-update-toolbar-action')`), false, 'A pin never duplicates the automatic action')
+      assert.equal(await evaluate(`!!document.querySelector('.top-pinned-action .app-update-icon-dot')`), true, 'Pinned action shows availability too')
+      await evaluate(`window.pin(false);window.emit({phase:'idle',background:false})`)
+      await waitFor(`!document.querySelector('.app-update-toolbar-action')`)
       await evaluate(`document.getElementById('opener').focus();document.getElementById('opener').click()`)
       await waitFor(`!!document.querySelector('[role="dialog"]')`)
       assert.equal(await evaluate(`window.checks`), 0, 'Opening controls is not permission to download')
@@ -55,6 +72,7 @@ if (!process.versions.electron) {
       await waitFor(`document.querySelector('progress')?.value===42`)
       await evaluate(`window.emit({phase:'ready',version:'0.16.0',message:'Update ready.'});window.resolveInitial({...window.state,phase:'idle'})`)
       await waitFor(`document.querySelector('h2')?.textContent==='Version 0.16.0 is ready'`)
+      assert.equal(await evaluate(`!!document.querySelector('button[aria-label="Update ready"]')`), true)
       if (process.env.PANEPILOT_UI_SCREENSHOT) {
         await evaluate(`new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))`)
         await writeFile(process.env.PANEPILOT_UI_SCREENSHOT, (await window.webContents.capturePage()).toPNG())
@@ -80,7 +98,7 @@ if (!process.versions.electron) {
       await waitFor(`!document.querySelector('[role="dialog"]')`)
       await evaluate(`window.unmount()`)
       await waitFor(`window.subscriptions===0`)
-      console.log('Update UI passed: manual checks, background progress, stale snapshots, cached-draft and transfer guards, explicit restart, duplicate suppression, Escape, focus restoration, and subscription cleanup.')
+      console.log('Update UI passed: automatic availability action, pin deduplication, manual checks, background progress, stale snapshots, cached-draft and transfer guards, explicit restart, duplicate suppression, Escape, focus restoration, and subscription cleanup.')
       window.destroy(); app.exit(0)
     } catch (error) { console.error(error); window.destroy(); app.exit(1) }
   })
@@ -91,6 +109,8 @@ function fixture() {
     import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
     import {AppUpdatesDialog} from './src/renderer/src/components/AppUpdatesDialog';
     import {useAppUpdates} from './src/renderer/src/lib/useAppUpdates';
+    import {AppUpdateIcon,AppUpdateToolbarAction} from './src/renderer/src/components/AppUpdateToolbarAction';
+    import {PinnedToolbarActions} from './src/renderer/src/components/PinnedToolbarActions';
     import {cachedUpdateRestartGuard} from './src/renderer/src/lib/updateRestartGuards';
     window.subscriptions=0;window.checks=0;window.restarts=0;
     window.state={phase:'idle',currentVersion:'0.15.0',version:null,percent:null,stage:'download',message:'Check for signed updates.'};
@@ -99,8 +119,10 @@ function fixture() {
       check:async()=>{window.checks++;window.emit({phase:'checking',message:'Checking…'})},
       restart:async()=>{window.restarts++;if(window.failRestart)throw Error('Wait for transfers.');return new Promise((resolve,reject)=>window.rejectRestart=reject)}
     }};window.guard=enabled=>cachedUpdateRestartGuard('fixture',enabled?'Save the cached file first.':null);
-    function Fixture(){const updates=useAppUpdates();const [open,setOpen]=useState(false);return <>
+    function Fixture(){const updates=useAppUpdates();const [open,setOpen]=useState(false);const [pinned,setPinned]=useState(false);window.pin=setPinned;return <>
       <button id="opener" onClick={()=>setOpen(true)}>Updates</button>
+      <PinnedToolbarActions ids={pinned?['app-updates']:[]} actions={[{id:'app-updates',label:'Check for updates…',icon:<AppUpdateIcon state={updates.state}/>,available:true,run:()=>setOpen(true)}]} onReorder={()=>{}}/>
+      <AppUpdateToolbarAction state={updates.state} pinned={pinned} onOpen={()=>setOpen(true)}/>
       <AppUpdatesDialog open={open} state={updates.state} onClose={()=>setOpen(false)} onCheck={updates.check} onRestart={updates.restart}/>
     </>};const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();root.render(<Fixture/>);
   `

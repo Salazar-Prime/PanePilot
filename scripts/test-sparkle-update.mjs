@@ -91,11 +91,11 @@ try {
   await waitFor(async () => child.exitCode !== null, 'ordinary quit')
   await new Promise((done) => setTimeout(done, 1200))
   assert.equal(JSON.parse(await readFile(join(oldApp, 'Contents/Resources/app/package.json'), 'utf8')).version, '0.0.1', 'Ordinary quit must not install a downloaded update')
-  await control('none')
+  await control('automatic')
   child = spawn(join(oldApp, 'Contents/MacOS/PanePilot Update Test'), [], { env, stdio: ['ignore', 'inherit', 'inherit'] })
   await waitFor(async () => (await readState())?.phase === 'idle', 'restart of unchanged original application')
-  await control('check')
-  await waitFor(async () => (await readState())?.phase === 'ready', 'manual re-download after ordinary quit')
+  await waitFor(async () => (await readState())?.phase === 'ready', 'automatic background download after ordinary quit')
+  assert.equal((await readState()).background, true, 'The application scheduler discovered the update without a user check')
   await control('restart', true)
   await waitFor(async () => (await readState())?.restartError === 'Fixture upload still running.', 'restart safety guard')
   assert.equal((await readState()).phase, 'ready')
@@ -105,7 +105,7 @@ try {
   await new Promise((done) => setTimeout(done, 700))
   const version = await readFile(join(oldApp, 'Contents/Resources/app/package.json'), 'utf8')
   assert.equal(JSON.parse(version).version, '0.0.2', 'Sparkle replaced only the temporary installed fixture')
-  console.log('Sparkle native update passed: ad-hoc 0.0.1 → 0.0.2, signed feed, corrupt archive rejection, no startup networking/install-on-quit, explicit restart, safety guard, install and relaunch. No installed PanePilot or provider sessions were touched.')
+  console.log('Sparkle native update passed: ad-hoc 0.0.1 → 0.0.2, signed feed, corrupt archive rejection, delayed automatic check/download, no install-on-quit, explicit restart, safety guard, install and relaunch. No installed PanePilot or provider sessions were touched.')
 } catch (error) {
   console.error('Last fixture state:', await readState())
   throw error
@@ -173,6 +173,7 @@ function fixtureMain() {
       const native=await loadSparkleBridgeForApp();
       if(!native)throw Error('Native bridge did not load');
       service=new AppUpdateService({platform:process.platform,packaged:app.isPackaged,currentVersion:app.getVersion(),
+        automaticChecks:JSON.parse(readFileSync(${JSON.stringify(controlFile)},'utf8')).action==='automatic',
         readConfig:async()=>({feedUrl:'https://updates.invalid/appcast.xml',publicEdKey:${JSON.stringify(publicEdKey)}}),
         loadBridge:async()=>({...native,init:options=>native.init({...options,appcastUrl:${JSON.stringify(feedUrl)}})}),
         notify:()=>record(),restartBlocker:()=>blocked?'Fixture upload still running.':null});
