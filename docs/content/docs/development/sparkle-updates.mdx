@@ -9,9 +9,9 @@ PanePilot uses the official, unmodified Sparkle 2.10.0 framework with a pinned
 version and macOS 12 deployment target. The framework download is pinned by SHA-256;
 the bridge package's custom delta-chain framework is never packaged.
 
-The public update feed has not yet been published.
-Existing releases require one manual installation of a Sparkle-enabled release.
-Only later releases can arrive through that updater.
+Version 0.16.0 introduces the signed update feed hosted with the latest GitHub release.
+Earlier public releases require one manual installation of v0.16.0 or newer.
+Later releases can then arrive through that updater.
 
 ## User experience
 
@@ -78,9 +78,9 @@ from accepting new updates through this trust chain. Do not regenerate it casual
 macOS may ask you to allow `generate_appcast` or `sign_update` to access this Keychain
 entry. Approve that prompt locally; never share a password with an agent or paste it
 into a command. Signing commands time out after two minutes if approval is unavailable.
-Production signing with the maintainer's Keychain key remains unverified. Its local
-test was stopped while apparently waiting for Keychain approval; the successful
-end-to-end test uses a separate ephemeral key.
+Release preparation uses the maintainer's Keychain key and verifies the resulting
+feed and archive signatures. The isolated native end-to-end test uses a separate
+ephemeral key and never accesses the release key.
 
 ## Prepare, but do not publish, an update
 

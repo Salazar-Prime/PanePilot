@@ -37,9 +37,9 @@ the top-right menu; an explicit pin stays visible without a duplicate. **Restart
 required to install it. Downloads can continue while you work. Restart is blocked
 for unsaved editor drafts, active file transfers, inline edits, and plain PTY terminals.
 
-The first Sparkle-enabled release must still be installed manually; existing releases
-cannot acquire an updater they do not contain. No update feed has been published as
-part of this implementation. Builds remain ad-hoc signed and not Apple-notarized;
+Install v0.16.0 or newer manually once to enable future in-app updates; earlier
+public releases cannot acquire an updater they do not contain. The signed feed is
+hosted with the latest GitHub release. Builds remain ad-hoc signed and not Apple-notarized;
 Sparkle’s update signatures do not establish Apple developer identity.
 See [update preparation and signing](docs/content/docs/development/sparkle-updates.mdx).
 
