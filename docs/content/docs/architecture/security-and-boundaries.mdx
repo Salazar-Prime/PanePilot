@@ -62,7 +62,10 @@ request restart; renderer input cannot supply feeds, keys, archives, or commands
 Both the appcast and update archive require Ed25519 signatures, with verification
 before extraction. The private signing key stays in the maintainer's Keychain.
 
-Checks are manual, system-profile reporting is disabled, and installation requires
+Checks run after a 30-second startup delay and every six hours, or explicitly from
+the overflow menu. They may download a signed update; an availability button then
+appears beside that menu. Background failures stay quiet. System-profile reporting
+is disabled, and installation requires
 an explicit restart action. Ordinary Quit does not authorize a pending update.
 Restart checks protect drafts, transfers, inline edits, and non-persistent terminals.
 This signing mechanism does not provide Apple Developer ID identity or notarization.

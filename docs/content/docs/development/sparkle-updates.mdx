@@ -9,7 +9,7 @@ PanePilot uses the official, unmodified Sparkle 2.10.0 framework with a pinned
 version and macOS 12 deployment target. The framework download is pinned by SHA-256;
 the bridge package's custom delta-chain framework is never packaged.
 
-This implementation has not published an update feed or changed an installed copy.
+The public update feed has not yet been published.
 Existing releases require one manual installation of a Sparkle-enabled release.
 Only later releases can arrive through that updater.
 
@@ -17,11 +17,20 @@ Only later releases can arrive through that updater.
 
 Use **More toolbar actions → Check for updates…** or Command-K. The menu command can
 be pinned and reordered like the other toolbar tools. The dialog shows the running
-version, download/preparation progress, and **Restart to update**. A compact status-bar
-button keeps an in-progress or ready update accessible after the dialog closes.
+version, download/preparation progress, and **Restart to update**. When a signed update
+is found, an update button appears automatically beside the top-right overflow menu.
+An explicit pin stays visible and gets an availability dot instead of a duplicate button.
+A compact status-bar button keeps an in-progress or ready update accessible after
+the dialog closes. Neither button opens the dialog or restarts the app automatically.
 
-Checks are manual. There is no startup check, periodic check, automatic restart, or
-install-on-quit mode. Checking downloads an available update in the background.
+Packaged macOS builds check 30 seconds after startup, then every six hours while
+running. Manual checks remain available and reset that interval. Checks do not overlap,
+and a downloaded update is retained without checking again. Background checks and
+offline/feed errors stay quiet; their details remain accessible in the update dialog.
+Finding an update reveals the toolbar button and downloads it in the background.
+PanePilot owns this schedule; Sparkle's own automatic check/install modes remain
+disabled so its persisted settings cannot authorize an unattended installation.
+There is no automatic restart or install-on-quit mode.
 Ordinary Quit discards a pending installation rather than authorizing it. An update
 must pass both signed-feed verification and archive-signature verification before
 extraction. The user then explicitly requests installation and relaunch.
@@ -119,7 +128,8 @@ npm run test:updates
 The native test constructs two temporary, ad-hoc-signed Electron application bundles
 containing the real updater service and native bridge. It uses a random test identity,
 an ephemeral test signing key, and a loopback feed. It tests signed-feed rejection,
-corrupted-archive rejection, a valid update, restart blocking, explicit install, and
+corrupted-archive rejection, a valid update, delayed automatic discovery/download,
+restart blocking, explicit install, and
 relaunch into the new version. Loopback HTTP is allowed only inside the throwaway
 fixture; production configuration requires HTTPS. The installed PanePilot and provider
 sessions are never launched, replaced, or stopped by this test.
@@ -131,7 +141,7 @@ otherwise temporary fixtures and test keys are deleted.
 
 ## Network and storage
 
-Only an explicit check starts update networking. The app fetches the GitHub-hosted
+Automatic and explicit checks start update networking. The app fetches the GitHub-hosted
 appcast and any referenced signed update assets; the hosting service sees ordinary
 request metadata such as IP address and User-Agent. Project files, terminal output,
 provider archives, and app credentials are not uploaded by the updater. Sparkle

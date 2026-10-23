@@ -31,7 +31,9 @@ download against `SHA256SUMS.txt` attached to the release.
 
 This source tree includes Sparkle updates for packaged macOS builds. Open the top
 toolbar’s **More toolbar actions → Check for updates…**, or search for updates in
-Command-K. Checking downloads an available signed update; **Restart to update** is
+Command-K. Packaged builds also check 30 seconds after launch and every six hours.
+An available update downloads in the background and reveals an update button beside
+the top-right menu; an explicit pin stays visible without a duplicate. **Restart to update** is
 required to install it. Downloads can continue while you work. Restart is blocked
 for unsaved editor drafts, active file transfers, inline edits, and plain PTY terminals.
 
