@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import type { Project, ProjectAction } from '@shared/types'
 import { ManagedTerminal } from './ManagedTerminal'
-import { StatusDot } from './StatusDot'
+import { SortableActionsList } from './SortableActionsList'
 import type { TerminalFileTarget } from '../lib/terminalFileLinks'
 import { useModalEscape } from '../lib/modalEscape'
 
@@ -137,38 +137,9 @@ export function ActionsPanel({ project, sessionRequest, onChanged, onOpenFile }:
           </div>
         </header>
         {error && <p className="action-error">{error}</p>}
-        <div className="actions-list-scroll">
-          {project.actions.map((action) => {
-            const actionSession = action.lastSessionId
-              ? project.sessions.find(
-                  (candidate) => candidate.id === action.lastSessionId
-                )
-              : null
-            return (
-              <button
-                key={action.id}
-                className={selected?.id === action.id ? 'active' : ''}
-                onClick={() => setSelectedId(action.id)}
-              >
-                <Play size={13} />
-                <span>
-                  <strong>{action.name}</strong>
-                  <small>{action.command}</small>
-                </span>
-                {actionSession && (
-                  <StatusDot state={actionSession.state} compact />
-                )}
-              </button>
-            )
-          })}
-          {project.actions.length === 0 && (
-            <div className="actions-list-empty">
-              <Play size={22} />
-              <span>No actions yet</span>
-              <small>Save a shell command to run it on demand.</small>
-            </div>
-          )}
-        </div>
+        <SortableActionsList key={project.id} projectId={project.id}
+          actions={project.actions} sessions={project.sessions}
+          selectedId={selected?.id ?? null} onSelect={setSelectedId} />
       </aside>
 
       <div className="action-runner">
