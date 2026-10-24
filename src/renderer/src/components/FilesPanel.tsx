@@ -29,6 +29,7 @@ import type {
 import { addFileManagementActions } from '../lib/monacoFinderAction'
 import { isMarkdownPath } from '../lib/markdown'
 import { isHtmlPath } from '../lib/htmlPreview'
+import { keepFileTab, openPreviewTab, protectFileTab, type OpenFileTab } from '../lib/fileTabs'
 import { HtmlPreview } from './HtmlPreview'
 import { cachedUpdateRestartGuard, useUpdateRestartGuard } from '../lib/updateRestartGuards'
 import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
@@ -58,13 +59,6 @@ interface FilesPanelSnapshot {
   loaded: boolean
   searchQuery: string
   searchResults: FileEntry[]
-}
-
-interface OpenFileTab {
-  preview: FilePreview
-  draft: string
-  editing: boolean
-  viewMode: 'preview' | 'source'
 }
 
 interface PendingMarkdownAnchor extends MarkdownPreviewAnchor {
@@ -148,6 +142,7 @@ function FilesPanelInstance({
   const pendingRevealRef = useRef<ProjectFileOpenRequest | null>(null)
   const initialPathRef = useRef(initialPath)
   const listingRequestRef = useRef(0)
+  const pendingFileOpenRef = useRef<{ path: string; keepOpen: boolean; request: number } | null>(null)
   const markdownLinkRequestRef = useRef(0)
   const mountedRef = useRef(false)
   const dropPendingRef = useRef(false)
@@ -183,13 +178,14 @@ function FilesPanelInstance({
   ): void {
     setOpenFiles((current) =>
       current.map((file) =>
-        file.preview.path === filePath ? update(file) : file
+        file.preview.path === filePath ? protectFileTab(update(file)) : file
       )
     )
   }
 
   async function load(nextPath = path) {
     const request = ++listingRequestRef.current
+    pendingFileOpenRef.current = null
     setLoading(true)
     setError('')
     try {
@@ -242,6 +238,8 @@ function FilesPanelInstance({
     return () => {
       active = false
       mountedRef.current = false
+      listingRequestRef.current++
+      pendingFileOpenRef.current = null
       listeners.delete(refresh)
       if (!listeners.size) fileImportListeners.delete(project.id)
       window.removeEventListener('blur', resetDrag)
@@ -344,47 +342,43 @@ function FilesPanelInstance({
 
   function addOpenFile(
     nextPreview: FilePreview,
-    requestedViewMode?: 'preview' | 'source'
+    requestedViewMode?: 'preview' | 'source',
+    keepOpen = false
   ): void {
-    setOpenFiles((current) => {
-      if (current.some((file) => file.preview.path === nextPreview.path)) {
-        return requestedViewMode
-          ? current.map((file) =>
-              file.preview.path === nextPreview.path
-                ? { ...file, viewMode: requestedViewMode }
-                : file
-            )
-          : current
-      }
-      return [
-        ...current,
-        {
-          preview: nextPreview,
-          draft: nextPreview.content,
-          editing: false,
-          viewMode:
-            requestedViewMode ??
-            (isMarkdownPath(nextPreview.path) || isHtmlPath(nextPreview.path) ? 'preview' : 'source')
-        }
-      ]
-    })
+    setOpenFiles((current) => openPreviewTab(current, {
+      preview: nextPreview,
+      draft: nextPreview.content,
+      editing: false,
+      temporary: !keepOpen,
+      viewMode: requestedViewMode ??
+        (isMarkdownPath(nextPreview.path) || isHtmlPath(nextPreview.path) ? 'preview' : 'source')
+    }, requestedViewMode))
     setActiveFilePath(nextPreview.path)
     if (nextPreview.binary) editorRef.current = null
   }
 
-  async function openFile(filePath: string) {
+  async function openFile(filePath: string, keepOpen = false) {
+    const pending = pendingFileOpenRef.current
+    if (pending?.path === filePath && pending.request === listingRequestRef.current) {
+      pending.keepOpen ||= keepOpen
+      return
+    }
     setMarkdownAnchor(null)
+    setError('')
     const existingFile = openFiles.find(
       (file) => file.preview.path === filePath
     )
     if (existingFile) {
+      cancelPendingFileOpen()
+      if (keepOpen) setOpenFiles((current) => keepFileTab(current, filePath))
       setActiveFilePath(filePath)
       pendingRevealRef.current = null
       return
     }
     const listingRequest = ++listingRequestRef.current
+    const opening = { path: filePath, keepOpen, request: listingRequest }
+    pendingFileOpenRef.current = opening
     setLoading(true)
-    setError('')
     try {
       const parent = filePath.split('/').slice(0, -1).join('/') || '.'
       const [nextEntries, nextPreview] = await Promise.all([
@@ -400,11 +394,12 @@ function FilesPanelInstance({
         loaded: true
       })
       pendingRevealRef.current = null
-      addOpenFile(nextPreview)
+      addOpenFile(nextPreview, undefined, opening.keepOpen)
     } catch (caught) {
       if (listingRequest !== listingRequestRef.current) return
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
+      if (pendingFileOpenRef.current === opening) pendingFileOpenRef.current = null
       if (listingRequest === listingRequestRef.current) setLoading(false)
     }
   }
@@ -414,6 +409,8 @@ function FilesPanelInstance({
     requestedAnchor: PendingMarkdownAnchor | null = null
   ) {
     const listingRequest = ++listingRequestRef.current
+    const opening = { path: openRequest.path, keepOpen: false, request: listingRequest }
+    pendingFileOpenRef.current = opening
     setLoading(true)
     setError('')
     try {
@@ -438,14 +435,24 @@ function FilesPanelInstance({
       setMarkdownAnchor(requestedAnchor)
       addOpenFile(
         result.preview,
-        openRequest.line == null ? undefined : 'source'
+        openRequest.line == null ? undefined : 'source',
+        opening.keepOpen
       )
     } catch (caught) {
       if (listingRequest !== listingRequestRef.current) return
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
+      if (pendingFileOpenRef.current === opening) pendingFileOpenRef.current = null
       if (listingRequest === listingRequestRef.current) setLoading(false)
     }
+  }
+
+  function cancelPendingFileOpen(): void {
+    const pending = pendingFileOpenRef.current
+    pendingFileOpenRef.current = null
+    if (pending?.request !== listingRequestRef.current) return
+    listingRequestRef.current++
+    setLoading(false)
   }
 
   function closeFile(filePath: string): void {
@@ -461,6 +468,7 @@ function FilesPanelInstance({
     ) {
       return
     }
+    cancelPendingFileOpen()
     const remaining = openFiles.filter(
       (candidate) => candidate.preview.path !== filePath
     )
@@ -900,7 +908,7 @@ function FilesPanelInstance({
         ) : (
           <div
             className="file-list"
-            key={`${project.id}:${path}:${searchQuery.trim()}`}
+            key={`${project.id}:${searchingPaths ? 'search' : path}:${searchQuery.trim()}`}
           >
             {path !== '.' && !searchingPaths && (
               <button
@@ -918,7 +926,10 @@ function FilesPanelInstance({
               <button
                 key={entry.path}
                 className={`file-row ${preview?.path === entry.path ? 'selected' : ''}`}
-                onClick={() => void openEntry(entry)}
+                onClick={(event) => { if (event.detail < 2) void openEntry(entry) }}
+                onDoubleClick={() => {
+                  if (entry.kind === 'file') void openFile(entry.path, true)
+                }}
                 onContextMenu={(event) => {
                   event.preventDefault()
                   setEntryMenu({
@@ -949,15 +960,18 @@ function FilesPanelInstance({
               const dirty = file.draft !== file.preview.content
               return (
                 <div
-                  className={`file-preview-tab ${selected ? 'selected' : ''}`}
+                  className={`file-preview-tab ${selected ? 'selected' : ''}${file.temporary ? ' temporary' : ''}`}
                   key={file.preview.path}
+                  data-file-path={file.preview.path}
                 >
                   <button
                     className="file-preview-tab-select"
                     role="tab"
                     aria-selected={selected}
-                    title={file.preview.path}
+                    title={`${file.preview.path}${file.temporary ? ' · Temporary preview — click to keep open' : ''}`}
                     onClick={() => {
+                      cancelPendingFileOpen()
+                      setOpenFiles((current) => keepFileTab(current, file.preview.path))
                       setActiveFilePath(file.preview.path)
                       pendingRevealRef.current = null
                       setMarkdownAnchor(null)

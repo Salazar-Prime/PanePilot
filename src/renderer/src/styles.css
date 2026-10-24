@@ -1982,6 +1982,11 @@ select:focus-visible {
   white-space: nowrap;
 }
 
+/* An italic label marks the single replaceable preview; kept files remain upright. */
+.file-preview-tab.temporary .file-preview-tab-select span {
+  font-style: italic;
+}
+
 .file-preview-tab-select i {
   width: 6px;
   height: 6px;
