@@ -16,6 +16,32 @@ describe('Codex tmux pane status', () => {
     )).toBe(true)
   })
 
+  it.each([
+    ['? 1 question · 12s', '⇧← to answer'],
+    ['? 1 question · 12s', 'shift+← to answer'],
+    ['? 1 question', '⇧← to answer'],
+    ['? 2 questions · 1m 12s', '⇧ ← to answer'],
+    ['? 12 questions · 1h 2m 3s', 'shift + ← to answer'],
+    ['? 1 question · 0s', '⇧+← to answer'],
+    ['? 1 question · 1.5s', '⇧← to answer']
+  ])('recognizes timed/glyph footer variants: %s / %s', (count, shortcut) => {
+    const footer = `• Queued follow-up inputs\n  ${count}\n    ${shortcut}`
+    expect(codexQueuedQuestionOnScreen(footer)).toBe(true)
+    expect(codexStateFromPaneSnapshot('Working', footer, 'running')).toBe('needs-input')
+    expect(codexStateFromPaneSnapshot('Ready', footer, 'response-ready')).toBe('needs-input')
+  })
+
+  it.each([
+    ['? 0 questions · 12s', '⇧← to answer'],
+    ['? 1 question · waiting for a response', '⇧← to answer'],
+    ['? 1 question · 12s', '⇧→ to answer'],
+    ['? 1 question · 12s', '⇧← to select'],
+    ['? 1 question · 12s', 'Ctrl+← to answer'],
+    ['? 1 question · 12s copied from a log', '⇧← to answer']
+  ])('rejects non-live footer variants: %s / %s', (count, shortcut) => {
+    expect(codexQueuedQuestionOnScreen(`• Queued follow-up inputs\n${count}\n${shortcut}`)).toBe(false)
+  })
+
   it('does not mistake ordinary output or an old question for the live footer', () => {
     expect(codexQueuedQuestionOnScreen('Queued follow-up inputs')).toBe(false)
     expect(codexQueuedQuestionOnScreen(
@@ -36,8 +62,10 @@ describe('Codex tmux pane status', () => {
     expect(codexStateFromPaneSnapshot('Working', 'No question', 'needs-input')).toBe('running')
   })
 
-  it('limits the complete footer to the last eight rendered rows', () => {
-    const footer = '• Queued follow-up inputs\n? 1 question\nshift+← to answer'
+  it.each([
+    '• Queued follow-up inputs\n? 1 question\nshift+← to answer',
+    '• Queued follow-up inputs\n? 1 question · 12s\n⇧← to answer'
+  ])('limits the complete footer to the last eight rendered rows: %s', (footer) => {
     const laterRows = (count: number) => Array.from({ length: count }, () => 'New output').join('\n')
     expect(codexQueuedQuestionOnScreen(`${footer}\n${laterRows(5)}`)).toBe(true)
     expect(codexQueuedQuestionOnScreen(`${footer}\n${laterRows(5)}\n`)).toBe(false)

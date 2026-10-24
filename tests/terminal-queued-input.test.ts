@@ -12,7 +12,10 @@ import { Store } from '../src/main/store'
 import { TerminalManager } from '../src/main/terminal-manager'
 import { statusSessions } from '../src/renderer/src/lib/statusSessions'
 
-it('removes the status-bar input count when the prompt leaves the live footer, without needing local input', async () => {
+it.each([
+  '• Queued follow-up inputs\r\n? 1 question\r\nshift+← to answer',
+  '• Queued follow-up inputs\r\n? 1 question · 12s\r\n⇧← to answer'
+])('updates the status-bar input count only while the footer is live: %s', async (footer) => {
   const root = mkdtempSync(join(tmpdir(), 'panepilot-queued-input-'))
   const folder = join(root, 'project')
   mkdirSync(folder)
@@ -36,9 +39,11 @@ it('removes the status-bar input count when the prompt leaves the live footer, w
     harness.scheduleScreenScan(runtime)
     await new Promise((resolve) => setTimeout(resolve, 150))
   }
-  const footer = '• Queued follow-up inputs\r\n? 1 question\r\nshift+← to answer'
   try {
-    await render(`\x1b[12;1H${footer}\r\n› Answer here`)
+    await render(`\x1b[12;1H\x1b[33m${footer}\x1b[0m\r\n› Answer here`)
+    expect(inputCount()).toBe(1)
+    // Repainting the elapsed time must retain one alert, not clear it or count twice.
+    await render(`\x1b[12;1H${footer.replace('12s', '13s')}\r\n› Answer here`)
     expect(inputCount()).toBe(1)
     // The same text is still on screen, but is now above the last eight rows.
     await render(`${footer}\r\n${'Progress\r\n'.repeat(10)}`)
@@ -53,6 +58,14 @@ it('removes the status-bar input count when the prompt leaves the live footer, w
 
     store.setSessionState(session.id, 'needs-input')
     const pane: ListedTmuxSession = { name: session.name, tmuxId: '$1', attachedClients: 0, paneCurrentCommand: 'codex', paneDead: false, paneTitle: 'Ready', metadata: null }
+    expect(harness.applyCodexPaneSnapshot(store.getSessionWithoutOutput(session.id)!, pane, null)).toBe(false)
+    expect(inputCount()).toBe(1)
+    expect(harness.applyCodexPaneSnapshot(store.getSessionWithoutOutput(session.id)!, pane, '› Ask anything')).toBe(true)
+    expect(inputCount()).toBe(0)
+
+    // Detached tmux snapshots (including SSH captures) use the same exact footer parser.
+    expect(harness.applyCodexPaneSnapshot(store.getSessionWithoutOutput(session.id)!, pane, footer)).toBe(true)
+    expect(inputCount()).toBe(1)
     expect(harness.applyCodexPaneSnapshot(store.getSessionWithoutOutput(session.id)!, pane, null)).toBe(false)
     expect(inputCount()).toBe(1)
     expect(harness.applyCodexPaneSnapshot(store.getSessionWithoutOutput(session.id)!, pane, '› Ask anything')).toBe(true)

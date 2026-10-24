@@ -306,7 +306,8 @@ previously running state maps to `response-ready`.
 
 Codex's `Queued follow-up inputs` footer can show a pending question while
 the pane title still says `Working`. An attached Codex screen recognizes the
-full footer (heading, positive question count, and answer shortcut) only within
+full footer (heading, positive question count with an optional elapsed-time suffix,
+and either `shift+←` or `⇧←` answer shortcut) only within
 the last eight rendered screen rows and marks the session `needs-input`.
 Each visible-connection discovery pass also checks a bounded, rotating set of
 detached working Codex panes and existing input alerts, including Ready panes,
