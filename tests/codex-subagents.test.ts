@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
-import { CodexSubagentReader, descendantHeaders, parseSubagent, REMOTE_SUBAGENT_SCRIPT, subagentHeader } from '../src/main/codex-subagents'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { CodexSubagentReader, descendantHeaders, parseSubagent, REMOTE_SUBAGENT_SCRIPT, subagentHeader, subagentLifecycleState } from '../src/main/codex-subagents'
 
 const start = '2026-10-04T10:00:00.000Z'
 const now = '2026-10-04T10:01:00.000Z'
@@ -83,15 +83,15 @@ describe('public output parsing', () => {
 })
 
 describe('bounded local and SSH-host reads', () => {
-  it('returns a metadata-only summary, separately cached from transcript reads', async () => {
+  it('returns presence and running activity without transcripts, separately cached from output reads', async () => {
     const f = fixture()
     const reader = new CodexSubagentReader(f.sessions)
-    expect(await reader.summary('root', '/project')).toEqual({ count: 2, rootFound: true, limited: false })
+    expect(await reader.summary('root', '/project')).toEqual({ count: 2, running: true, rootFound: true, limited: false })
     expect((await reader.read('root', '/project', undefined, false)).agents).toEqual([])
     expect((await reader.read('root', '/project')).agents).toHaveLength(2)
-    expect(await reader.summary('root', '/other-project')).toEqual({ count: 0, rootFound: false, limited: false })
+    expect(await reader.summary('root', '/other-project')).toEqual({ count: 0, running: false, rootFound: false, limited: false })
   })
-  it('SSH summary skips transcript tails and preserves explicit nested ownership', () => {
+  it('SSH summary reports lifecycle activity without returning transcript tails', () => {
     const f = fixture()
     const params = Buffer.from(JSON.stringify({ rootId: 'root', folder: '/project', includeOutput: false })).toString('base64')
     const encoded = execFileSync('python3', ['-c', REMOTE_SUBAGENT_SCRIPT, params], { encoding: 'utf8', env: { ...process.env, CODEX_HOME: f.root } })
@@ -99,6 +99,47 @@ describe('bounded local and SSH-host reads', () => {
     expect(result.entries).toEqual([])
     expect(result.total).toBe(2)
     expect(result.rootFound).toBe(true)
+    expect(result.running).toBe(true)
+  })
+  it('clears activity for completed/stopped turns and does not infer work from ordinary output', async () => {
+    const f = fixture()
+    for (const type of ['task_complete', 'turn_aborted', 'agent_message']) {
+      f.write('first', [meta('first', 'root'), record('event_msg', { type, message: 'Not proof of work' })])
+      expect((await new CodexSubagentReader(f.sessions).summary('root', '/project')).running).toBe(false)
+      const params = Buffer.from(JSON.stringify({ rootId: 'root', folder: '/project', includeOutput: false })).toString('base64')
+      const encoded = execFileSync('python3', ['-c', REMOTE_SUBAGENT_SCRIPT, params], { encoding: 'utf8', env: { ...process.env, CODEX_HOME: f.root } })
+      expect(JSON.parse(Buffer.from(encoded.trim(), 'base64').toString('utf8')).running).toBe(false)
+    }
+  })
+  it('checks activity beyond the first 24 cards without returning their output', async () => {
+    const f = fixture()
+    f.write('first', [meta('first', 'root'), record('event_msg', { type: 'task_complete' })])
+    for (let i = 0; i < 30; i++) f.write(`new-${i}`, [meta(`new-${i}`, 'root'), record('event_msg', { type: 'task_complete' })])
+    // Make the sole running agent older than the recent finished cards.
+    const { utimesSync } = await import('node:fs')
+    f.write('running', [meta('running', 'root'), record('event_msg', { type: 'task_started' })])
+    utimesSync(join(f.sessions, 'running.jsonl'), new Date(start), new Date(start))
+    const result = await new CodexSubagentReader(f.sessions).read('root', '/project', undefined, false)
+    expect(result.running).toBe(true)
+    expect(result.agents).toEqual([])
+    const params = Buffer.from(JSON.stringify({ rootId: 'root', folder: '/project', includeOutput: false })).toString('base64')
+    const encoded = execFileSync('python3', ['-c', REMOTE_SUBAGENT_SCRIPT, params], { encoding: 'utf8', env: { ...process.env, CODEX_HOME: f.root } })
+    expect(JSON.parse(Buffer.from(encoded.trim(), 'base64').toString('utf8')).running).toBe(true)
+  })
+  it('invalidates cached activity after completion and resumption on the next poll', async () => {
+    const f = fixture()
+    const reader = new CodexSubagentReader(f.sessions)
+    let clock = Date.now()
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    try {
+      expect((await reader.summary('root', '/project')).running).toBe(true)
+      f.write('first', [meta('first', 'root'), record('event_msg', { type: 'task_complete' })])
+      clock += 3_000
+      expect((await reader.summary('root', '/project')).running).toBe(false)
+      f.write('first', [meta('first', 'root'), record('event_msg', { type: 'task_started' })])
+      clock += 3_000
+      expect((await reader.summary('root', '/project')).running).toBe(true)
+    } finally { now.mockRestore() }
   })
   it('reads only exact descendants, and rejects a root in another project', async () => {
     const f = fixture()
@@ -153,5 +194,20 @@ describe('bounded local and SSH-host reads', () => {
     const agent = (await new CodexSubagentReader(f.sessions).read('root', '/project')).agents.find((a) => a.id === 'first')!
     expect(agent.truncated).toBe(true)
     expect(agent.output[0].text).toBe('Final output')
+  })
+})
+
+describe('lifecycle-only activity', () => {
+  it('uses the last explicit event, not messages, inherited turns or invalid timestamps', () => {
+    expect(subagentLifecycleState([
+      record('event_msg', { type: 'task_started' }, '2026-10-04T09:00:00Z'),
+      record('event_msg', { type: 'task_started' }, 'invalid'),
+      record('event_msg', { type: 'agent_message', message: 'Working' })
+    ].join('\n'), start)).toBe('unknown')
+    expect(subagentLifecycleState([
+      record('event_msg', { type: 'task_started' }), record('event_msg', { type: 'task_complete' }),
+      record('event_msg', { type: 'task_started' }), '{partial'
+    ].join('\n'), start)).toBe('working')
+    expect(subagentLifecycleState(record('event_msg', { type: 'turn_aborted' }), start)).toBe('stopped')
   })
 })

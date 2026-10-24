@@ -555,6 +555,7 @@ export interface CodexSubagentSnapshot {
 
 export interface CodexSubagentSummary {
   count: number
+  running: boolean
   rootFound: boolean
   limited: boolean
 }

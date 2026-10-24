@@ -8,6 +8,7 @@ import type { CodexSubagent, CodexSubagentOutput, CodexSubagentSnapshot, CodexSu
 const execFileAsync = promisify(execFile)
 const READ_BYTES = 256 * 1024
 const MAX_AGENTS = 24
+const MAX_ACTIVITY_AGENTS = 128
 const MAX_FILES = 20_000
 
 interface AgentHeader {
@@ -19,7 +20,8 @@ interface AgentHeader {
   startedAt: string
 }
 interface ArchiveEntry { header: AgentHeader; tail: string; truncated: boolean; updatedAt: string }
-interface ArchiveScan { entries: ArchiveEntry[]; rootFound: boolean; total: number; limited: boolean }
+interface ArchiveScan { entries: ArchiveEntry[]; rootFound: boolean; total: number; limited: boolean; running: boolean }
+interface ReadResult extends CodexSubagentSnapshot { running: boolean }
 type JsonObject = Record<string, any>
 
 function object(value: unknown): JsonObject {
@@ -69,11 +71,31 @@ function contentText(value: unknown): string {
     .map((item) => text(item.text)).join('\n')
 }
 
+/** A status-only read never extracts messages, tool output, or inherited lifecycle events. */
+export function subagentLifecycleState(tail: string, startedAt: string): CodexSubagent['state'] {
+  let state: CodexSubagent['state'] = 'unknown'
+  const started = Date.parse(startedAt)
+  for (const line of tail.split('\n')) {
+    if (!line.includes('"event_msg"')) continue
+    let record: JsonObject
+    try { record = object(JSON.parse(line)) } catch { continue }
+    if (record.type !== 'event_msg') continue
+    const timestamp = text(record.timestamp)
+    const at = Date.parse(timestamp)
+    if (Number.isFinite(started) && (!Number.isFinite(at) || at < started)) continue
+    const kind = object(record.payload).type
+    if (kind === 'task_started') state = 'working'
+    if (kind === 'task_complete') state = 'finished'
+    if (kind === 'turn_aborted') state = 'stopped'
+  }
+  return state
+}
+
 /** Only public messages and tool I/O; never reasoning, encrypted content, or inherited prompts. */
 export function parseSubagent(entry: ArchiveEntry): CodexSubagent {
   const { header } = entry
   const output: CodexSubagentOutput[] = []
-  let state: CodexSubagent['state'] = 'unknown'
+  const state = subagentLifecycleState(entry.tail, header.startedAt)
   let clipped = entry.truncated
   const started = Date.parse(header.startedAt)
   const push = (kind: CodexSubagentOutput['kind'], value: string, timestamp: string | null) => {
@@ -91,12 +113,9 @@ export function parseSubagent(entry: ArchiveEntry): CodexSubagent {
     if (Number.isFinite(started) && (!timestamp || Date.parse(timestamp) < started)) continue
     const p = object(record.payload)
     if (record.type === 'event_msg') {
-      if (p.type === 'task_started') state = 'working'
       if (p.type === 'task_complete') {
-        state = 'finished'
         push('message', text(p.last_agent_message), timestamp)
       }
-      if (p.type === 'turn_aborted') state = 'stopped'
       if (p.type === 'agent_message') push('message', text(p.message), timestamp)
     }
     if (record.type !== 'response_item') continue
@@ -119,17 +138,18 @@ export function parseSubagent(entry: ArchiveEntry): CodexSubagent {
 
 export class CodexSubagentReader {
   private readonly headers = new Map<string, { identity: string; header: AgentHeader | null }>()
-  private readonly pending = new Map<string, Promise<CodexSubagentSnapshot>>()
-  private readonly cache = new Map<string, { at: number; snapshot: CodexSubagentSnapshot }>()
+  private readonly pending = new Map<string, Promise<ReadResult>>()
+  private readonly cache = new Map<string, { at: number; snapshot: ReadResult }>()
+  private readonly activity = new Map<string, { revision: string; running: boolean }>()
 
   constructor(private readonly root = join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'sessions')) {}
 
   async summary(rootId: string, folder: string, alias?: string): Promise<CodexSubagentSummary> {
     const snapshot = await this.read(rootId, folder, alias, false)
-    return { count: snapshot.total, rootFound: snapshot.rootFound, limited: snapshot.limited }
+    return { count: snapshot.total, running: snapshot.running, rootFound: snapshot.rootFound, limited: snapshot.limited }
   }
 
-  async read(rootId: string, folder: string, alias?: string, includeOutput = true): Promise<CodexSubagentSnapshot> {
+  async read(rootId: string, folder: string, alias?: string, includeOutput = true): Promise<ReadResult> {
     if (!rootId || rootId.length > 200) throw new Error('This terminal has no linked Codex thread yet.')
     const key = JSON.stringify([alias ?? '', folder, rootId, includeOutput])
     const cached = this.cache.get(key)
@@ -139,8 +159,8 @@ export class CodexSubagentReader {
     const request = (async () => {
       const scan = alias ? await this.remote(rootId, folder, alias, includeOutput) : await this.local(rootId, folder, includeOutput)
       const snapshot = { ...scan, agents: scan.entries.map(parseSubagent) }
-      const result: CodexSubagentSnapshot = {
-        agents: snapshot.agents, total: scan.total, rootFound: scan.rootFound, limited: scan.limited
+      const result: ReadResult = {
+        agents: snapshot.agents, total: scan.total, rootFound: scan.rootFound, limited: scan.limited, running: scan.running
       }
       if (this.cache.size >= 8) this.cache.delete(this.cache.keys().next().value!)
       this.cache.set(key, { at: Date.now(), snapshot: result })
@@ -151,7 +171,7 @@ export class CodexSubagentReader {
   }
 
   private async local(rootId: string, folder: string, includeOutput: boolean): Promise<ArchiveScan> {
-    const candidates: { header: AgentHeader; file: string; updatedAt: string }[] = []
+    const candidates: { header: AgentHeader; file: string; updatedAt: string; revision: string }[] = []
     let count = 0
     let limited = false
     const deadline = Date.now() + 8_000
@@ -178,7 +198,7 @@ export class CodexSubagentReader {
             if (this.headers.size >= MAX_FILES) this.headers.clear()
             this.headers.set(file, cached)
           }
-          if (cached.header) candidates.push({ header: cached.header, file, updatedAt: stat.mtime.toISOString() })
+          if (cached.header) candidates.push({ header: cached.header, file, updatedAt: stat.mtime.toISOString(), revision: `${identity}:${stat.size}:${stat.mtimeMs}` })
         } finally { await handle.close() }
       }
     }
@@ -186,12 +206,19 @@ export class CodexSubagentReader {
     const canonical = await realpath(folder).catch(() => resolve(folder))
     const root = candidates.find(({ header }) => header.id === rootId)
     const rootFound = Boolean(root && (await realpath(root.header.cwd).catch(() => resolve(root.header.cwd))) === canonical)
-    if (!rootFound) return { entries: [], rootFound: false, total: 0, limited }
+    if (!rootFound) return { entries: [], rootFound: false, total: 0, limited, running: false }
     const descendants = new Set(descendantHeaders(candidates.map((c) => c.header), rootId).map((h) => h.id))
     const matches = candidates.filter(({ header }) => descendants.has(header.id))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     const entries: ArchiveEntry[] = []
-    for (const candidate of includeOutput ? matches.slice(0, MAX_AGENTS) : []) {
+    let running = false
+    for (const candidate of matches.slice(0, includeOutput ? MAX_AGENTS : MAX_ACTIVITY_AGENTS)) {
+      if (Date.now() > deadline) { limited = true; break }
+      const activity = this.activity.get(candidate.file)
+      if (!includeOutput && activity?.revision === candidate.revision) {
+        if (activity.running) { running = true; break }
+        continue
+      }
       const handle = await open(candidate.file, 'r').catch(() => null)
       if (!handle) continue
       try {
@@ -200,10 +227,15 @@ export class CodexSubagentReader {
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, Math.max(0, size - READ_BYTES))
         let tail = buffer.subarray(0, bytesRead).toString('utf8')
         if (size > READ_BYTES) tail = tail.slice(tail.indexOf('\n') + 1)
-        entries.push({ header: candidate.header, updatedAt: candidate.updatedAt, tail, truncated: size > READ_BYTES })
+        const working = subagentLifecycleState(tail, candidate.header.startedAt) === 'working'
+        if (this.activity.size >= 512) this.activity.delete(this.activity.keys().next().value!)
+        this.activity.set(candidate.file, { revision: candidate.revision, running: working })
+        running ||= working
+        if (includeOutput) entries.push({ header: candidate.header, updatedAt: candidate.updatedAt, tail, truncated: size > READ_BYTES })
+        else if (running) break
       } finally { await handle.close() }
     }
-    return { entries, rootFound, total: matches.length, limited: limited || matches.length > MAX_AGENTS }
+    return { entries, rootFound, total: matches.length, limited: limited || matches.length > MAX_AGENTS, running }
   }
 
   private async remote(rootId: string, folder: string, alias: string, includeOutput: boolean): Promise<ArchiveScan> {
@@ -226,7 +258,7 @@ export class CodexSubagentReader {
     try {
       result = JSON.parse(Buffer.from(stdout.trim().split(/\r?\n/).at(-1) || '', 'base64').toString('utf8'))
       if (!result || !Array.isArray(result.entries) || result.entries.length > MAX_AGENTS ||
-        typeof result.rootFound !== 'boolean' || typeof result.total !== 'number' ||
+        typeof result.rootFound !== 'boolean' || typeof result.total !== 'number' || typeof result.running !== 'boolean' ||
         !result.entries.every((entry) => entry && typeof entry.tail === 'string' && entry.tail.length <= READ_BYTES &&
           entry.header && typeof entry.header.id === 'string' && typeof entry.header.parentId === 'string' &&
           typeof entry.header.path === 'string' && typeof entry.header.name === 'string')) throw new Error()
@@ -290,7 +322,41 @@ if root_found:
         related.update(more)
 matches = sorted([c for c in candidates if c[0]["id"] != p["rootId"] and c[0]["id"] in related], key=lambda c: c[2], reverse=True)
 entries = []
-for header, path, updated in (matches[:24] if p.get("includeOutput", True) else []):
+running = False
+include_output = p.get("includeOutput", True)
+def lifecycle_state(raw, started_at):
+    state = "unknown"
+    def timestamp(value):
+        try:
+            return datetime.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except (ValueError, TypeError, AttributeError):
+            return None
+    started = timestamp(started_at)
+    for line in raw.splitlines():
+        if b'"event_msg"' not in line:
+            continue
+        try:
+            record = json.loads(line)
+            if not isinstance(record, dict) or record.get("type") != "event_msg":
+                continue
+            at = timestamp(record.get("timestamp"))
+            if started is not None and (at is None or at < started):
+                continue
+            payload = record.get("payload")
+            kind = payload.get("type") if isinstance(payload, dict) else None
+            if kind == "task_started":
+                state = "working"
+            elif kind == "task_complete":
+                state = "finished"
+            elif kind == "turn_aborted":
+                state = "stopped"
+        except (ValueError, TypeError):
+            continue
+    return state
+for header, path, updated in matches[:24 if include_output else 128]:
+    if time.monotonic() > deadline:
+        limited = True
+        break
     try:
         with open(path, "rb") as source:
             size = os.fstat(source.fileno()).st_size
@@ -298,9 +364,13 @@ for header, path, updated in (matches[:24] if p.get("includeOutput", True) else 
             raw = source.read(limit)
             if size > limit:
                 raw = raw.partition(b"\n")[2]
-        entries.append({"header": header, "tail": raw.decode("utf-8", errors="replace"), "truncated": size > limit,
-            "updatedAt": datetime.datetime.fromtimestamp(updated, datetime.timezone.utc).isoformat()})
+        running = running or lifecycle_state(raw, header["startedAt"]) == "working"
+        if include_output:
+            entries.append({"header": header, "tail": raw.decode("utf-8", errors="replace"), "truncated": size > limit,
+                "updatedAt": datetime.datetime.fromtimestamp(updated, datetime.timezone.utc).isoformat()})
+        elif running:
+            break
     except OSError:
         continue
-print(base64.b64encode(json.dumps({"entries": entries, "rootFound": root_found, "total": len(matches), "limited": limited or len(matches) > 24}).encode()).decode())
+print(base64.b64encode(json.dumps({"entries": entries, "rootFound": root_found, "total": len(matches), "limited": limited or len(matches) > 24, "running": running}).encode()).decode())
 `

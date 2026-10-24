@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 
-/** Only the visible, linked Codex chat is scanned; never fetch transcript tails here. */
-export function useSubagentPresence(sessionId: string | null, providerSessionId: string | null): boolean {
+export interface SubagentPresence { present: boolean; running: boolean }
+
+/** Only the visible, linked chat is checked. IPC carries counts/activity, never transcripts. */
+export function useSubagentPresence(sessionId: string | null, providerSessionId: string | null): SubagentPresence {
   const identity = sessionId && providerSessionId ? `${sessionId}:${providerSessionId}` : null
-  const [result, setResult] = useState<{ identity: string; present: boolean } | null>(null)
+  const [result, setResult] = useState<SubagentPresence & { identity: string } | null>(null)
 
   useEffect(() => {
     if (!identity || !sessionId) return
@@ -15,9 +17,15 @@ export function useSubagentPresence(sessionId: string | null, providerSessionId:
       busy = true
       try {
         const summary = await window.projectConsole.terminals.subagentSummary(sessionId)
-        if (!disposed) setResult({ identity, present: summary.rootFound && summary.count > 0 })
+        if (!disposed) {
+          const next = { identity, present: summary.rootFound && summary.count > 0,
+            running: summary.rootFound && summary.count > 0 && summary.running === true }
+          setResult((current) => current?.identity === identity && current.present === next.present &&
+            current.running === next.running ? current : next)
+        }
       } catch {
-        // An ambient SSH/archive failure must not interrupt the workspace or erase a known result.
+        // Retain known presence, but never claim ongoing work from a failed activity check.
+        if (!disposed) setResult((current) => current?.identity === identity && current.running ? { ...current, running: false } : current)
       } finally {
         busy = false
         if (!disposed && !document.hidden) timer = setTimeout(poll, 10_000)
@@ -36,5 +44,5 @@ export function useSubagentPresence(sessionId: string | null, providerSessionId:
     }
   }, [identity, sessionId])
 
-  return !!identity && result?.identity === identity && result.present
+  return identity && result?.identity === identity ? result : { present: false, running: false }
 }

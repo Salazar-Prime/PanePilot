@@ -29,6 +29,7 @@ if (!process.versions.electron) {
   app.setPath('userData', join(temp, 'profile'))
   setTimeout(() => { process.stderr.write('Sub-agent toolbar test timed out.\n'); app.exit(1) }, 25_000).unref()
   void app.whenReady().then(async () => {
+    if (process.platform === 'darwin') app.setActivationPolicy('prohibited')
     const window = new BrowserWindow({ width: 700, height: 400, show: false, webPreferences: { backgroundThrottling: false, sandbox: true } })
     const evaluate = (code) => window.webContents.executeJavaScript(code)
     const waitFor = async (code) => {
@@ -49,21 +50,33 @@ if (!process.versions.electron) {
       assert.equal(await evaluate(buttons), 0)
       await evaluate(`window.updateToolbar({session:'with-agents'})`)
       await waitFor(`${buttons}===1`)
+      await waitFor(`document.querySelectorAll('.subagent-running-dot').length===1`)
+      await evaluate(`window.running=false`)
+      await waitFor(`document.querySelectorAll('.subagent-running-dot').length===0`)
+      assert.equal(await evaluate(buttons), 1, 'Completion does not hide inspectable agents or create an alert')
+      await evaluate(`window.running=true`)
+      await waitFor(`document.querySelectorAll('.subagent-running-dot').length===1`)
       await evaluate(`document.querySelector('[aria-label="Sub-agents"]').click()`)
       assert.equal(await evaluate(`window.opens`), 1)
       await evaluate(`window.updateToolbar({pinned:true})`)
-      await waitFor(`document.querySelector('[data-pinned-action="sub-agents"]')`)
+      await waitFor(`!!document.querySelector('[data-pinned-action="sub-agents"]')`)
       assert.equal(await evaluate(buttons), 1, 'Pinned and automatic actions must not duplicate')
+      assert.equal(await evaluate(`document.querySelectorAll('[data-pinned-action="sub-agents"] .subagent-running-dot').length`), 1)
+      await evaluate(`window.running=false`)
+      await waitFor(`document.querySelectorAll('.subagent-running-dot').length===0`)
+      await evaluate(`window.running=true`)
+      await waitFor(`document.querySelectorAll('.subagent-running-dot').length===1`)
       await evaluate(`window.updateToolbar({session:null})`)
       await waitFor(`document.querySelector('[aria-label="Sub-agents"]').disabled`)
       assert.equal(await evaluate(buttons), 1, 'Pinned button stays visible outside chats')
+      assert.equal(await evaluate(`document.querySelectorAll('.subagent-running-dot').length`), 0)
       await evaluate(`window.updateToolbar({pinned:false})`)
       await waitFor(`${buttons}===0`)
       await evaluate(`window.updateToolbar({session:'late'})`)
       await waitFor(`!!window.resolveLate`)
       await evaluate(`window.updateToolbar({session:'empty'})`)
       await waitFor(`window.reads.at(-1)==='empty'`)
-      await evaluate(`window.resolveLate({rootFound:true,count:3,limited:false})`)
+      await evaluate(`window.resolveLate({rootFound:true,count:3,running:true,limited:false})`)
       assert.equal(await evaluate(buttons), 0, 'Late response from a previous chat is discarded')
       await evaluate(`window.updateToolbar({session:'with-agents'})`)
       await waitFor(`${buttons}===1`)
@@ -74,15 +87,17 @@ if (!process.versions.electron) {
       await waitFor(`${buttons}===0`)
       await evaluate(`window.count=2`)
       await waitFor(`${buttons}===1`)
+      await waitFor(`document.querySelectorAll('.subagent-running-dot').length===1`)
       await evaluate(`window.fail=true;document.dispatchEvent(new Event('visibilitychange'))`)
       await evaluate(`new Promise(done=>setTimeout(done,100))`)
       assert.equal(await evaluate(buttons), 1, 'Transient archive failures retain known presence')
+      assert.equal(await evaluate(`document.querySelectorAll('.subagent-running-dot').length`), 0, 'A failed check must not leave a stale working dot')
       await evaluate(`window.updateToolbar({provider:'new-thread'})`)
       await waitFor(`${buttons}===0`)
       await evaluate(`window.unmount();window.readCount=window.reads.length`)
       await evaluate(`new Promise(done=>setTimeout(done,140))`)
       assert.equal(await evaluate(`window.reads.length===window.readCount`), true)
-      process.stdout.write('Sub-agent toolbar passed: automatic show/hide, persistent pins, no duplicates, exact thread switches, stale reads, hidden/unmounted polling, and transient failures.\n')
+      process.stdout.write('Sub-agent toolbar passed: running-only dots, completion without alerts, automatic/pinned parity, no duplicates, thread switches, stale reads, hidden/unmounted polling, and transient failures.\n')
       window.destroy()
       app.exit(0)
     } catch (error) {
@@ -98,18 +113,24 @@ function fixture() {
     import React from 'react';import {createRoot} from 'react-dom/client';
     import {AutomaticSubagentAction} from './src/renderer/src/components/AutomaticSubagentAction';
     import {PinnedToolbarActions} from './src/renderer/src/components/PinnedToolbarActions';
+    import {SubagentActivityIcon} from './src/renderer/src/components/SubagentActivityIcon';
+    import {useSubagentPresence} from './src/renderer/src/lib/useSubagentPresence';
     const timeout=window.setTimeout.bind(window);window.setTimeout=(handler,delay,...args)=>timeout(handler,delay===10000?60:delay,...args);
     window.hidden=false;Object.defineProperty(document,'hidden',{get:()=>window.hidden});
-    window.reads=[];window.opens=0;window.count=2;
+    window.reads=[];window.opens=0;window.count=2;window.running=true;
     window.projectConsole={terminals:{subagentSummary:async(id)=>{
       window.reads.push(id);if(id==='late')return new Promise(done=>window.resolveLate=done);
-      if(window.fail)throw Error('Offline');return {rootFound:true,count:id==='empty'?0:window.count,limited:false};
+      if(window.fail)throw Error('Offline');return {rootFound:true,count:id==='empty'?0:window.count,running:window.running,limited:false};
     }}};
     const root=createRoot(document.getElementById('root'));let state={session:null,provider:'thread',pinned:false};
-    const render=()=>root.render(<div>
-      <PinnedToolbarActions ids={state.pinned?['sub-agents']:[]} actions={[{id:'sub-agents',label:'Sub-agents',icon:'Agents',available:!!state.session,run:()=>window.opens++}]} onReorder={()=>{}}/>
-      <AutomaticSubagentAction sessionId={state.session} providerSessionId={state.provider} pinned={state.pinned} active={false} onToggle={()=>window.opens++}/>
-    </div>);
+    function Toolbar({session,provider,pinned}) {
+      const presence=useSubagentPresence(session,provider);
+      return <div>
+        <PinnedToolbarActions ids={pinned?['sub-agents']:[]} actions={[{id:'sub-agents',label:'Sub-agents',icon:<SubagentActivityIcon running={presence.running}/>,available:!!session,run:()=>window.opens++}]} onReorder={()=>{}}/>
+        <AutomaticSubagentAction present={presence.present} running={presence.running} pinned={pinned} active={false} onToggle={()=>window.opens++}/>
+      </div>;
+    }
+    const render=()=>root.render(<Toolbar {...state}/>);
     window.updateToolbar=(change)=>{state={...state,...change};render()};window.unmount=()=>root.unmount();render();
   `
 }

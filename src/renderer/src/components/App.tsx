@@ -139,6 +139,8 @@ import { SubagentOverlay } from './SubagentOverlay'
 import { QuickNotesDialog } from './QuickNotesDialog'
 import { visibleCodexSession } from '../lib/subagents'
 import { AutomaticSubagentAction } from './AutomaticSubagentAction'
+import { SubagentActivityIcon } from './SubagentActivityIcon'
+import { useSubagentPresence } from '../lib/useSubagentPresence'
 import { AppUpdateIcon, AppUpdateToolbarAction } from './AppUpdateToolbarAction'
 import {
   CommandPalette,
@@ -1223,6 +1225,7 @@ export function App() {
     ) ?? null
   const subagentSession = visibleCodexSession(project,
     visibleDestinations[focusedPane === 'b' && splitOpen ? 'b' : 'a'], focusedSession?.id ?? null)
+  const subagentPresence = useSubagentPresence(subagentSession?.id ?? null, subagentSession?.providerSessionId ?? null)
   useEffect(() => {
     setSubagentSessionId(null)
   }, [subagentSession?.id, focusedPane])
@@ -2391,7 +2394,7 @@ export function App() {
       run: () => { if (project) openTemporaryChats(project) }
     },
     {
-      id: 'sub-agents', label: 'Sub-agents', icon: <GitFork size={15} />,
+      id: 'sub-agents', label: 'Sub-agents', icon: <SubagentActivityIcon running={subagentPresence.running} />,
       group: 'general', available: !!subagentSession, visibleInMenu: true,
       unavailableReason: 'Select a Codex terminal to view sub-agents',
       run: () => setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null)
@@ -2561,8 +2564,7 @@ export function App() {
             <PinnedToolbarActions ids={topToolbarPins} actions={topToolbarActions}
               onReorder={setTopToolbarPins} />
           )}
-          <AutomaticSubagentAction sessionId={subagentSession?.id ?? null}
-            providerSessionId={subagentSession?.providerSessionId ?? null}
+          <AutomaticSubagentAction present={subagentPresence.present} running={subagentPresence.running}
             pinned={topToolbarPins.includes('sub-agents')}
             active={subagentSessionId === subagentSession?.id}
             onToggle={() => setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null)} />
