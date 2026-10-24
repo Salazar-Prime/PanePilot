@@ -192,9 +192,43 @@ if (!process.versions.electron) {
       await waitFor(`!document.querySelector('#primary')`)
       await end(target)
       assert.deepEqual(await saved(), lastSaved, 'Unmount cannot commit an unfinished drag')
+
+      // Selection is independent of manual order and durable across capability/project switches.
+      await evaluate(`window.updateActions({mounted:true,projectId:'remember-local'})`)
+      await waitFor(`document.querySelector('#primary [data-action-id="a7"]')!==null`)
+      await evaluate(`document.querySelector('#primary [data-action-id="a7"]').click()`)
+      await waitFor(`localStorage.getItem('panepilot.action-selection.v1:remember-local')==='a7'`)
+      await evaluate(`window.updateActions({mounted:false})`)
+      await waitFor(`!document.querySelector('#primary')`)
+      await evaluate(`window.updateActions({mounted:true})`)
+      await waitFor(`document.querySelector('#primary button.active')?.dataset.actionId==='a7'`)
+      await evaluate(`window.updateActions({projectId:'remember-ssh'})`)
+      await waitFor(`document.querySelector('#primary button.active')?.dataset.actionId==='a1'`)
+      await evaluate(`document.querySelector('#primary [data-action-id="a4"]').click()`)
+      await waitFor(`localStorage.getItem('panepilot.action-selection.v1:remember-ssh')==='a4'`)
+      await evaluate(`window.updateActions({projectId:'remember-local'})`)
+      await waitFor(`document.querySelector('#primary button.active')?.dataset.actionId==='a7'`)
+      await evaluate(`window.updateActions({empty:true})`)
+      await waitFor(`document.querySelectorAll('#primary [data-action-id]').length===0`)
+      await evaluate(`window.updateActions({empty:false})`)
+      await waitFor(`document.querySelector('#primary button.active')?.dataset.actionId==='a7'`)
+      await evaluate(`window.updateActions({request:{id:1,sessionId:'run1'}})`)
+      await waitFor(`document.querySelector('#primary button.active')?.dataset.actionId==='a1'`)
+      await evaluate(`document.querySelector('#primary [data-action-id="a5"]').click()`)
+      await waitFor(`document.querySelector('#primary button.active')?.dataset.actionId==='a5'`)
+      await evaluate(`window.updateActions({refresh:2})`)
+      assert.equal(await evaluate(`document.querySelector('#primary button.active')?.dataset.actionId`), 'a5', 'Handled session requests cannot replay on refresh')
+      await evaluate(`window.updateActions({mounted:false})`)
+      await waitFor(`!document.querySelector('#primary')`)
+      await evaluate(`window.updateActions({mounted:true})`)
+      await waitFor(`document.querySelector('#primary button.active')?.dataset.actionId==='a5'`)
+      await evaluate(`window.updateActions({removed:'a5'})`)
+      await waitFor(`document.querySelector('#primary button.active')?.dataset.actionId==='a1'`)
+      await evaluate(`window.updateActions({projectId:'remember-ssh'})`)
+      await waitFor(`document.querySelector('#primary button.active')?.dataset.actionId==='a4'`)
       assert.deepEqual(await evaluate(`window.calls`), { run: 0, stop: 0, delete: 0 })
       assert.deepEqual(await evaluate(`window.errors`), [])
-      process.stdout.write('Actions ordering passed: pointer drag, persistence, split synchronization, click safety, stable output, cancellation, live refresh, keyboard ordering, edge scrolling, reduced motion, and cleanup.\n')
+      process.stdout.write('Actions passed: drag ordering, saved selection, project isolation, explicit session targeting without replay, deletion/hydration fallback, stable output, cancellation, keyboard moves, edge scrolling, reduced motion, and cleanup.\n')
       window.destroy()
       app.exit(0)
     } catch (error) {
@@ -216,10 +250,10 @@ function fixture() {
     window.fixtureHidden=false;Object.defineProperty(document,'hidden',{get:()=>window.fixtureHidden});
     window.projectConsole={actions:{sync:async()=>{},run:async()=>window.calls.run++,stop:async()=>window.calls.stop++,delete:async()=>window.calls.delete++}};
     const root=createRoot(document.getElementById('root'));
-    let state={projectId:'project',mounted:true,extra:false,refresh:0};
+    let state={projectId:'project',mounted:true,extra:false,refresh:0,empty:false,removed:null,request:null};
     const actions=Array.from({length:13},(_,i)=>({id:'a'+(i+1),name:['Build','Test','Deploy','Lint','Preview','Typecheck','Publish','Clean','Format','Watch','Inspect','Package','Audit'][i],command:'npm run '+['build','test','deploy','lint','preview','typecheck','publish','clean','format','watch','inspect','package','audit'][i],lastSessionId:i===0?'run1':null}));
-    const render=()=>{const project={id:state.projectId,folder:'/fixture',actions:actions.slice(0,state.extra?13:12).map(a=>({...a})),sessions:[{id:'run1',state:'running',name:'Build',updatedAt:String(state.refresh)}]};
-      root.render(state.mounted?<><main id="primary"><ActionsPanel key={state.projectId} project={project} onChanged={async()=>{}}/></main><aside id="mirror"><SortableActionsList key={state.projectId} projectId={state.projectId} actions={project.actions} sessions={project.sessions} selectedId={null} onSelect={()=>{}}/></aside></>:null)};
+    const render=()=>{const project={id:state.projectId,folder:'/fixture',actions:state.empty?[]:actions.slice(0,state.extra?13:12).filter(a=>a.id!==state.removed).map(a=>({...a})),sessions:[{id:'run1',state:'running',name:'Build',updatedAt:String(state.refresh)}]};
+      root.render(state.mounted?<><main id="primary"><ActionsPanel project={project} sessionRequest={state.request} onSessionRequestHandled={id=>{if(state.request?.id===id){state={...state,request:null};render()}}} onChanged={async()=>{}}/></main><aside id="mirror"><SortableActionsList key={state.projectId} projectId={state.projectId} actions={project.actions} sessions={project.sessions} selectedId={null} onSelect={()=>{}}/></aside></>:null)};
     window.updateActions=change=>{state={...state,...change};render()};render();
   `
 }

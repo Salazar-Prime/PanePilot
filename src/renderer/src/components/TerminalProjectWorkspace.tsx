@@ -746,6 +746,7 @@ export function TerminalProjectWorkspace({
         <ActionsPanel
           project={project}
           sessionRequest={actionSessionRequest}
+          onSessionRequestHandled={(id) => setActionSessionRequest((current) => current?.id === id ? null : current)}
           onChanged={onChanged}
           onOpenFile={openFile}
         />
