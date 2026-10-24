@@ -5,6 +5,7 @@ import type { CodexSubagent, CodexSubagentSnapshot } from '@shared/types'
 import { useModalEscape } from '../lib/modalEscape'
 import { SUBAGENTS_PER_PAGE, subagentTranscript } from '../lib/subagentTerminal'
 import { SubagentTerminal } from './SubagentTerminal'
+import { orderSubagents } from '../lib/subagents'
 import '../subagents.css'
 
 const stateLabels = { working: 'Working', finished: 'Finished', stopped: 'Stopped', unknown: 'Status unavailable' }
@@ -58,9 +59,8 @@ export function SubagentOverlay({ sessionId, sessionName, projectName, onClose }
       try {
         const next = await window.projectConsole.terminals.subagents(sessionId)
         if (!disposed) {
-          // New output must not reorder windows while the user is reading them.
-          next.agents.sort((a, b) => (a.path || a.name).localeCompare(b.path || b.name, undefined, { numeric: true }) || a.id.localeCompare(b.id))
-          setSnapshot(next)
+          // Sort the complete snapshot before paging so active agents lead every finished card.
+          setSnapshot({ ...next, agents: orderSubagents(next.agents) })
           setError('')
         }
       } catch (cause) {
