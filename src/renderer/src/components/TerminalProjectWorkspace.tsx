@@ -56,6 +56,7 @@ import {
 import { RenameDialog } from './RenameDialog'
 import { StatusDot } from './StatusDot'
 import { StatusWorkspaceNav } from './StatusWorkspaceNav'
+import { LastActionTool } from './LastActionTool'
 import { TerminalLauncher } from './TerminalLauncher'
 import {
   TerminalProfileIcon
@@ -485,11 +486,8 @@ export function TerminalProjectWorkspace({
           Terminals
           <ShortcutKeytip value="T" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'actions' ? 'active' : ''} onClick={() => selectWorkspaceTab('actions')}>
-          <Play size={15} />
-          Actions
-          <ShortcutKeytip value="A" open={projectShortcuts.open} />
-        </button>
+        <LastActionTool project={project} active={tab === 'actions'} onOpen={() => selectWorkspaceTab('actions')}
+          onChanged={onChanged} keytip={<ShortcutKeytip value="A" open={projectShortcuts.open} />} />
         <button className={tab === 'notes' ? 'active' : ''} onClick={() => selectWorkspaceTab('notes')}>
           <FileText size={15} />
           Notes

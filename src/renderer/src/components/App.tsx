@@ -46,6 +46,7 @@ import {
   Pin,
   PinOff,
   Plus,
+  Play,
   RefreshCw,
   Server,
   Settings,
@@ -141,6 +142,8 @@ import { visibleCodexSession } from '../lib/subagents'
 import { AutomaticSubagentAction } from './AutomaticSubagentAction'
 import { SubagentActivityIcon } from './SubagentActivityIcon'
 import { useSubagentPresence } from '../lib/useSubagentPresence'
+import { lastProjectAction, lastProjectActionCommand } from '../lib/lastProjectAction'
+import { runProjectAction, useActionRunPending } from '../lib/actionRuns'
 import { AppUpdateIcon, AppUpdateToolbarAction } from './AppUpdateToolbarAction'
 import {
   CommandPalette,
@@ -1226,6 +1229,8 @@ export function App() {
   const subagentSession = visibleCodexSession(project,
     visibleDestinations[focusedPane === 'b' && splitOpen ? 'b' : 'a'], focusedSession?.id ?? null)
   const subagentPresence = useSubagentPresence(subagentSession?.id ?? null, subagentSession?.providerSessionId ?? null)
+  const lastAction = lastProjectAction(project)
+  const lastActionPending = useActionRunPending(lastAction?.action.id ?? null)
   useEffect(() => {
     setSubagentSessionId(null)
   }, [subagentSession?.id, focusedPane])
@@ -1812,7 +1817,10 @@ export function App() {
   const paletteSession = commandPaletteSession(
     project, paneDestinationsRef.current[focusedPane], focusedSession
   )
+  const runLastActionCommand = lastProjectActionCommand(project, lastActionPending,
+    async (projectId, actionId) => { await runProjectAction(actionId, () => refreshProject(projectId)) })
   const commandPaletteCommands: CommandPaletteCommand[] = [
+    ...(runLastActionCommand ? [{ ...runLastActionCommand, icon: <Play size={15} /> }] : []),
     {
       id: 'action:app-updates', section: 'Actions', label: 'Check for PanePilot updates…',
       detail: 'Download signed updates and restart when ready', keywords: ['sparkle', 'upgrade', 'version', 'install'],

@@ -867,6 +867,70 @@ select:focus-visible {
 .status-workspace-nav .workspace-tabs button:hover { background: #1b2130; }
 .status-workspace-nav .workspace-tabs button.active { color: #b8c6ff; background: #202946; }
 .status-workspace-nav .workspace-tabs button.active::after { display: none; }
+
+.last-action-popover-anchor {
+  position: fixed;
+  z-index: 160;
+  box-sizing: border-box;
+  padding-bottom: 7px;
+  white-space: normal;
+}
+
+.last-action-popover {
+  max-height: inherit;
+  overflow-y: auto;
+  color: #d5d8df;
+  border: 1px solid #424b70;
+  border-radius: 10px;
+  background: #101521f5;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 12px 40px #0008;
+  animation: status-session-enter 160ms ease-out;
+}
+
+.last-action-popover header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 6px;
+  color: #8991a3;
+  font-size: 10px;
+}
+
+.last-action-popover header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.last-action-run {
+  display: flex;
+  align-items: center;
+  width: calc(100% - 12px);
+  gap: 10px;
+  margin: 0 6px 6px;
+  padding: 10px 7px;
+  color: #b8c6ff;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+}
+
+.last-action-run > svg, .last-action-run > small { flex: 0 0 auto; }
+.last-action-run > span { display: grid; min-width: 0; flex: 1; gap: 5px; }
+.last-action-run strong { color: #d5d8df; font-size: 12px; overflow-wrap: anywhere; }
+.last-action-run code { overflow: hidden; color: #8991a3; font: 10px "SFMono-Regular", "Cascadia Code", monospace; text-overflow: ellipsis; white-space: nowrap; }
+.last-action-run > small { font-size: 10px; }
+.last-action-run:is(:hover, :focus-visible):not(:disabled) { background: #252e46; }
+.last-action-run:focus-visible, .last-action-open:focus-visible { outline: 1px solid #b8c6ff; outline-offset: -1px; }
+.last-action-run:disabled { cursor: default; }
+.last-action-open { display: flex; align-items: center; justify-content: flex-end; gap: 5px; width: 100%; padding: 8px 12px; color: #8991a3; border: 0; border-top: 1px solid #30394e; background: transparent; font-size: 10px; }
+.last-action-open:hover { color: #b8c6ff; background: #1b2130; }
+.last-action-empty, .last-action-error { margin: 6px 12px 12px; color: #8991a3; font-size: 11px; line-height: 1.5; }
+.last-action-error { color: #eac39a; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .last-action-popover { animation: none; } }
 .status-workspace-nav .latex-tab-meta {
   flex: 0 0 auto;
   margin-left: 6px;
