@@ -64,6 +64,7 @@ import {
 import { discoverSshAliases } from './ssh-config'
 import { Store } from './store'
 import { TerminalManager } from './terminal-manager'
+import { HostTerminalService } from './host-terminal-service'
 import { TerminalDropService } from './terminal-drop-service'
 import { AppUpdateService } from './app-update-service'
 import { HTML_PREVIEW_SCHEME, HTML_PREVIEW_PRIVILEGES, InteractiveHtmlPreviewService, guardInteractiveHtmlNavigation, isInteractiveHtmlUrl } from './html-interactive-preview'
@@ -74,6 +75,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: HTML_PREVIEW_SCHEME, privileges:
 let mainWindow: BrowserWindow | null = null
 let store: Store
 let terminals: TerminalManager
+let hostTerminals: HostTerminalService
 let terminalDrops: TerminalDropService
 let conversations: ConversationIndexer
 let remoteConversations: RemoteConversationIndexer
@@ -96,7 +98,7 @@ const appUpdates = new AppUpdateService({
   readConfig: async () => JSON.parse(await readFile(join(process.resourcesPath, 'panepilot-updates.json'), 'utf8')),
   loadBridge: async () => (await import('electron-sparkle-updater')).loadSparkleBridgeForApp(),
   notify: (state) => { if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('updates:changed', state) },
-  restartBlocker: () => terminalDrops?.hasActiveTransfers() ? 'Wait for file transfers to finish before updating.' : terminals?.updateRestartBlocker() ?? null
+  restartBlocker: () => terminalDrops?.hasActiveTransfers() ? 'Wait for file transfers to finish before updating.' : terminals?.updateRestartBlocker() ?? hostTerminals?.updateRestartBlocker() ?? null
 })
 
 // Keep the existing application-data identity when the packaged product name is PanePilot.
@@ -155,6 +157,27 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  const hostTerminalSender = (event: Electron.IpcMainInvokeEvent) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid host terminal sender.')
+  }
+  ipcMain.handle('host-terminals:list', (event) => { hostTerminalSender(event); return hostTerminals.list() })
+  ipcMain.handle('host-terminals:create', (event) => { hostTerminalSender(event); return hostTerminals.create() })
+  ipcMain.handle('host-terminals:close', async (event, id: string) => {
+    hostTerminalSender(event)
+    const session = store.getHostTerminal(id)
+    if (!session) throw new Error('Host terminal not found.')
+    const response = await dialog.showMessageBox(mainWindow!, {
+      type: 'warning', title: `Close ${session.name}?`, message: `Close ${session.name}?`,
+      detail: 'This stops only this local host terminal and its running commands. Project terminals are not affected.',
+      buttons: ['Cancel', 'Close terminal'], defaultId: 0, cancelId: 0, noLink: true
+    })
+    if (response.response === 1) await hostTerminals.close(id)
+  })
+  ipcMain.handle('host-terminals:attach', (event, id: string, cols: number, rows: number) => { hostTerminalSender(event); return hostTerminals.attach(id, cols, rows) })
+  ipcMain.handle('host-terminals:retry-attach', (event, id: string, cols: number, rows: number) => { hostTerminalSender(event); return hostTerminals.retryAttach(id, cols, rows) })
+  ipcMain.handle('host-terminals:write', (event, id: string, data: string) => { hostTerminalSender(event); hostTerminals.write(id, data) })
+  ipcMain.handle('host-terminals:resize', (event, id: string, cols: number, rows: number) => { hostTerminalSender(event); hostTerminals.resize(id, cols, rows) })
+  ipcMain.handle('host-terminals:capture-buffer', (event, id: string) => { hostTerminalSender(event); return hostTerminals.captureBuffer(id) })
   const updateSender = (event: Electron.IpcMainInvokeEvent) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid update sender.')
   }
@@ -754,6 +777,14 @@ if (!ownsSingleInstanceLock) {
     .then(() => {
       protocol.handle(HTML_PREVIEW_SCHEME, (request) => interactiveHtml.handle(request))
       store = new Store(app.getPath('userData'))
+      const hostTerminalEvent = (channel: string, payload: unknown) => {
+        if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send(channel, payload)
+      }
+      hostTerminals = new HostTerminalService(store, app.getPath('userData'), {
+        changed: (sessions) => hostTerminalEvent('host-terminals:changed', sessions),
+        data: (event) => hostTerminalEvent('host-terminals:data', event),
+        transport: (event) => hostTerminalEvent('host-terminals:transport', event)
+      })
       terminalDrops = new TerminalDropService(store, (progress) => {
         if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('terminal-drops:progress', progress)
       })
@@ -812,6 +843,7 @@ app.on('before-quit', () => {
   appUpdates.dispose()
   terminalDrops?.shutdown()
   terminals?.shutdown()
+  hostTerminals?.shutdown()
   portForwards?.shutdown()
   store?.close()
 })

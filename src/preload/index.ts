@@ -8,6 +8,7 @@ import type {
   CreateProjectInput,
   CreateProjectActionInput,
   LatexChatMode,
+  HostTerminal,
   PrintLatexPdfInput,
   ProjectConsoleApi,
   ProjectFolderSelectionPurpose,
@@ -139,6 +140,36 @@ const api: ProjectConsoleApi = {
       ): void => listener(payload)
       ipcRenderer.on('terminal:transport', handler)
       return () => ipcRenderer.removeListener('terminal:transport', handler)
+    }
+  },
+  hostTerminals: {
+    list: () => ipcRenderer.invoke('host-terminals:list'),
+    create: () => ipcRenderer.invoke('host-terminals:create'),
+    close: (id: string) => ipcRenderer.invoke('host-terminals:close', id),
+    attach: (sessionId: string, cols: number, rows: number) =>
+      ipcRenderer.invoke('host-terminals:attach', sessionId, cols, rows),
+    retryAttach: (sessionId: string, cols: number, rows: number) =>
+      ipcRenderer.invoke('host-terminals:retry-attach', sessionId, cols, rows),
+    write: (sessionId: string, data: string) =>
+      ipcRenderer.invoke('host-terminals:write', sessionId, data),
+    captureBuffer: (sessionId: string) =>
+      ipcRenderer.invoke('host-terminals:capture-buffer', sessionId),
+    resize: (sessionId: string, cols: number, rows: number) =>
+      ipcRenderer.invoke('host-terminals:resize', sessionId, cols, rows),
+    onData: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: TerminalDataEvent): void => listener(payload)
+      ipcRenderer.on('host-terminals:data', handler)
+      return () => ipcRenderer.removeListener('host-terminals:data', handler)
+    },
+    onTransport: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: TerminalTransportEvent): void => listener(payload)
+      ipcRenderer.on('host-terminals:transport', handler)
+      return () => ipcRenderer.removeListener('host-terminals:transport', handler)
+    },
+    onChanged: (listener: (sessions: HostTerminal[]) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sessions: HostTerminal[]): void => listener(sessions)
+      ipcRenderer.on('host-terminals:changed', handler)
+      return () => ipcRenderer.removeListener('host-terminals:changed', handler)
     }
   },
   actions: {

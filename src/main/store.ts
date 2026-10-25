@@ -16,6 +16,7 @@ import type {
   LatexProjectDetails,
   LatexSection,
   LaunchProfile,
+  HostTerminal,
   Project,
   ProjectAction,
   ProjectType,
@@ -165,6 +166,29 @@ type SessionRow = {
   output: string
   created_at: string
   updated_at: string
+}
+
+type HostTerminalRow = {
+  id: string
+  name: string
+  backend: TerminalBackend
+  tmux_name: string | null
+  state: HostTerminal['state']
+  created_at: string
+  updated_at: string
+}
+
+function mapHostTerminal(row: HostTerminalRow): HostTerminal {
+  return {
+    id: row.id,
+    name: row.name,
+    profile: 'shell',
+    backend: row.backend,
+    tmuxName: row.tmux_name,
+    state: row.state,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
 }
 
 type ProjectActionRow = {
@@ -553,6 +577,16 @@ export class Store {
         pinned INTEGER NOT NULL DEFAULT 0,
         flagged INTEGER NOT NULL DEFAULT 0,
         output TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS host_terminals (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        backend TEXT NOT NULL CHECK (backend IN ('tmux', 'pty')),
+        tmux_name TEXT,
+        state TEXT NOT NULL DEFAULT 'idle' CHECK (state IN ('idle', 'completed', 'error')),
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -1237,6 +1271,52 @@ export class Store {
       throw new Error('Stop every terminal or chat before deleting this project.')
     }
     this.db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+  }
+
+  listHostTerminals(): HostTerminal[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, name, backend, tmux_name, state, created_at, updated_at
+         FROM host_terminals ORDER BY created_at ASC, id ASC`
+      )
+      .all() as HostTerminalRow[]
+    return rows.map(mapHostTerminal)
+  }
+
+  getHostTerminal(id: string): HostTerminal | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, name, backend, tmux_name, state, created_at, updated_at
+         FROM host_terminals WHERE id = ?`
+      )
+      .get(id) as HostTerminalRow | undefined
+    return row ? mapHostTerminal(row) : null
+  }
+
+  createHostTerminal(input: {
+    id: string
+    name: string
+    backend: TerminalBackend
+    tmuxName: string | null
+  }): HostTerminal {
+    const timestamp = now()
+    this.db
+      .prepare(
+        `INSERT INTO host_terminals (id, name, backend, tmux_name, state, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'idle', ?, ?)`
+      )
+      .run(input.id, input.name, input.backend, input.tmuxName, timestamp, timestamp)
+    return this.getHostTerminal(input.id)!
+  }
+
+  setHostTerminalState(id: string, state: HostTerminal['state']): void {
+    this.db
+      .prepare('UPDATE host_terminals SET state = ?, updated_at = ? WHERE id = ?')
+      .run(state, now(), id)
+  }
+
+  deleteHostTerminal(id: string): void {
+    this.db.prepare('DELETE FROM host_terminals WHERE id = ?').run(id)
   }
 
   getProject(id: string): Project | null {

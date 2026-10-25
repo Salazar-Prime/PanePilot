@@ -54,6 +54,17 @@ export interface TerminalSession {
   updatedAt: string
 }
 
+export interface HostTerminal {
+  id: string
+  name: string
+  profile: 'shell'
+  backend: TerminalBackend
+  tmuxName: string | null
+  state: 'idle' | 'completed' | 'error'
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ProjectAction {
   id: string
   projectId: string
@@ -620,6 +631,12 @@ export interface ProjectConsoleApi {
     onMetadata(listener: (event: TerminalMetadataEvent) => void): () => void
     onTransport(listener: (event: TerminalTransportEvent) => void): () => void
   }
+  hostTerminals: TerminalSurfaceBridge & {
+    list(): Promise<HostTerminal[]>
+    create(): Promise<HostTerminal>
+    close(id: string): Promise<void>
+    onChanged(listener: (sessions: HostTerminal[]) => void): () => void
+  }
   actions: {
     sync(projectId: string): Promise<ProjectAction[]>
     create(input: CreateProjectActionInput): Promise<ProjectAction>
@@ -722,3 +739,8 @@ export interface ProjectConsoleApi {
     setZoomFactor(factor: number): void
   }
 }
+
+export type TerminalSurfaceBridge = Pick<
+  ProjectConsoleApi['terminals'],
+  'attach' | 'retryAttach' | 'write' | 'captureBuffer' | 'resize' | 'onData' | 'onTransport'
+>
