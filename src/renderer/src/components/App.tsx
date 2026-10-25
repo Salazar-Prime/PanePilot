@@ -163,6 +163,9 @@ import { SortMenu } from './SortMenu'
 import { StatusDot } from './StatusDot'
 import { TerminalProfileIcon } from './TerminalProfileIcon'
 import { TemporaryChatsPanel } from './TemporaryChatsPanel'
+import { HostTerminalsPanel } from './HostTerminalsPanel'
+import { HostTerminalToolbarAction } from './HostTerminalToolbarAction'
+import { useHostTerminals } from '../lib/useHostTerminals'
 import { TransferSessionDialog } from './TransferSessionDialog'
 import { WorkspaceSwitcherOverlay } from './WorkspaceSwitcherOverlay'
 import { TerminalDropStatus } from './TerminalDropStatus'
@@ -319,6 +322,7 @@ export function App() {
   const [newProjectConnectionId, setNewProjectConnectionId] = useState<string>()
   const [newProjectType, setNewProjectType] = useState<ProjectType>('terminal')
   const [showTopOverflow, setShowTopOverflow] = useState(false)
+  const hostTerminals = useHostTerminals()
   const [topToolbarPins, setTopToolbarPins] = useState(() =>
     loadTopToolbarPins(window.localStorage)
   )
@@ -1002,7 +1006,7 @@ export function App() {
         event.key.toLocaleLowerCase() === 'k'
       ) {
         event.preventDefault()
-        if (document.querySelector('.subagent-observatory, .quick-notes-modal')) return
+        if (document.querySelector('.subagent-observatory, .quick-notes-modal, .host-terminals-dialog')) return
         setShowCommandPalette((current) => !current)
         return
       }
@@ -1893,6 +1897,18 @@ export function App() {
       icon: <Plus size={15} />,
       action: () => openNewProject()
     },
+    ...(!hostTerminals.pending ? [{
+      id: 'action:new-host-terminal', section: 'Actions', label: 'New host terminal',
+      detail: 'Login shell on this computer · independent of projects',
+      keywords: ['local', 'shell', 'app', 'global', 'terminal'], icon: <TerminalSquare size={15} />,
+      action: hostTerminals.create
+    }] : []),
+    ...(hostTerminals.sessions.length ? [{
+      id: 'action:host-terminals', section: 'Actions', label: 'Open host terminals',
+      detail: `${hostTerminals.sessions.length} open on this computer`,
+      keywords: ['local', 'shell', 'app', 'global', 'terminal'], icon: <TerminalSquare size={15} />,
+      action: hostTerminals.show
+    }] : []),
     ...(project
       ? [
           {
@@ -2386,6 +2402,11 @@ export function App() {
   const localRepository = isOriginlessGitRepository(gitStatus)
   const topToolbarActions: TopToolbarAction[] = [
     {
+      id: 'host-terminals', label: 'Host terminals', icon: <TerminalSquare size={15} />,
+      group: 'general', available: !hostTerminals.pending, visibleInMenu: true,
+      run: () => { if (hostTerminals.sessions.length) hostTerminals.show(); else void hostTerminals.create().catch(() => {}) }
+    },
+    {
       id: 'app-updates', label: updates.state.phase === 'ready' ? 'Install PanePilot update…' : 'Check for updates…',
       icon: <AppUpdateIcon state={updates.state} />, group: 'general', available: true, visibleInMenu: true,
       run: () => setShowAppUpdates(true)
@@ -2576,6 +2597,8 @@ export function App() {
             pinned={topToolbarPins.includes('sub-agents')}
             active={subagentSessionId === subagentSession?.id}
             onToggle={() => setSubagentSessionId((current) => current ? null : subagentSession?.id ?? null)} />
+          <HostTerminalToolbarAction count={hostTerminals.sessions.length} pinned={topToolbarPins.includes('host-terminals')}
+            active={hostTerminals.open} onOpen={hostTerminals.show} />
           <AppUpdateToolbarAction state={updates.state} pinned={topToolbarPins.includes('app-updates')}
             onOpen={() => setShowAppUpdates(true)} />
           <div className="top-overflow-wrap" ref={topOverflowRef}>
@@ -3289,6 +3312,10 @@ export function App() {
           onClose={() => setTemporaryChatPanel(null)}
         />
       )}
+      {hostTerminals.open && <HostTerminalsPanel sessions={hostTerminals.sessions} selectedId={hostTerminals.selectedId}
+        pending={hostTerminals.pending} error={hostTerminals.error} onSelect={hostTerminals.select}
+        onCreate={() => { void hostTerminals.create().catch(() => {}) }}
+        onRemove={(id) => { void hostTerminals.remove(id).catch(() => {}) }} onDismiss={hostTerminals.dismiss} />}
       {transferTarget && (
         <TransferSessionDialog
           session={transferTarget.session}

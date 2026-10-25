@@ -23,7 +23,7 @@ describe('Codex Option reasoning shortcuts', () => {
     const handler = view.slice(view.indexOf('      const reasoningKey'), view.indexOf('      const key = event.key'))
     expect(handler).toContain("event.type === 'keydown' && activeRef.current && writableRef.current")
     expect(handler).toContain('host.contains(document.activeElement)')
-    expect(handler).toContain('terminals.write(session.id, reasoningKey)')
+    expect(handler).toContain('bridge.write(session.id, reasoningKey)')
     expect(handler).toContain('return false')
     expect(handler).not.toContain('paste(')
   })

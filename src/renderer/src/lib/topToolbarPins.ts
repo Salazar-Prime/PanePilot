@@ -1,5 +1,6 @@
 export const TOP_TOOLBAR_ACTION_IDS = [
   'quick-notes',
+  'host-terminals',
   'app-updates',
   'quick-chats',
   'sub-agents',

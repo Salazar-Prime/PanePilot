@@ -12,6 +12,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import type {
   TerminalSession,
+  TerminalSurfaceBridge,
   TerminalTransportEvent
 } from '@shared/types'
 import {
@@ -30,7 +31,9 @@ import { terminalTheme } from '../lib/terminalTheme'
 import { terminalReasoningShortcut } from '../lib/terminalReasoningShortcut'
 
 interface Props {
-  session: TerminalSession
+  session: Pick<TerminalSession, 'id' | 'profile' | 'backend' | 'tmuxName' | 'state'>
+  bridge?: TerminalSurfaceBridge
+  allowFileDrops?: boolean
   active?: boolean
   retainOutputOnExit?: boolean
   projectFolder?: string
@@ -39,8 +42,15 @@ interface Props {
 
 const terminalAttachCounts = new Map<string, number>()
 
+function canFocusTerminal(host: HTMLElement): boolean {
+  const modal = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')).at(-1)
+  return !modal || modal.contains(host)
+}
+
 export function ManagedTerminal({
   session,
+  bridge = window.projectConsole.terminals,
+  allowFileDrops = true,
   active = true,
   retainOutputOnExit = false,
   projectFolder,
@@ -89,7 +99,7 @@ export function ManagedTerminal({
     event.stopPropagation()
     setDraggingFiles(false)
     const files = Array.from(event.dataTransfer.files)
-    if (!files.length) return
+    if (!files.length || !allowFileDrops) return
     const terminal = terminalRef.current
     if (!terminal || !activeRef.current || !writableRef.current || dropPendingRef.current) return
     if (!window.projectConsole.terminalDrops) {
@@ -104,7 +114,7 @@ export function ManagedTerminal({
       const stillTarget = document.hasFocus() && terminalRef.current === terminal && activeRef.current && writableRef.current &&
         focusVersion === dropFocusVersionRef.current && hostRef.current?.contains(document.activeElement)
       if (result.paths.length && stillTarget) {
-        await window.projectConsole.terminals.write(session.id,
+        await bridge.write(session.id,
           terminalPastePayload(droppedPathsText(result.paths), terminal.modes.bracketedPasteMode))
         terminal.scrollToBottom()
       } else if (result.paths.length && !result.transferId) {
@@ -145,7 +155,7 @@ export function ManagedTerminal({
         window.alert('Clipboard paste is limited to 2 MB.')
         return
       }
-      await window.projectConsole.terminals.write(session.id, payload)
+      await bridge.write(session.id, payload)
       terminal.scrollToBottom()
       terminal.focus()
     } catch (error) {
@@ -160,7 +170,7 @@ export function ManagedTerminal({
   async function copyFullBuffer(): Promise<void> {
     setContextMenu(null)
     try {
-      const output = await window.projectConsole.terminals.captureBuffer(
+      const output = await bridge.captureBuffer(
         session.id
       )
       await window.projectConsole.system.copyText(output)
@@ -178,6 +188,7 @@ export function ManagedTerminal({
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+    let disposed = false
     writableRef.current = false
     replayingRef.current = true
     setInputReady(false)
@@ -249,7 +260,7 @@ export function ManagedTerminal({
         event.stopPropagation()
         if (event.type === 'keydown' && activeRef.current && writableRef.current &&
           host.contains(document.activeElement)) {
-          void window.projectConsole.terminals.write(session.id, reasoningKey).catch(
+          void bridge.write(session.id, reasoningKey).catch(
             (error) => console.error('Could not send reasoning shortcut.', error)
           )
           terminal.scrollToBottom()
@@ -272,7 +283,7 @@ export function ManagedTerminal({
           if (terminal.hasSelection()) {
             void copySelection()
           } else if (event.metaKey && writableRef.current) {
-            void window.projectConsole.terminals.write(session.id, '\x03')
+            void bridge.write(session.id, '\x03')
           }
         } else if (writableRef.current) {
           void pasteClipboard()
@@ -283,16 +294,16 @@ export function ManagedTerminal({
 
     const dataDisposable = terminal.onData((data) => {
       if (activeRef.current && writableRef.current) {
-        void window.projectConsole.terminals.write(session.id, data).catch(
+        void bridge.write(session.id, data).catch(
           (error) => console.error('Could not write terminal input.', error)
         )
       }
     })
-    const removeDataListener = window.projectConsole.terminals.onData((event) => {
+    const removeDataListener = bridge.onData((event) => {
       if (event.sessionId === session.id) terminal.write(event.data)
     })
     const removeTransportListener =
-      window.projectConsole.terminals.onTransport((event) => {
+      bridge.onTransport((event) => {
         if (event.sessionId !== session.id) return
         transportRef.current = event
         writableRef.current = terminalAcceptsInput(
@@ -308,10 +319,12 @@ export function ManagedTerminal({
     const attachStartedAt = performance.now()
     const attachCount = (terminalAttachCounts.get(session.id) ?? 0) + 1
     terminalAttachCounts.set(session.id, attachCount)
-    void window.projectConsole.terminals
+    void bridge
       .attach(session.id, terminal.cols, terminal.rows)
       .then(({ output }) => {
+        if (disposed) return
         terminal.write(output, () => {
+          if (disposed || terminalRef.current !== terminal) return
           replaying = false
           replayingRef.current = false
           writableRef.current = terminalAcceptsInput(
@@ -321,7 +334,7 @@ export function ManagedTerminal({
             transportRef.current.state
           )
           setInputReady(writableRef.current)
-          if (activeRef.current) terminal.focus()
+          if (activeRef.current && canFocusTerminal(host)) terminal.focus()
           if (import.meta.env.DEV) {
             console.debug('[PanePilot performance] terminal ready', {
               sessionId: session.id,
@@ -346,6 +359,7 @@ export function ManagedTerminal({
         })
       })
       .catch((error) => {
+        if (disposed) return
         replaying = false
         replayingRef.current = false
         writableRef.current = false
@@ -369,11 +383,12 @@ export function ManagedTerminal({
       if (!activeRef.current) return
       fit.fit()
       dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
-      void window.projectConsole.terminals.resize(session.id, terminal.cols, terminal.rows)
+      void bridge.resize(session.id, terminal.cols, terminal.rows)
     })
     resizeObserver.observe(host)
 
     return () => {
+      disposed = true
       resizeObserver.disconnect()
       removeDataListener()
       removeTransportListener()
@@ -386,7 +401,7 @@ export function ManagedTerminal({
       if (fitRef.current === fit) fitRef.current = null
       terminal.dispose()
     }
-  }, [session.id, projectFolder])
+  }, [session.id, projectFolder, bridge])
 
   useEffect(() => {
     const terminal = terminalRef.current
@@ -407,7 +422,7 @@ export function ManagedTerminal({
     )
     writableRef.current = ready
     setInputReady(ready)
-    if (ready) terminalRef.current?.focus()
+    if (ready && hostRef.current && canFocusTerminal(hostRef.current)) terminalRef.current?.focus()
   }, [terminalEnded])
 
   useEffect(() => {
@@ -423,7 +438,7 @@ export function ManagedTerminal({
       if (!terminal || !fit) return
       fit.fit()
       dimensionsRef.current = { cols: terminal.cols, rows: terminal.rows }
-      void window.projectConsole.terminals.resize(
+      void bridge.resize(
         session.id,
         terminal.cols,
         terminal.rows
@@ -436,7 +451,7 @@ export function ManagedTerminal({
       )
       writableRef.current = ready
       setInputReady(ready)
-      terminal.focus()
+      if (hostRef.current && canFocusTerminal(hostRef.current)) terminal.focus()
       if (import.meta.env.DEV && ready) {
         const name = `panepilot:terminal-select:${session.id}`
         const mark = performance.getEntriesByName(name, 'mark').at(-1)
@@ -451,7 +466,7 @@ export function ManagedTerminal({
       }
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [active, session.id])
+  }, [active, session.id, bridge])
 
   useEffect(() => {
     if (!active) setContextMenu(null)
@@ -481,7 +496,7 @@ export function ManagedTerminal({
       message: 'Retrying the existing tmux session…'
     }))
     try {
-      await window.projectConsole.terminals.retryAttach(
+      await bridge.retryAttach(
         session.id,
         dimensionsRef.current.cols,
         dimensionsRef.current.rows
@@ -506,7 +521,8 @@ export function ManagedTerminal({
   return (
     <div
       className={`managed-terminal ${draggingFiles ? 'terminal-drop-target' : ''}`}
-      data-terminal-session-id={session.id}
+      data-terminal-session-id={allowFileDrops ? session.id : undefined}
+      data-host-terminal-id={!allowFileDrops ? session.id : undefined}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) dropFocusVersionRef.current++
       }}
@@ -514,7 +530,7 @@ export function ManagedTerminal({
         if (!event.dataTransfer.types.includes('Files')) return
         event.preventDefault()
         event.stopPropagation()
-        const allowed = activeRef.current && writableRef.current && !dropPendingRef.current
+        const allowed = allowFileDrops && activeRef.current && writableRef.current && !dropPendingRef.current
         event.dataTransfer.dropEffect = allowed ? 'copy' : 'none'
         setDraggingFiles(allowed)
       }}
@@ -558,7 +574,7 @@ export function ManagedTerminal({
           <span>
             <strong>
               {transport.state === 'offline'
-                ? 'Remote host offline'
+                ? allowFileDrops ? 'Remote host offline' : 'Local terminal unavailable'
                 : transport.state === 'reconnecting'
                   ? 'Reconnecting'
                   : 'Terminal detached'}
@@ -574,7 +590,7 @@ export function ManagedTerminal({
       {contextMenu &&
         createPortal(
           <div
-            className="popover-menu terminal-clipboard-menu"
+            className={`popover-menu terminal-clipboard-menu ${allowFileDrops ? '' : 'host-terminal-clipboard-menu'}`}
             style={{ top: contextMenu.top, left: contextMenu.left }}
           >
             <button
