@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Plus, TerminalSquare, X } from 'lucide-react'
 import type { HostTerminal } from '@shared/types'
 import { useModalEscape } from '../lib/modalEscape'
+import { useActiveTabVisibility } from '../lib/useActiveTabVisibility'
 import { ManagedTerminal } from './ManagedTerminal'
 import '../host-terminals.css'
 
@@ -35,6 +36,7 @@ export function HostTerminalsPanel({ sessions, selectedId, pending, error, onSel
     () => sessions.find((session) => session.id === selectedId) ?? sessions[0] ?? null,
     [sessions, selectedId]
   )
+  const tabsRef = useActiveTabVisibility(selected?.id, JSON.stringify(sessions.map(({ id, name }) => [id, name])))
 
   useModalEscape(onDismiss, true, pending)
 
@@ -130,10 +132,10 @@ export function HostTerminalsPanel({ sessions, selectedId, pending, error, onSel
         </header>
 
         {sessions.length > 0 && <div className="host-terminals-tabs" aria-label="Host terminal sessions">
-          <div className="host-terminals-tablist" role="tablist" aria-label="Terminal sessions">
+          <div className="host-terminals-tablist" role="tablist" aria-label="Terminal sessions" ref={tabsRef}>
             {sessions.map((session, index) => {
               const active = session.id === selected?.id
-              return <div className={`host-terminals-tab-item${active ? ' active' : ''}`} key={session.id}>
+              return <div className={`host-terminals-tab-item${active ? ' active' : ''}`} key={session.id} data-active-tab={active}>
                 <button
                   id={`${id}-tab-${index}`}
                   className="host-terminals-tab"
