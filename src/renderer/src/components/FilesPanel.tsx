@@ -30,6 +30,7 @@ import { addFileManagementActions } from '../lib/monacoFinderAction'
 import { isMarkdownPath } from '../lib/markdown'
 import { isHtmlPath } from '../lib/htmlPreview'
 import { keepFileTab, openPreviewTab, protectFileTab, type OpenFileTab } from '../lib/fileTabs'
+import { useActiveTabVisibility } from '../lib/useActiveTabVisibility'
 import { HtmlPreview } from './HtmlPreview'
 import { cachedUpdateRestartGuard, useUpdateRestartGuard } from '../lib/updateRestartGuards'
 import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
@@ -108,6 +109,7 @@ function FilesPanelInstance({
   const [activeFilePath, setActiveFilePath] = useState<string | null>(
     cached?.activeFilePath ?? cached?.openFiles.at(-1)?.preview.path ?? null
   )
+  const fileTabsRef = useActiveTabVisibility(activeFilePath, JSON.stringify(openFiles.map((file) => file.preview.path)))
   const [searchQuery, setSearchQuery] = useState(cached?.searchQuery ?? '')
   const [searchResults, setSearchResults] = useState<FileEntry[]>(
     uniqueEntries(cached?.searchResults ?? [])
@@ -954,7 +956,7 @@ function FilesPanelInstance({
       </aside>
       <main className="file-preview">
         {openFiles.length > 0 && (
-          <div className="file-preview-tabs" role="tablist" aria-label="Open files">
+          <div className="file-preview-tabs" role="tablist" aria-label="Open files" ref={fileTabsRef}>
             {openFiles.map((file) => {
               const selected = file.preview.path === activeFilePath
               const dirty = file.draft !== file.preview.content
@@ -962,6 +964,7 @@ function FilesPanelInstance({
                 <div
                   className={`file-preview-tab ${selected ? 'selected' : ''}${file.temporary ? ' temporary' : ''}`}
                   key={file.preview.path}
+                  data-active-tab={selected}
                   data-file-path={file.preview.path}
                 >
                   <button

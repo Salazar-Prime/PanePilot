@@ -27,6 +27,7 @@ import type {
   TerminalFileTarget
 } from '../lib/terminalFileLinks'
 import { isAttentionState } from '../lib/status'
+import { useActiveTabVisibility } from '../lib/useActiveTabVisibility'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
 import {
   type ProjectShortcutAction,
@@ -151,6 +152,8 @@ export function TerminalProjectWorkspace({
   )
   const activeSession =
     openTabs.find((session) => session.id === selectedSessionId) ?? openTabs[0]
+  const terminalTabsRef = useActiveTabVisibility(activeSession?.id,
+    JSON.stringify([tab, openTabs.map(({ id, name }) => [id, name])]))
 
   function selectWorkspaceTab(nextTab: WorkspaceTab) {
     setTab(nextTab)
@@ -524,10 +527,11 @@ export function TerminalProjectWorkspace({
       {tab === 'terminal' && (
         <section className="terminal-workspace">
           <div className="terminal-tabs">
-            <div className="terminal-tabs-scroll">
+            <div className="terminal-tabs-scroll" ref={terminalTabsRef}>
               {openTabs.map((session, index) => (
                 <div
                   key={session.id}
+                  data-active-tab={activeSession?.id === session.id}
                   className={`terminal-tab ${
                     activeSession?.id === session.id ? 'active' : ''
                   } ${session.pinned ? 'pinned-tab' : ''} ${

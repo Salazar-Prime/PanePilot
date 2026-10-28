@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.17.1 — 2026-10-28
+
+This patch keeps selected project terminal and Files tab titles readable when a tab
+strip becomes crowded:
+
+- Tabs use their natural title widths while space is available. When space runs out,
+  inactive titles may shorten, while the selected tab retains its complete title and
+  controls.
+- Exceptionally long selected titles wrap within the current pane instead of hiding
+  characters. Selecting, renaming, reordering, or resizing minimally reveals the
+  active tab without scrolling the surrounding workspace.
+
+The v0.17.1 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed and not Apple-notarized. Signed Sparkle updates are available to
+PanePilot v0.16.0 and newer; installation and restart always require user action.
+
 ## 0.15.0 — 2026-10-20
 
 This release adds an explicit interactive mode for trusted project HTML and makes
