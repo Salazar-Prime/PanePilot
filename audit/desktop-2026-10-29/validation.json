@@ -1,0 +1,63 @@
+{
+  "baselineCommit": "41aa35dd0774a613dd6aa5c18568e9432843f725",
+  "scope": "Desktop audit; no production implementation changes",
+  "fullSuite": {
+    "command": "ELECTRON_RUN_AS_NODE=1 <electron-binary> node_modules/vitest/vitest.mjs run --maxWorkers=2",
+    "filesPassed": 98,
+    "filesSkipped": 1,
+    "testsPassed": 539,
+    "testsSkipped": 2,
+    "elapsedSeconds": 20.69
+  },
+  "existingOutputBenchmark": {
+    "testsPassed": 1,
+    "appendCount": 200,
+    "appendBytes": 512,
+    "inputBytes": 102400,
+    "outputBytes": 524288,
+    "walBytes": 2216592,
+    "walToInputRatio": 21.65,
+    "elapsedMs": 50.99
+  },
+  "build": {
+    "command": "npm run build",
+    "nodeVersion": "22.13.0",
+    "typecheck": "passed",
+    "result": "passed",
+    "rendererBuildSeconds": 22.45
+  },
+  "checkpoint": {
+    "branch": "checkpoint/pre-desktop-audit-20261029T164816Z",
+    "siblingDirectory": "panepilot-audit-checkpoint-20261029T164816Z",
+    "gitBundleVerified": true,
+    "checksumsVerified": true,
+    "originalUntrackedFilesVerified": 4,
+    "includesIgnoredFiles": false,
+    "includesLiveAppData": false
+  },
+  "metadataProbeExpectedInvariant": {
+    "name": "latex-comment-concurrent-create",
+    "method": "Two concurrent calls to actual ProjectMetadataService.createLatexComment, using a temporary local project folder and stubbed project lookup.",
+    "successfulCreateCalls": 2,
+    "persistedComments": 1,
+    "lostSuccessfulCreates": 1,
+    "invariantSatisfied": false,
+    "limitations": [
+      "Service-level concurrency probe; not proof that one particular UI gesture triggers concurrent calls.",
+      "Tests one process and local files. Cross-client and SSH races need their own integration tests."
+    ]
+  },
+  "newBenchmarkTypes": "strict tsc passed for all four TypeScript benchmark modules",
+  "newLauncherSyntax": "node --check passed for all three launchers",
+  "reportValidation": {
+    "localLinks": "all exist",
+    "sourceReferences": "all files and line numbers exist",
+    "layoutWidths": [
+      1200,
+      390
+    ],
+    "horizontalPageOverflow": false,
+    "visualInspection": "desktop and narrow screenshots inspected",
+    "originalUntrackedFiles": "all four byte-identical to checkpoint archive"
+  }
+}

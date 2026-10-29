@@ -1,0 +1,1369 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-10-29T16:53:28.789Z",
+  "method": "Read existing ASAR header and package metadata; SHA-256 streamed from app.asar; allocated disk sizes from du -sk. No application run or package build.",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v18.20.5"
+  },
+  "repository": {
+    "head": "41aa35dd0774a613dd6aa5c18568e9432843f725",
+    "version": "0.17.1"
+  },
+  "artifact": {
+    "path": "release/mac-arm64/PanePilot.app",
+    "version": "0.17.1",
+    "productName": "PanePilot",
+    "packageName": "project-console",
+    "asar": {
+      "path": "release/mac-arm64/PanePilot.app/Contents/Resources/app.asar",
+      "modifiedAt": "2026-10-28T15:35:13.612Z",
+      "bytes": 175820154,
+      "sha256": "bd9cfbec7a9733ca93c5bbdba6eee6ffcd2a321965e466d025acc9168532dbf8"
+    },
+    "allocatedBytes": 469999616,
+    "resourcesAllocatedBytes": 199024640,
+    "unpackedAllocatedBytes": 23023616,
+    "frameworksAllocatedBytes": 270819328,
+    "frameworkComponents": [
+      {
+        "name": "Electron Framework.framework",
+        "allocatedBytes": 265940992
+      },
+      {
+        "name": "Sparkle.framework",
+        "allocatedBytes": 3092480
+      },
+      {
+        "name": "ReactiveObjC.framework",
+        "allocatedBytes": 397312
+      },
+      {
+        "name": "Squirrel.framework",
+        "allocatedBytes": 319488
+      },
+      {
+        "name": "PanePilot Helper (GPU).app",
+        "allocatedBytes": 237568
+      },
+      {
+        "name": "PanePilot Helper (Plugin).app",
+        "allocatedBytes": 237568
+      },
+      {
+        "name": "PanePilot Helper (Renderer).app",
+        "allocatedBytes": 237568
+      },
+      {
+        "name": "PanePilot Helper.app",
+        "allocatedBytes": 237568
+      },
+      {
+        "name": "Mantle.framework",
+        "allocatedBytes": 118784
+      }
+    ],
+    "entryCount": 7245,
+    "logicalEntryBytes": 196192303,
+    "packedLogicalEntryBytes": 173922158,
+    "unpackedLogicalEntryBytes": 22270145,
+    "groups": [
+      {
+        "path": "node_modules/monaco-editor",
+        "files": 1709,
+        "logicalBytes": 97133738,
+        "packedBytes": 97133738,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "out/renderer",
+        "files": 99,
+        "logicalBytes": 31184086,
+        "packedBytes": 31184086,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/canvas",
+        "files": 68,
+        "logicalBytes": 19197684,
+        "packedBytes": 0,
+        "unpackedBytes": 19197684
+      },
+      {
+        "path": "node_modules/pdfjs-dist",
+        "files": 264,
+        "logicalBytes": 17444070,
+        "packedBytes": 17444070,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/highlight.js",
+        "files": 1563,
+        "logicalBytes": 5473241,
+        "packedBytes": 5473241,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/react-dom",
+        "files": 31,
+        "logicalBytes": 4512343,
+        "packedBytes": 4512343,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/lucide-react",
+        "files": 1759,
+        "logicalBytes": 3507943,
+        "packedBytes": 3507943,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/node-pty",
+        "files": 152,
+        "logicalBytes": 2437320,
+        "packedBytes": 0,
+        "unpackedBytes": 2437320
+      },
+      {
+        "path": "node_modules/framer-motion",
+        "files": 198,
+        "logicalBytes": 2310014,
+        "packedBytes": 2310014,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/node-gyp",
+        "files": 104,
+        "logicalBytes": 1737709,
+        "packedBytes": 1737709,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/motion-dom",
+        "files": 238,
+        "logicalBytes": 1724007,
+        "packedBytes": 1724007,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@xterm/xterm",
+        "files": 97,
+        "logicalBytes": 1158067,
+        "packedBytes": 1158067,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/dompurify",
+        "files": 17,
+        "logicalBytes": 1134337,
+        "packedBytes": 1134337,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/motion",
+        "files": 29,
+        "logicalBytes": 797552,
+        "packedBytes": 797552,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/electron-sparkle-updater",
+        "files": 34,
+        "logicalBytes": 635141,
+        "packedBytes": 0,
+        "unpackedBytes": 635141
+      },
+      {
+        "path": "node_modules/lru-cache",
+        "files": 34,
+        "logicalBytes": 629625,
+        "packedBytes": 629625,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/tar",
+        "files": 72,
+        "logicalBytes": 560274,
+        "packedBytes": 560274,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "out/main",
+        "files": 1,
+        "logicalBytes": 478418,
+        "packedBytes": 478418,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/node-addon-api",
+        "files": 18,
+        "logicalBytes": 372406,
+        "packedBytes": 372406,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/marked",
+        "files": 11,
+        "logicalBytes": 359066,
+        "packedBytes": 359066,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/iconv-lite",
+        "files": 24,
+        "logicalBytes": 325658,
+        "packedBytes": 325658,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/react",
+        "files": 19,
+        "logicalBytes": 316852,
+        "packedBytes": 316852,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/glob",
+        "files": 20,
+        "logicalBytes": 268267,
+        "packedBytes": 268267,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minimatch",
+        "files": 16,
+        "logicalBytes": 170134,
+        "packedBytes": 170134,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@xterm/headless",
+        "files": 2,
+        "logicalBytes": 142221,
+        "packedBytes": 142221,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/path-scurry",
+        "files": 6,
+        "logicalBytes": 133658,
+        "packedBytes": 133658,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/readable-stream",
+        "files": 24,
+        "logicalBytes": 118674,
+        "packedBytes": 118674,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/scheduler",
+        "files": 16,
+        "logicalBytes": 92933,
+        "packedBytes": 92933,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/socks",
+        "files": 19,
+        "logicalBytes": 86228,
+        "packedBytes": 86228,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/ip-address",
+        "files": 11,
+        "logicalBytes": 81262,
+        "packedBytes": 81262,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/semver",
+        "files": 52,
+        "logicalBytes": 75083,
+        "packedBytes": 75083,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass",
+        "files": 6,
+        "logicalBytes": 70446,
+        "packedBytes": 70446,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/tslib",
+        "files": 11,
+        "logicalBytes": 66813,
+        "packedBytes": 66813,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/picomatch",
+        "files": 9,
+        "logicalBytes": 64103,
+        "packedBytes": 64103,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/smart-buffer",
+        "files": 7,
+        "logicalBytes": 63510,
+        "packedBytes": 63510,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@monaco-editor/loader",
+        "files": 31,
+        "logicalBytes": 60878,
+        "packedBytes": 60878,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/buffer",
+        "files": 4,
+        "logicalBytes": 55181,
+        "packedBytes": 55181,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/fdir",
+        "files": 6,
+        "logicalBytes": 48656,
+        "packedBytes": 48656,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass-fetch",
+        "files": 10,
+        "logicalBytes": 45774,
+        "packedBytes": 45774,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/exponential-backoff",
+        "files": 26,
+        "logicalBytes": 43430,
+        "packedBytes": 43430,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/motion-utils",
+        "files": 35,
+        "logicalBytes": 43270,
+        "packedBytes": 43270,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/cacache",
+        "files": 16,
+        "logicalBytes": 40414,
+        "packedBytes": 40414,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/path2d",
+        "files": 5,
+        "logicalBytes": 39521,
+        "packedBytes": 39521,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/make-fetch-happen",
+        "files": 12,
+        "logicalBytes": 38368,
+        "packedBytes": 38368,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minizlib",
+        "files": 8,
+        "logicalBytes": 38218,
+        "packedBytes": 38218,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/tinyglobby",
+        "files": 6,
+        "logicalBytes": 37715,
+        "packedBytes": 37715,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/http-cache-semantics",
+        "files": 3,
+        "logicalBytes": 37195,
+        "packedBytes": 37195,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/safer-buffer",
+        "files": 6,
+        "logicalBytes": 33788,
+        "packedBytes": 33788,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/brace-expansion",
+        "files": 6,
+        "logicalBytes": 30017,
+        "packedBytes": 30017,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/graceful-fs",
+        "files": 6,
+        "logicalBytes": 27363,
+        "packedBytes": 27363,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@isaacs/fs-minipass",
+        "files": 6,
+        "logicalBytes": 27060,
+        "packedBytes": 27060,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/p-map",
+        "files": 3,
+        "logicalBytes": 26137,
+        "packedBytes": 26137,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/state-local",
+        "files": 7,
+        "logicalBytes": 25551,
+        "packedBytes": 25551,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@monaco-editor/react",
+        "files": 12,
+        "logicalBytes": 24541,
+        "packedBytes": 24541,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@npmcli/fs",
+        "files": 12,
+        "logicalBytes": 23607,
+        "packedBytes": 23607,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass-pipeline",
+        "files": 6,
+        "logicalBytes": 22988,
+        "packedBytes": 22988,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/detect-libc",
+        "files": 6,
+        "logicalBytes": 22218,
+        "packedBytes": 22218,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/tar-stream",
+        "files": 7,
+        "logicalBytes": 22000,
+        "packedBytes": 22000,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass-flush",
+        "files": 6,
+        "logicalBytes": 21581,
+        "packedBytes": 21581,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/debug",
+        "files": 6,
+        "logicalBytes": 20109,
+        "packedBytes": 20109,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/nopt",
+        "files": 7,
+        "logicalBytes": 19832,
+        "packedBytes": 19832,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/prebuild-install",
+        "files": 13,
+        "logicalBytes": 19531,
+        "packedBytes": 19531,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/isexe",
+        "files": 14,
+        "logicalBytes": 18556,
+        "packedBytes": 18556,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/tar-fs",
+        "files": 6,
+        "logicalBytes": 18503,
+        "packedBytes": 18503,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/negotiator",
+        "files": 8,
+        "logicalBytes": 18390,
+        "packedBytes": 18390,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@npmcli/agent",
+        "files": 7,
+        "logicalBytes": 17413,
+        "packedBytes": 17413,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/ssri",
+        "files": 3,
+        "logicalBytes": 17197,
+        "packedBytes": 17197,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/tunnel-agent",
+        "files": 3,
+        "logicalBytes": 16566,
+        "packedBytes": 16566,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/node-abi",
+        "files": 4,
+        "logicalBytes": 16053,
+        "packedBytes": 16053,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@npmcli/redact",
+        "files": 8,
+        "logicalBytes": 15541,
+        "packedBytes": 15541,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/bl",
+        "files": 4,
+        "logicalBytes": 13547,
+        "packedBytes": 13547,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/https-proxy-agent",
+        "files": 4,
+        "logicalBytes": 13364,
+        "packedBytes": 13364,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "out/preload",
+        "files": 1,
+        "logicalBytes": 12523,
+        "packedBytes": 12523,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/string_decoder",
+        "files": 3,
+        "logicalBytes": 12345,
+        "packedBytes": 12345,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/github-slugger",
+        "files": 4,
+        "logicalBytes": 12058,
+        "packedBytes": 12058,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/fs-minipass",
+        "files": 3,
+        "logicalBytes": 11596,
+        "packedBytes": 11596,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/agent-base",
+        "files": 4,
+        "logicalBytes": 11547,
+        "packedBytes": 11547,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/yallist",
+        "files": 4,
+        "logicalBytes": 9848,
+        "packedBytes": 9848,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/napi-build-utils",
+        "files": 4,
+        "logicalBytes": 9119,
+        "packedBytes": 9119,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/socks-proxy-agent",
+        "files": 3,
+        "logicalBytes": 8965,
+        "packedBytes": 8965,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minimist",
+        "files": 4,
+        "logicalBytes": 8745,
+        "packedBytes": 8745,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/chownr",
+        "files": 6,
+        "logicalBytes": 8696,
+        "packedBytes": 8696,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/rc",
+        "files": 8,
+        "logicalBytes": 8212,
+        "packedBytes": 8212,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/http-proxy-agent",
+        "files": 3,
+        "logicalBytes": 8036,
+        "packedBytes": 8036,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/base64-js",
+        "files": 4,
+        "logicalBytes": 8019,
+        "packedBytes": 8019,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/content-type",
+        "files": 3,
+        "logicalBytes": 7633,
+        "packedBytes": 7633,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass-sized",
+        "files": 6,
+        "logicalBytes": 6525,
+        "packedBytes": 6525,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/ini",
+        "files": 3,
+        "logicalBytes": 6282,
+        "packedBytes": 6282,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/pump",
+        "files": 7,
+        "logicalBytes": 6212,
+        "packedBytes": 6212,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/simple-get",
+        "files": 3,
+        "logicalBytes": 6200,
+        "packedBytes": 6200,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/deep-extend",
+        "files": 4,
+        "logicalBytes": 6109,
+        "packedBytes": 6109,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@gar/promise-retry",
+        "files": 4,
+        "logicalBytes": 6072,
+        "packedBytes": 6072,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@xterm/addon-fit",
+        "files": 4,
+        "logicalBytes": 5958,
+        "packedBytes": 5958,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/which",
+        "files": 4,
+        "logicalBytes": 5786,
+        "packedBytes": 5786,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/balanced-match",
+        "files": 6,
+        "logicalBytes": 5687,
+        "packedBytes": 5687,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/proc-log",
+        "files": 3,
+        "logicalBytes": 5107,
+        "packedBytes": 5107,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/ms",
+        "files": 3,
+        "logicalBytes": 4600,
+        "packedBytes": 4600,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/loose-envify",
+        "files": 7,
+        "logicalBytes": 4540,
+        "packedBytes": 4540,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/ieee754",
+        "files": 3,
+        "logicalBytes": 4418,
+        "packedBytes": 4418,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/end-of-stream",
+        "files": 3,
+        "logicalBytes": 4351,
+        "packedBytes": 4351,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/mkdirp-classic",
+        "files": 3,
+        "logicalBytes": 4137,
+        "packedBytes": 4137,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/abbrev",
+        "files": 3,
+        "logicalBytes": 4102,
+        "packedBytes": 4102,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/expand-template",
+        "files": 4,
+        "logicalBytes": 4038,
+        "packedBytes": 4038,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/env-paths",
+        "files": 3,
+        "logicalBytes": 3748,
+        "packedBytes": 3748,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/util-deprecate",
+        "files": 5,
+        "logicalBytes": 3559,
+        "packedBytes": 3559,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/safe-buffer",
+        "files": 3,
+        "logicalBytes": 3525,
+        "packedBytes": 3525,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/mimic-response",
+        "files": 3,
+        "logicalBytes": 3350,
+        "packedBytes": 3350,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/strip-json-comments",
+        "files": 3,
+        "logicalBytes": 3287,
+        "packedBytes": 3287,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass-collect",
+        "files": 3,
+        "logicalBytes": 3280,
+        "packedBytes": 3280,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/decompress-response",
+        "files": 3,
+        "logicalBytes": 3122,
+        "packedBytes": 3122,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/js-tokens",
+        "files": 3,
+        "logicalBytes": 2902,
+        "packedBytes": 2902,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/simple-concat",
+        "files": 3,
+        "logicalBytes": 2290,
+        "packedBytes": 2290,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/once",
+        "files": 3,
+        "logicalBytes": 2152,
+        "packedBytes": 2152,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/wrappy",
+        "files": 3,
+        "logicalBytes": 2149,
+        "packedBytes": 2149,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/inherits",
+        "files": 4,
+        "logicalBytes": 2146,
+        "packedBytes": 2146,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/github-from-package",
+        "files": 3,
+        "logicalBytes": 2001,
+        "packedBytes": 2001,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@types/trusted-types",
+        "files": 2,
+        "logicalBytes": 1720,
+        "packedBytes": 1720,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/fs-constants",
+        "files": 4,
+        "logicalBytes": 1615,
+        "packedBytes": 1615,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "package.json",
+        "files": 1,
+        "logicalBytes": 1035,
+        "packedBytes": 1035,
+        "unpackedBytes": 0
+      }
+    ],
+    "largestEntries": [
+      {
+        "path": "node_modules/monaco-editor/dev/vs/assets/ts.worker-DrA3GP0m.js",
+        "logicalBytes": 13308634,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/ts.worker-D1n1aso5.js",
+        "logicalBytes": 13290795,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/dev/vs/language/typescript/ts.worker.js",
+        "logicalBytes": 12720236,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/index-BSAqcNdK.js",
+        "logicalBytes": 9839598,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/esm/vs/languages/features/typescript/lib/typescriptServices.js",
+        "logicalBytes": 9075748,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/min/vs/assets/ts.worker-BWKtMYOk.js",
+        "logicalBytes": 7031833,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/min/vs/language/typescript/ts.worker.js",
+        "logicalBytes": 6746766,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/canvas/build/Release/librsvg-2.2.dylib",
+        "logicalBytes": 5679136,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/monaco-editor/dev/vs/editor-ECyZhXSU.js",
+        "logicalBytes": 4835021,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/esm/vs/languages/features/typescript/lib/lib.js",
+        "logicalBytes": 3213598,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/dev/vs/toggleHighContrast-LEuD8lYt.js",
+        "logicalBytes": 2480930,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/min/vs/editor-KLE6jdfb.js",
+        "logicalBytes": 2389392,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+        "logicalBytes": 2335121,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/pdfjs-dist/build/pdf.worker.mjs",
+        "logicalBytes": 2202494,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/canvas/build/Release/libgio-2.0.0.dylib",
+        "logicalBytes": 2037040,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/monaco-editor/dev/vs/assets/css.worker-DNarQrQK.js",
+        "logicalBytes": 1910320,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/css.worker-Ddkp-8Lu.js",
+        "logicalBytes": 1909561,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs",
+        "logicalBytes": 1410676,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/canvas/build/Release/libglib-2.0.0.dylib",
+        "logicalBytes": 1381552,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
+        "logicalBytes": 1369805,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/pdf.worker.min-GB3t0DcA.mjs",
+        "logicalBytes": 1369805,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/dev/vs/assets/html.worker-_hSXlFAt.js",
+        "logicalBytes": 1285909,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/html.worker-Bh__g14Z.js",
+        "logicalBytes": 1285125,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/min/vs/toggleHighContrast-qGX7E9o7.js",
+        "logicalBytes": 1263617,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/dev/vs/language/css/css.worker.js",
+        "logicalBytes": 1255347,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/canvas/build/Release/libharfbuzz.0.dylib",
+        "logicalBytes": 1230464,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/canvas/build/Release/libcairo.2.dylib",
+        "logicalBytes": 1183328,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/react-dom/umd/react-dom.development.js",
+        "logicalBytes": 1080227,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/monaco-editor/min/vs/assets/css.worker-URu8fCFR.js",
+        "logicalBytes": 1051369,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/react-dom/cjs/react-dom.development.js",
+        "logicalBytes": 1029622,
+        "unpacked": false
+      }
+    ]
+  },
+  "packagingCandidates": {
+    "explanation": "These renderer dependencies already have code/assets in out/renderer. Their extra node_modules copies are exclusion candidates, not measured savings. canvas is a native optional PDF.js dependency; the desktop uses PDF.js in Chromium. Rebuild and smoke-test editor workers, PDF rendering, terminal native helpers, and updates before removing anything.",
+    "modules": [
+      {
+        "path": "node_modules/@monaco-editor/react",
+        "files": 12,
+        "logicalBytes": 24541,
+        "packedBytes": 24541,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@xterm/addon-fit",
+        "files": 4,
+        "logicalBytes": 5958,
+        "packedBytes": 5958,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@xterm/xterm",
+        "files": 97,
+        "logicalBytes": 1158067,
+        "packedBytes": 1158067,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/monaco-editor",
+        "files": 1709,
+        "logicalBytes": 97133738,
+        "packedBytes": 97133738,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/pdfjs-dist",
+        "files": 264,
+        "logicalBytes": 17444070,
+        "packedBytes": 17444070,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/canvas",
+        "files": 68,
+        "logicalBytes": 19197684,
+        "packedBytes": 0,
+        "unpackedBytes": 19197684
+      },
+      {
+        "path": "node_modules/dompurify",
+        "files": 17,
+        "logicalBytes": 1134337,
+        "packedBytes": 1134337,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/github-slugger",
+        "files": 4,
+        "logicalBytes": 12058,
+        "packedBytes": 12058,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/highlight.js",
+        "files": 1563,
+        "logicalBytes": 5473241,
+        "packedBytes": 5473241,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/lucide-react",
+        "files": 1759,
+        "logicalBytes": 3507943,
+        "packedBytes": 3507943,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/marked",
+        "files": 11,
+        "logicalBytes": 359066,
+        "packedBytes": 359066,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/motion",
+        "files": 29,
+        "logicalBytes": 797552,
+        "packedBytes": 797552,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/framer-motion",
+        "files": 198,
+        "logicalBytes": 2310014,
+        "packedBytes": 2310014,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/motion-dom",
+        "files": 238,
+        "logicalBytes": 1724007,
+        "packedBytes": 1724007,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/motion-utils",
+        "files": 35,
+        "logicalBytes": 43270,
+        "packedBytes": 43270,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/react",
+        "files": 19,
+        "logicalBytes": 316852,
+        "packedBytes": 316852,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/react-dom",
+        "files": 31,
+        "logicalBytes": 4512343,
+        "packedBytes": 4512343,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/scheduler",
+        "files": 16,
+        "logicalBytes": 92933,
+        "packedBytes": 92933,
+        "unpackedBytes": 0
+      }
+    ],
+    "logicalBytes": 155247674,
+    "packedBytes": 136049990,
+    "unpackedBytes": 19197684,
+    "mainExternalPackages": [
+      "@xterm/headless",
+      "electron-sparkle-updater",
+      "node-pty"
+    ],
+    "minimumRequiredRuntimeRootModules": [
+      {
+        "path": "node_modules/@xterm/headless",
+        "files": 2,
+        "logicalBytes": 142221,
+        "packedBytes": 142221,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/electron-sparkle-updater",
+        "files": 34,
+        "logicalBytes": 635141,
+        "packedBytes": 0,
+        "unpackedBytes": 635141
+      },
+      {
+        "path": "node_modules/node-pty",
+        "files": 152,
+        "logicalBytes": 2437320,
+        "packedBytes": 0,
+        "unpackedBytes": 2437320
+      }
+    ],
+    "requiredRuntimeRootLogicalBytes": 3214682,
+    "minimumCaveat": "Runtime roots are a lower bound, not a dependency closure. Keep their required transitive packages, Electron, native helpers, Sparkle framework, and licenses. Logical ASAR bytes differ from filesystem allocation and compressed download size."
+  },
+  "developmentFiles": {
+    "explanation": "These workspace build/dependency/release directories are not all shipped inside the app. No files were removed.",
+    "outAllocatedBytes": 31899648,
+    "outLogicalBytes": 31681175,
+    "outLargestFiles": [
+      {
+        "path": "renderer/assets/ts.worker-D1n1aso5.js",
+        "bytes": 13290795
+      },
+      {
+        "path": "renderer/assets/index-BSAqcNdK.js",
+        "bytes": 9839598
+      },
+      {
+        "path": "renderer/assets/css.worker-Ddkp-8Lu.js",
+        "bytes": 1909561
+      },
+      {
+        "path": "renderer/assets/pdf.worker.min-GB3t0DcA.mjs",
+        "bytes": 1369805
+      },
+      {
+        "path": "renderer/assets/html.worker-Bh__g14Z.js",
+        "bytes": 1285125
+      },
+      {
+        "path": "renderer/assets/json.worker-B_6GSjhi.js",
+        "bytes": 883243
+      },
+      {
+        "path": "renderer/assets/LatexPdfPreview-DR0amHRQ.js",
+        "bytes": 642170
+      },
+      {
+        "path": "renderer/assets/editor.worker-BaQuYFPg.js",
+        "bytes": 584645
+      },
+      {
+        "path": "main/index.js",
+        "bytes": 478418
+      },
+      {
+        "path": "renderer/assets/index-DBCxZ9gi.css",
+        "bytes": 436233
+      },
+      {
+        "path": "renderer/assets/codicon-Brq4_Ui5.ttf",
+        "bytes": 140956
+      },
+      {
+        "path": "renderer/assets/lspLanguageFeatures-ovdk3NHx.js",
+        "bytes": 61691
+      },
+      {
+        "path": "renderer/assets/freemarker2-loXs2Y-B.js",
+        "bytes": 42096
+      },
+      {
+        "path": "renderer/assets/tsMode-DOYhD2IV.js",
+        "bytes": 40359
+      },
+      {
+        "path": "renderer/assets/jsonMode-CZnc93-9.js",
+        "bytes": 28929
+      },
+      {
+        "path": "renderer/assets/solidity-yHOxYChb.js",
+        "bytes": 26025
+      },
+      {
+        "path": "renderer/assets/abap-D5KwWAsZ.js",
+        "bytes": 22974
+      },
+      {
+        "path": "renderer/assets/powerquery-BQ_t1ZiQ.js",
+        "bytes": 21645
+      },
+      {
+        "path": "renderer/assets/postiats-CVVurEnu.js",
+        "bytes": 19303
+      },
+      {
+        "path": "renderer/assets/elixir-eLfY1jWH.js",
+        "bytes": 18736
+      }
+    ],
+    "nodeModulesAllocatedBytes": 839405568,
+    "releaseAllocatedBytes": 6445416448
+  },
+  "sourceMetrics": [
+    {
+      "path": "src/main/store.ts",
+      "bytes": 105128,
+      "lines": 3247
+    },
+    {
+      "path": "src/main/conversation-indexer.ts",
+      "bytes": 18809,
+      "lines": 533
+    },
+    {
+      "path": "src/main/remote-conversation-indexer.ts",
+      "bytes": 23475,
+      "lines": 620
+    },
+    {
+      "path": "src/main/codex-subagents.ts",
+      "bytes": 18787,
+      "lines": 376
+    },
+    {
+      "path": "src/main/terminal-manager.ts",
+      "bytes": 110472,
+      "lines": 3243
+    },
+    {
+      "path": "src/main/latex-project-service.ts",
+      "bytes": 50208,
+      "lines": 1510
+    },
+    {
+      "path": "src/main/index.ts",
+      "bytes": 33091,
+      "lines": 821
+    },
+    {
+      "path": "src/renderer/src/components/App.tsx",
+      "bytes": 128701,
+      "lines": 3431
+    },
+    {
+      "path": "src/renderer/src/components/FilesPanel.tsx",
+      "bytes": 49536,
+      "lines": 1451
+    },
+    {
+      "path": "src/renderer/src/components/LatexPdfPreview.tsx",
+      "bytes": 21242,
+      "lines": 687
+    },
+    {
+      "path": "src/renderer/src/components/ChatHistoryPanel.tsx",
+      "bytes": 12343,
+      "lines": 283
+    }
+  ]
+}

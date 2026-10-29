@@ -1,0 +1,130 @@
+PanePilot desktop resource audit — 29 October 2026
+
+Open report.html for the findings, measurements and staged refactoring plan.
+Baseline source commit: 41aa35dd0774a613dd6aa5c18568e9432843f725 (0.17.1).
+No application source, dependency versions or release settings were changed.
+
+BENCHMARKS (run from repository root)
+
+  node scripts/benchmark-desktop.mjs audit/desktop-2026-10-29/core-benchmark.json
+  node scripts/benchmark-desktop-renderer.mjs --output audit/desktop-2026-10-29/renderer-benchmark.json
+  node scripts/benchmark-desktop-package.mjs --output audit/desktop-2026-10-29/package-audit.json
+
+Run timed workloads one at a time, after builds/tests finish. Repeat on the
+same hardware with comparable host load. Report medians and individual samples;
+do not compare a single sample as a guaranteed speedup. CPU ms can exceed elapsed
+ms because V8 can perform concurrent work. No watts/battery measurement is made.
+
+The launchers use installed npm dependencies (esbuild and Electron); no downloads
+or global settings changes occur. The core launcher starts Electron with
+ELECTRON_RUN_AS_NODE=1 and --expose-gc. Native imports match the desktop runtime.
+The renderer launcher uses a hidden sandboxed Electron window and throwaway
+profile; PDF.js and file IPC are mocked. Counts/retention are meaningful; mock
+PDF timing is not a real-document performance measurement.
+
+Core fixtures include real temporary SQLite databases, synthetic provider JSONL,
+production replay retention invoked without constructing a live manager, and
+real remote-file functions run against a fake SSH executable in a child-only
+PATH. No actual SSH connection or provider archive is accessed. The metadata
+probe uses actual file IO and a fake project lookup. It records the known lost-
+update invariant as false rather than throwing, so inspect that field explicitly.
+Temporary data is removed on normal completion and handled errors. Abrupt process
+termination can leave disposable panepilot-*-benchmark/fixture temp directories.
+
+The package script reads the existing release/mac-arm64/PanePilot.app by default.
+An optional positional app path selects a different artifact. It records its own
+mtime/version/hash and distinguishes logical entry bytes from filesystem
+allocation. It does not build, install, sign, publish or delete an app. An existing
+artifact need not match the current source; compare the recorded identity.
+
+Rerunning overwrites JSON results but does not rewrite this dated report. Use a
+different output path for comparison runs. Record the new source revision and
+working-tree changes. Keep the original data with the baseline report.
+
+BASELINE VALIDATION
+
+Use a supported Node version for npm run build (audit used Node 22.13.0):
+
+  npm run build
+
+The audit's default shell Node 18.20.5 was below package.json's >=20.19.0 engine.
+The command above includes typecheck. For SQLite/native-module test compatibility,
+the audit ran Vitest under the installed Electron binary on macOS:
+
+  ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron node_modules/vitest/vitest.mjs run --maxWorkers=2
+
+Result: 98 files passed, 1 skipped; 539 tests passed, 2 skipped. This was the full
+repository suite, including 6 Android installer tests; the audit is desktop-only.
+Some existing integration tests create/clean their own exact temporary tmux
+sessions. The new benchmark scripts never construct real terminal sessions.
+
+The existing gated output benchmark was also enabled separately:
+
+  PANEPILOT_OUTPUT_BENCHMARK=1 ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron node_modules/vitest/vitest.mjs run tests/terminal-output-benchmark.test.ts --maxWorkers=1
+
+Result: 1 test passed. The other baseline skip was an optional remote fixture.
+See validation.json for the stored counts and existing benchmark result.
+
+Syntax/whitespace checks:
+
+  node --check scripts/benchmark-desktop.mjs
+  node --check scripts/benchmark-desktop-renderer.mjs
+  node --check scripts/benchmark-desktop-package.mjs
+  git diff --check
+
+The report is a static HTML file with no scripts or remote assets. Source links
+are relative to this repository. Open at desktop/narrow widths; wide data tables
+scroll horizontally. No web service is required to view it.
+
+CHECKPOINT
+
+Original branch: release/v0.17.1
+Original HEAD: 41aa35dd0774a613dd6aa5c18568e9432843f725
+Local checkpoint: checkpoint/pre-desktop-audit-20261029T164816Z
+Audit branch: audit/desktop-efficiency-2026-10-29
+
+External backup, relative to repository root:
+  ../panepilot-audit-checkpoint-20261029T164816Z/
+
+Contains repository.bundle (complete Git refs/history), working-tree.tar.gz,
+staged.patch, unstaged.patch and manifest.json with SHA-256 checksums. The Git
+bundle and all checksums were verified. The archive contains tracked and
+non-ignored untracked files; ignored build outputs/dependencies and live app data
+are excluded. In particular it preserves these originally untracked files:
+
+  .panepilot/notes/TODO.md
+  docs/pnpm-lock.yaml
+  pnpm-lock.yaml
+  test-tts.mjs
+
+The checkpoint branch is local; the backup directory is outside this repository.
+Neither is included in the audit commit. Keep the backup directory independently.
+
+To inspect the exact original code, first preserve any later work, then:
+
+  git switch checkpoint/pre-desktop-audit-20261029T164816Z
+
+This switches code; it does not reset app data or remove untracked files. You can
+also return to the untouched release/v0.17.1 branch. Do not use reset --hard or
+clean to recover this checkpoint.
+
+To recover into a new sibling directory, run from the current repository root
+(the destination must not already exist):
+
+  git clone ../panepilot-audit-checkpoint-20261029T164816Z/repository.bundle ../panepilot-restored-20261029
+  git -C ../panepilot-restored-20261029 switch checkpoint/pre-desktop-audit-20261029T164816Z
+  tar -xzf ../panepilot-audit-checkpoint-20261029T164816Z/working-tree.tar.gz -C ../panepilot-restored-20261029
+
+This reproduces the original tracked tree and its four untracked files in a
+separate clone. Install dependencies there if needed. It does not recover live
+SQLite data, provider archives or ignored files; the audit did not change those.
+
+FOLLOW-UP ENERGY MEASUREMENT
+
+Use an isolated packaged-app profile and copied/synthetic datasets. Compare idle
+foreground, hidden/minimized and macOS window-closed states; then active terminal
+output, many sessions on one offline host, large archives, long PDFs and split
+panes. Sample the whole Electron process tree over repeated fixed windows. Record
+CPU, RSS, process launches, read/write volume and wakeups. Use calibrated power
+instrumentation if available and record hardware/power conditions. Never turn
+these service-level CPU/IO numbers into an estimated battery-life percentage.

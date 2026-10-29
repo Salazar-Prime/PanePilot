@@ -1,0 +1,272 @@
+{
+  "capturedAt": "2026-10-29T16:53:55.077Z",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4",
+    "electron": "39.8.10",
+    "chromium": "142.0.7444.265"
+  },
+  "method": "Production React components bundled with esbuild. Hidden sandboxed Electron window, 1200x850, backgroundThrottling false, isolated throwaway profile; actual component code and DOM layout, fake PDF.js and fake projectConsole. PDF cache exposed read-only in generated fixture, source files unchanged.",
+  "limitations": [
+    "initialSettleMs is observed at 20ms polling resolution; elapsedMs additionally includes a 100ms observation window. Neither measures PDF parsing/rendering or actual disk/SSH latency.",
+    "Fake PDF pages draw nothing. getPage counts verify eagerness, not real PDF.js CPU cost.",
+    "Heap after explicit GC separates V8 heap usedSize from external backingStorageSize (including strings); excludes renderer RSS, GPU memory, PDF workers and browser native allocations.",
+    "Markdown image requests return tiny fake previews after 25ms. Peak concurrency measures attempted component IPC fan-out, not real file sizes or SSH connections.",
+    "This is not a battery/power benchmark and no watt or full-application CPU claim is made."
+  ],
+  "initialHeap": {
+    "backingStorageSize": 1502515,
+    "embedderHeapUsedSize": 329176,
+    "totalSize": 2621440,
+    "usedSize": 1711032
+  },
+  "pageCases": [
+    {
+      "pages": 10,
+      "samples": [
+        {
+          "kind": "pdf",
+          "pages": 10,
+          "getPageCalls": 13,
+          "renderCalls": 3,
+          "documentsCreated": 1,
+          "documentsDestroyed": 0,
+          "imageRequests": 0,
+          "imageInFlight": 0,
+          "imagePeak": 0,
+          "imageCompleted": 0,
+          "uniquePageCount": 10,
+          "pageShells": 10,
+          "elapsedMs": 144.70000004768372,
+          "documentHidden": false,
+          "initialSettleMs": 38.700000047683716
+        },
+        {
+          "kind": "pdf",
+          "pages": 10,
+          "getPageCalls": 13,
+          "renderCalls": 3,
+          "documentsCreated": 1,
+          "documentsDestroyed": 0,
+          "imageRequests": 0,
+          "imageInFlight": 0,
+          "imagePeak": 0,
+          "imageCompleted": 0,
+          "uniquePageCount": 10,
+          "pageShells": 10,
+          "elapsedMs": 131.79999995231628,
+          "documentHidden": false,
+          "initialSettleMs": 23.799999952316284
+        },
+        {
+          "kind": "pdf",
+          "pages": 10,
+          "getPageCalls": 13,
+          "renderCalls": 3,
+          "documentsCreated": 1,
+          "documentsDestroyed": 0,
+          "imageRequests": 0,
+          "imageInFlight": 0,
+          "imagePeak": 0,
+          "imageCompleted": 0,
+          "uniquePageCount": 10,
+          "pageShells": 10,
+          "elapsedMs": 131.20000004768372,
+          "documentHidden": false,
+          "initialSettleMs": 29.5
+        }
+      ]
+    },
+    {
+      "pages": 100,
+      "samples": [
+        {
+          "kind": "pdf",
+          "pages": 100,
+          "getPageCalls": 103,
+          "renderCalls": 3,
+          "documentsCreated": 1,
+          "documentsDestroyed": 0,
+          "imageRequests": 0,
+          "imageInFlight": 0,
+          "imagePeak": 0,
+          "imageCompleted": 0,
+          "uniquePageCount": 100,
+          "pageShells": 100,
+          "elapsedMs": 122.39999985694885,
+          "documentHidden": false,
+          "initialSettleMs": 21.399999856948853
+        },
+        {
+          "kind": "pdf",
+          "pages": 100,
+          "getPageCalls": 103,
+          "renderCalls": 3,
+          "documentsCreated": 1,
+          "documentsDestroyed": 0,
+          "imageRequests": 0,
+          "imageInFlight": 0,
+          "imagePeak": 0,
+          "imageCompleted": 0,
+          "uniquePageCount": 100,
+          "pageShells": 100,
+          "elapsedMs": 130.30000019073486,
+          "documentHidden": false,
+          "initialSettleMs": 25.800000190734863
+        },
+        {
+          "kind": "pdf",
+          "pages": 100,
+          "getPageCalls": 103,
+          "renderCalls": 3,
+          "documentsCreated": 1,
+          "documentsDestroyed": 0,
+          "imageRequests": 0,
+          "imageInFlight": 0,
+          "imagePeak": 0,
+          "imageCompleted": 0,
+          "uniquePageCount": 100,
+          "pageShells": 100,
+          "elapsedMs": 139.29999995231628,
+          "documentHidden": false,
+          "initialSettleMs": 30.59999990463257
+        }
+      ]
+    },
+    {
+      "pages": 500,
+      "samples": [
+        {
+          "kind": "pdf",
+          "pages": 500,
+          "getPageCalls": 503,
+          "renderCalls": 3,
+          "documentsCreated": 1,
+          "documentsDestroyed": 0,
+          "imageRequests": 0,
+          "imageInFlight": 0,
+          "imagePeak": 0,
+          "imageCompleted": 0,
+          "uniquePageCount": 500,
+          "pageShells": 500,
+          "elapsedMs": 135.40000009536743,
+          "documentHidden": false,
+          "initialSettleMs": 30.5
+        },
+        {
+          "kind": "pdf",
+          "pages": 500,
+          "getPageCalls": 503,
+          "renderCalls": 3,
+          "documentsCreated": 1,
+          "documentsDestroyed": 0,
+          "imageRequests": 0,
+          "imageInFlight": 0,
+          "imagePeak": 0,
+          "imageCompleted": 0,
+          "uniquePageCount": 500,
+          "pageShells": 500,
+          "elapsedMs": 134.60000014305115,
+          "documentHidden": false,
+          "initialSettleMs": 28.100000143051147
+        },
+        {
+          "kind": "pdf",
+          "pages": 500,
+          "getPageCalls": 503,
+          "renderCalls": 3,
+          "documentsCreated": 1,
+          "documentsDestroyed": 0,
+          "imageRequests": 0,
+          "imageInFlight": 0,
+          "imagePeak": 0,
+          "imageCompleted": 0,
+          "uniquePageCount": 500,
+          "pageShells": 500,
+          "elapsedMs": 130.70000004768372,
+          "documentHidden": false,
+          "initialSettleMs": 29.59999990463257
+        }
+      ]
+    }
+  ],
+  "retainedSnapshots": {
+    "projectsVisited": 8,
+    "syntheticPdfBytesEach": 2097152,
+    "cacheBefore": {
+      "projects": 9,
+      "base64Characters": 12312
+    },
+    "cacheAfter": {
+      "projects": 17,
+      "base64Characters": 22381944
+    },
+    "heapBefore": {
+      "backingStorageSize": 1516506,
+      "embedderHeapUsedSize": 477824,
+      "totalSize": 4456448,
+      "usedSize": 2702224
+    },
+    "heapAfter": {
+      "backingStorageSize": 23886138,
+      "embedderHeapUsedSize": 359040,
+      "totalSize": 3407872,
+      "usedSize": 2704232
+    },
+    "usedHeapDeltaBytes": 2008,
+    "backingStorageDeltaBytes": 22369632,
+    "cacheBase64DeltaCharacters": 22369632,
+    "currentMountedPages": 0
+  },
+  "markdownCases": [
+    {
+      "kind": "markdown",
+      "pages": 0,
+      "getPageCalls": 0,
+      "renderCalls": 0,
+      "documentsCreated": 0,
+      "documentsDestroyed": 0,
+      "imageRequests": 10,
+      "imageInFlight": 0,
+      "imagePeak": 10,
+      "imageCompleted": 10,
+      "uniquePageCount": 0,
+      "pageShells": 0,
+      "elapsedMs": 52.200000047683716,
+      "documentHidden": false
+    },
+    {
+      "kind": "markdown",
+      "pages": 0,
+      "getPageCalls": 0,
+      "renderCalls": 0,
+      "documentsCreated": 0,
+      "documentsDestroyed": 0,
+      "imageRequests": 100,
+      "imageInFlight": 0,
+      "imagePeak": 100,
+      "imageCompleted": 100,
+      "uniquePageCount": 0,
+      "pageShells": 0,
+      "elapsedMs": 32.799999952316284,
+      "documentHidden": false
+    },
+    {
+      "kind": "markdown",
+      "pages": 0,
+      "getPageCalls": 0,
+      "renderCalls": 0,
+      "documentsCreated": 0,
+      "documentsDestroyed": 0,
+      "imageRequests": 500,
+      "imageInFlight": 0,
+      "imagePeak": 500,
+      "imageCompleted": 500,
+      "uniquePageCount": 0,
+      "pageShells": 0,
+      "elapsedMs": 50.799999952316284,
+      "documentHidden": false
+    }
+  ]
+}

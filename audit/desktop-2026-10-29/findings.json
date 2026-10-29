@@ -1,0 +1,308 @@
+[
+  {
+    "id": "F01",
+    "priority": "P1",
+    "title": "Remote Actions poll and transfer full scrollback while running",
+    "evidence": "Code-confirmed. Action completion schedules another read 250 ms after settlement. The remote path captures the complete tmux history with capture-pane -S - before interpreting exit status; the local path waits until completion. No real SSH throughput was benchmarked.",
+    "impact": "Each running remote Action can approach four SSH subprocesses and repeated history transfers per second (actual period: 250 ms plus request duration). A capture exceeding the 1 MiB output bound becomes a failed read; even a completed Action can continue polling without being finalized.",
+    "fix": "Read small lifecycle metadata while running. Capture bounded final output only after completion, independently of the completion decision. Coalesce reads by connection and use an adaptive cadence.",
+    "verify": "A running action with unchanged output transfers status only; a completed action with oversized history still completes and exposes explicit truncation. Keep exact-session cleanup and interactive input.",
+    "references": [
+      "src/main/terminal-manager.ts:2465",
+      "src/main/terminal-manager.ts:2502",
+      "src/main/terminal-manager.ts:2573"
+    ]
+  },
+  {
+    "id": "F02",
+    "priority": "P1",
+    "title": "Codex replay retention does large copies for tiny appends",
+    "evidence": "Measured with the production retainTerminalOutput method, constructor bypassed. The 512 KiB buffer coalesces over 256 chunks into a large string; subsequent small appends repeatedly encode, slice, decode and recount that large head chunk.",
+    "impact": "The retained-size limit bounds stored content but not allocation/CPU work. The benchmark below isolates replay retention; it excludes PTY, headless parsing, IPC and renderer costs.",
+    "fix": "Extract a byte-counted deque/ring with a head offset. Compact amortized, avoid Array.shift and full-buffer conversions on each small append, and preserve UTF-8 boundaries.",
+    "verify": "Compare CPU and elapsed time at identical workloads; verify exact suffix, split multibyte text, escape sequences, large writes, reset and shutdown behavior. Do not persist Codex replay to SQLite.",
+    "references": [
+      "src/main/terminal-manager.ts:240",
+      "src/main/terminal-manager.ts:2351"
+    ]
+  },
+  {
+    "id": "F03",
+    "priority": "P1",
+    "title": "Interactive SSH operations still block the main event loop",
+    "evidence": "Measured: actual synchronous folder browsing versus asynchronous file browsing with a fake SSH executable sleeping 200 ms. Synchronous Notes/Actions metadata, connection tests and several capability-launch/rename/stop paths also remain in production.",
+    "impact": "A slow SSH operation can freeze unrelated windows, input and terminal IPC until the child returns. Relevant timeouts range from 3 to 15 seconds; sequential archive/rename checks can compound delays. An async function wrapping spawnSync does not yield.",
+    "fix": "Introduce one asynchronous command runner with timeout, cancellation, byte bounds and exit handling. Migrate folder browsing and Notes first, then capability launches/stops with explicit mutation serialization.",
+    "verify": "Use delayed fake child processes to assert timers and unrelated IPC stay responsive. Preserve exact-session ownership checks and archive-only-after-every-stop-succeeds behavior.",
+    "references": [
+      "src/main/remote-file-service.ts:467",
+      "src/main/remote-file-service.ts:591",
+      "src/main/project-metadata-service.ts:685",
+      "src/main/terminal-manager.ts:3145",
+      "src/main/port-forward-manager.ts:34"
+    ]
+  },
+  {
+    "id": "F04",
+    "priority": "P1",
+    "title": "Conversation browsing scans every local archive synchronously",
+    "evidence": "Measured using custom temporary archive roots. list/get recursively traverse and stat all files; changed files are read and parsed in full. The cache retains full transcripts for unrelated projects without a byte bound. Selected-chat get also depends on every raw search keystroke, despite list debounce.",
+    "impact": "Cold cost scales with all archive bytes, warm cost with all archive files, and search with queried text. Main-thread stalls and retained transcript memory grow independently of the number of visible conversations.",
+    "fix": "Build an asynchronous or worker-owned file catalog with identity/revision/parser version, incremental append parsing with rewrite fallback, lazy details and a byte-bounded cache. Reuse it for thread/subagent discovery. Use a rebuildable FTS index if volume warrants; avoid refetching a transcript solely for search metadata.",
+    "verify": "Benchmark cold/warm/mutated-file cases at 100, 1,000 and larger collections. Preserve read-only archives, complete search and explicit cross-folder descendants.",
+    "references": [
+      "src/main/conversation-indexer.ts:261",
+      "src/main/conversation-indexer.ts:308",
+      "src/main/conversation-indexer.ts:495",
+      "src/renderer/src/components/ChatHistoryPanel.tsx:100"
+    ]
+  },
+  {
+    "id": "F05",
+    "priority": "P1",
+    "title": "Concurrent shared-comment edits can lose a successful write",
+    "evidence": "Reproduced with real ProjectMetadataService file IO in a temporary local project: two concurrent create calls both succeeded, but only one comment remained. Both read the old list before replacing the file. This is a service-level probe, not a claim about a particular UI gesture.",
+    "impact": "Atomic replacement prevents partial JSON but not lost updates. A client-local queue alone also cannot protect two laptops editing the same shared project. Shared Action read/replace operations have an analogous untested cross-client risk.",
+    "fix": "Provide a canonical-location-scoped metadata mutation API. Serialize within one client and add host-side revision checking or a locked merge for separate clients; retain authoritative .panepilot files.",
+    "verify": "Concurrent creates retain both IDs; create/delete cannot resurrect entries; stale revisions report conflicts; migration cannot overwrite a newer file. Preserve symlink and path guards.",
+    "references": [
+      "src/main/project-metadata-service.ts:958",
+      "src/main/project-metadata-service.ts:985",
+      "src/main/project-metadata-service.ts:1049"
+    ]
+  },
+  {
+    "id": "F06",
+    "priority": "P1",
+    "title": "Markdown image loading has no aggregate admission budget",
+    "evidence": "Measured in actual MarkdownPreview with fake asynchronous preview IPC: 10/100/500 local images produced peak concurrency 10/100/500. Promise.all starts all reads; HTML loading=lazy does not defer these IPC calls.",
+    "impact": "Per-image limits (5 MiB) do not cap total requests or memory. Actual memory and SSH concurrency depend on the backend and image sizes; the benchmark did not allocate 500 full-size images.",
+    "fix": "Reuse the bounded asset-loading pattern from HTML previews: viewport admission, three concurrent reads, total byte/file limits, cancellation and per-project cache ownership.",
+    "verify": "Assert peak admission, aggregate bytes, duplicate coalescing, cancellation after navigation and explicit limit messages. Keep sanitization and secure external-image behavior.",
+    "references": [
+      "src/renderer/src/components/MarkdownPreview.tsx:100",
+      "src/renderer/src/lib/htmlPreview.ts:11",
+      "src/main/file-service.ts:22"
+    ]
+  },
+  {
+    "id": "F07",
+    "priority": "P1",
+    "title": "PDF snapshots retain unbounded renderer-lifetime memory",
+    "evidence": "Measured: visit/unmount eight distinct 2 MiB mock PDF snapshots; cache strings and external backing storage retain 22,369,632 bytes after GC, with zero PDF page nodes mounted. pdfSnapshotCache has no eviction; destroying the PDF.js proxy does not remove its snapshot.",
+    "impact": "A 32 MiB per-PDF cap does not bound all projects. Base64 expands bytes by about one third, before active PDF.js, worker, native or GPU memory. Those additional costs were not measured.",
+    "fix": "Introduce owned immutable snapshots with byte accounting and bounded hot memory, possibly binary transport and cold temporary-file storage. Keep lightweight page/zoom/scroll state separately.",
+    "verify": "Never silently reread a changed disk PDF after eviction: preserve the exact displayed and printed snapshot until explicit manual/auto compile. Test project changes, cleanup, failure and split-pane ownership.",
+    "references": [
+      "src/renderer/src/components/LatexPdfPreview.tsx:59",
+      "src/renderer/src/components/LatexPdfPreview.tsx:231",
+      "src/main/latex-project-service.ts:61"
+    ]
+  },
+  {
+    "id": "F08",
+    "priority": "P1",
+    "title": "Editor-model ownership and dirty-cache eviction need repair",
+    "evidence": "Code-observed. LaTeX uses keepCurrentModel and unique project/path URIs but does not dispose text models. The 32-entry source cache does not own Monaco model lifetime and can evict dirty snapshots and clear restart guards. Files/Notes path switches also leave old models outside tab-close disposal.",
+    "impact": "Model text/undo history can accumulate. Separately, revisiting a dirty source after snapshot eviction may load disk content over its retained model. That dirty-eviction scenario needs a dedicated runtime regression; it was not reproduced here.",
+    "fix": "Create a model registry with split-pane reference counts, dirty-state pinning and bounded clean-model retention. Separate drafts from disposable content. Dispose only models with no editor/draft owner.",
+    "verify": "Open over 32 sources, keep early dirty drafts, remount and verify exact text/undo. Closing clean tabs must release models; one pane must not dispose another pane\u2019s model.",
+    "references": [
+      "src/renderer/src/components/LatexManuscript.tsx:97",
+      "src/renderer/src/components/LatexManuscript.tsx:482",
+      "src/renderer/src/components/LatexManuscript.tsx:1596",
+      "src/renderer/src/components/FilesPanel.tsx:460"
+    ]
+  },
+  {
+    "id": "F09",
+    "priority": "P2",
+    "title": "Distribution includes large renderer-dependency duplicates",
+    "evidence": "Measured from the existing 0.17.1 app, not a newly packaged build. Monaco, PDF.js, React, Motion, highlighting and icon packages are shipped alongside their compiled renderer. Optional native canvas adds another large payload.",
+    "impact": "148.06 MiB of logical dependency payload is an exclusion candidate in a 448.23 MiB allocated app. This is not a demonstrated compressed-download saving or a claim that every candidate is safely removable.",
+    "fix": "Distinguish renderer build dependencies from main-process runtime dependencies, or apply a validated package allowlist. Preserve node-pty, headless xterm, Sparkle, their required transitives/native helpers and licenses.",
+    "verify": "Build an isolated package and verify Monaco workers/languages, PDF rendering, PTY launch and updater loading with the dev server stopped. Compare ASAR contents and installed/download bytes before publication.",
+    "references": [
+      "package.json:36",
+      "electron-builder.yml:9",
+      "src/renderer/src/lib/monaco.ts:1"
+    ]
+  },
+  {
+    "id": "F10",
+    "priority": "P2",
+    "title": "The intended four-surface terminal limit can be exceeded",
+    "evidence": "Code-path analysis, not a mounted-surface benchmark. Inactive cached projects receive selectedSessionId=null, choose their first open tab and append it even when absent from the four retained entries. Four projects retaining a non-first tab can therefore render seven surfaces in one pane.",
+    "impact": "Unbudgeted xterms attach and consume output. The helper cache length alone cannot establish the number of mounted terminals.",
+    "fix": "Only append an uncached activeSession when that workspace is active. Inactive projects must render exactly their retained entries.",
+    "verify": "Render four projects with multiple tabs, visit a non-first tab in each and count actual xterm/attach subscriptions. Keep hidden input/resize guards and preserve backend sessions on disposal.",
+    "references": [
+      "src/renderer/src/components/PaneWorkspaceStack.tsx:110",
+      "src/renderer/src/components/TerminalProjectWorkspace.tsx:153",
+      "src/renderer/src/components/TerminalProjectWorkspace.tsx:213"
+    ]
+  },
+  {
+    "id": "F11",
+    "priority": "P2",
+    "title": "Optional UI polling lacks a consistent visibility/settlement policy",
+    "evidence": "Code-observed: Git polls every 12 s; selected-connection discovery every 15 s; running LaTeX edit diffs every 1.8 s; enabled PDF auto-compile checks every 2.5 s. Git/diff paths lack in-flight guards; these effects lack explicit document-hidden gates. Chromium may throttle timers, so the listed rates are nominal, not measured hidden-window rates.",
+    "impact": "LaTeX diff reads and compares all bounded source files even behind another capability. Slow requests can overlap. Git status invokes three git/SSH commands, including stable root/origin metadata, per refresh. Existing discovery single-flight already prevents some duplicate work.",
+    "fix": "Use settlement-based scheduling, per-key single-flight, cancellation/identity fences and explicit foreground/background policies. Cache root/origin separately and batch remote Git reads. Keep required agent lifecycle monitoring; establish intended background auto-compile behavior before changing it.",
+    "verify": "Count requests while visible, hidden, switched and slow. No overlap; returning to foreground refreshes promptly; real running jobs remain running.",
+    "references": [
+      "src/renderer/src/components/App.tsx:1233",
+      "src/renderer/src/components/App.tsx:1334",
+      "src/renderer/src/components/LatexProjectWorkspace.tsx:425",
+      "src/main/latex-project-service.ts:1362",
+      "src/main/git.ts:455"
+    ]
+  },
+  {
+    "id": "F12",
+    "priority": "P2",
+    "title": "Offline recovery duplicates full host scans per session",
+    "evidence": "Code-confirmed. Ordinary discovery coalesces by connection; runRemoteReconnect instead calls listRemoteTmuxSessions independently for every disconnected session. Wake forces many sessions to reconnect together.",
+    "impact": "N sessions on one unreachable host can perform N equivalent scans per backoff round, plus ordinary discovery. Backoff reaches about 30 s plus command duration but does not consolidate host work.",
+    "fix": "Own scan/backoff state by connection, distribute one result to exact-session consumers, and add bounded concurrency/jitter.",
+    "verify": "With many sessions on one offline host, assert one scan per round. Unreachable transport must never be interpreted as a successfully observed missing terminal.",
+    "references": [
+      "src/main/terminal-manager.ts:1123",
+      "src/main/terminal-manager.ts:1409",
+      "src/main/terminal-manager.ts:2730",
+      "src/main/terminal-manager.ts:2806"
+    ]
+  },
+  {
+    "id": "F13",
+    "priority": "P2",
+    "title": "Headless parsing and output queues are not demand-bounded",
+    "evidence": "Code-observed. Every attached runtime creates headless xterm with 1,000 scrollback rows and parses each chunk, including tmux shell/Action profiles without screen detectors. Every chunk is sent to the renderer without an app-level acknowledgment/backpressure protocol.",
+    "impact": "Renderer surface eviction does not stop main-process parsing. The 512 KiB replay cap does not bound parser/IPC queues. The installed headless xterm WriteBuffer eventually rejects extremely large pending data; no normal-use queue overflow was benchmarked.",
+    "fix": "Omit unnecessary headless screens for tmux non-agent profiles, retain plain-PTY preview and agent detection screens, and add byte-budgeted parser/IPC flow control with subscriber-aware batching.",
+    "verify": "Stress high-output sessions and slow consumers while monitoring queued bytes and CPU. Preserve raw byte ordering, escape sequences, sticky lifecycle states and useful background monitoring.",
+    "references": [
+      "src/main/terminal-manager.ts:1447",
+      "src/main/terminal-manager.ts:1950",
+      "src/main/terminal-manager.ts:1983",
+      "src/renderer/src/components/ManagedTerminal.tsx:291"
+    ]
+  },
+  {
+    "id": "F14",
+    "priority": "P2",
+    "title": "Archive presence and remote history need shared indexing",
+    "evidence": "Code-observed. Subagent presence opens/stats/closes every local archive even with cached headers; cold reads can consume 256 KiB merely for a first line. Remote history parses all archives before project filtering, returns full matching transcripts, and has a 5 s cache without single-flight or eviction.",
+    "impact": "A light presence dot can cost a global directory pass. Expired concurrent list/detail requests may duplicate SSH/Python work. Remote 20 MiB base64 stdout bounds failure size, not a usable paged history experience.",
+    "fix": "Reuse a provider archive catalog and explicit parent index. Refresh known descendant tails separately from slower new-file reconciliation. Coalesce remote reads, bound cache bytes and separate summaries from paged details.",
+    "verify": "Measure stat/open counts as collections grow. Preserve cross-worktree descendants, scan-limit visibility, malformed-header handling, read-only archives and exact provider identity.",
+    "references": [
+      "src/main/codex-subagents.ts:173",
+      "src/main/remote-conversation-indexer.ts:117",
+      "src/main/remote-conversation-indexer.ts:600"
+    ]
+  },
+  {
+    "id": "F15",
+    "priority": "P2",
+    "title": "PDF page acquisition and scroll bookkeeping remain eager",
+    "evidence": "Measured with real React/layout and mocked PDF.js: 10/100/500-page documents requested every page, with 13/103/503 getPage calls while only three pages rendered. The viewer mounts a shell for every page. Scroll handling scans page DOM bounds; zoom repeats acquisition.",
+    "impact": "Rasterization is lazy, but metadata acquisition, effects and DOM size scale with total pages. Mock timings do not estimate actual PDF parsing or GPU cost.",
+    "fix": "Acquire pages near the viewport, cache dimensions and use a bounded window/spacers or an indexed page-position structure for reading position.",
+    "verify": "Use real varied-size PDFs for follow-up measurements. Preserve continuous scrolling, exact printed snapshot, page/zoom/scroll restoration and cancellation during rapid zoom.",
+    "references": [
+      "src/renderer/src/components/LatexPdfPreview.tsx:116",
+      "src/renderer/src/components/LatexPdfPreview.tsx:357",
+      "src/renderer/src/components/LatexPdfPreview.tsx:672"
+    ]
+  },
+  {
+    "id": "F16",
+    "priority": "P2",
+    "title": "Document caches and annotations do avoidable lifetime work",
+    "evidence": "Code-observed. filesPanelCache retains clean previews/directory/search state for every visited project without byte eviction. Comment layout can repeatedly fetch full model text and resolve each moved anchor during scrolling and typing.",
+    "impact": "Permanent images accumulate base64 content. Worst-case anchor work scales with comment count \u00d7 source length per refresh, even when only vertical coordinates changed. No annotation CPU benchmark was run.",
+    "fix": "Separate navigation and protected drafts from reloadable clean assets. Resolve anchors by model/comment revision, retain tracked ranges, and update only visible positions on scroll.",
+    "verify": "Close/remove projects and verify clean-asset release without draft loss. Test ambiguous/moved anchors and scroll a heavily commented source without repeated full-text resolution.",
+    "references": [
+      "src/renderer/src/components/FilesPanel.tsx:75",
+      "src/renderer/src/components/FilesPanel.tsx:288",
+      "src/renderer/src/components/LatexManuscript.tsx:197",
+      "src/renderer/src/components/LatexManuscript.tsx:405"
+    ]
+  },
+  {
+    "id": "F17",
+    "priority": "P2",
+    "title": "Hidden writing chats miss the inactive-surface contract",
+    "evidence": "Code-observed. The persistent writing margin can be hidden while LatexAgentPane does not pass active to ManagedTerminal; active defaults true.",
+    "impact": "Hidden writing chats bypass the ordinary inactive input/resize gates and keep processing output as active surfaces. This is distinct from deliberately retaining the backend.",
+    "fix": "Pass mounted/visible/focused state explicitly through the writing pane and centralize capability lifecycle policy.",
+    "verify": "Hide the margin, switch capabilities/panes and verify no hidden input or resize IPC while restoration preserves the chat and backend.",
+    "references": [
+      "src/renderer/src/components/LatexProjectWorkspace.tsx:788",
+      "src/renderer/src/components/LatexAgentPane.tsx:256",
+      "src/renderer/src/components/ManagedTerminal.tsx:44"
+    ]
+  },
+  {
+    "id": "F18",
+    "priority": "P2",
+    "title": "Legacy output migration retains a duplicate durable copy",
+    "evidence": "Code-observed. Migration copies the legacy output column into terminal_output_chunks without clearing the old column. A later append/replace clears it, but completed legacy sessions may never write again.",
+    "impact": "Old sessions can keep two full copies indefinitely; migration also loads all legacy output rows together. Current retention rules intentionally preserve oversized legacy output.",
+    "fix": "Copy/verify/clear transactionally in bounded batches. Preserve complete legacy bytes; do not apply the new live retention cap retroactively.",
+    "verify": "Migrate, reopen, compare exact bytes and confirm the redundant column is empty, including oversized and UTF-8 fixtures.",
+    "references": [
+      "src/main/store.ts:854",
+      "src/main/store.ts:2758",
+      "tests/terminal-output-storage.test.ts:80"
+    ]
+  },
+  {
+    "id": "F19",
+    "priority": "P2",
+    "title": "Startup migrations repeatedly normalize already-current data",
+    "evidence": "Code-observed. migrate reads user_version but reruns most schema checks and normalization, then unconditionally assigns version 21. No explicit newer-schema rejection precedes this.",
+    "impact": "Repeated startup writes complicate performance and downgrade compatibility. Code rollback does not guarantee live database rollback; no live user database was opened for this audit.",
+    "fix": "Extract ordered forward migrations with a compatibility bootstrap and unsupported-newer-version guard. Keep domain repositories behind the existing transaction owner.",
+    "verify": "Verify supported legacy upgrades, second-open idempotence, interrupted migrations and newer-schema refusal. Preserve existing version-20 cleanup semantics.",
+    "references": [
+      "src/main/store.ts:506",
+      "src/main/store.ts:768",
+      "src/main/store.ts:838"
+    ]
+  },
+  {
+    "id": "F20",
+    "priority": "P3",
+    "title": "Heavy default reads and inaccessible history add avoidable cost",
+    "evidence": "Code-observed. Drive status/existence checks call getProject, which hydrates saved replay. Activities accumulate while only the newest 100 are exposed. Inline-edit history returns all originals/replacements/model notes. Git history recounts commits and uses --skip on each page.",
+    "impact": "Unrelated UI actions may materialize replay; durable histories become large transfers. SQLite deleted pages are reusable but file size may stay at its high-water mark. This is not evidence of a WAL leak.",
+    "fix": "Use explicit identity/runtime/summary/replay APIs. Add history pagination/lazy bodies. Choose activity retention or accessible history deliberately; use explicit/idle compaction only when measured free pages justify it. Cache Git counts by ref snapshot.",
+    "verify": "Keep provider archives, project folders and editorial history until explicit deletion. Benchmark large histories before changing page or retention semantics.",
+    "references": [
+      "src/main/google-drive-service.ts:105",
+      "src/main/store.ts:1242",
+      "src/main/store.ts:1658",
+      "src/main/store.ts:1985",
+      "src/main/store.ts:3191",
+      "src/main/git.ts:510"
+    ]
+  },
+  {
+    "id": "F21",
+    "priority": "P3",
+    "title": "Small durable-output transactions still amplify writes",
+    "evidence": "Measured with saturated shell output and autocheckpoint disabled: compare 512 B, 4 KiB and 16 KiB appends at identical 1 MiB total input. This measures cumulative logical WAL bytes; production already batches for 250 ms and uses chunked storage.",
+    "impact": "Tiny transactions cost more CPU/WAL bytes than larger batches. The fixture deliberately removes normal arrival gaps and checkpointing, so it does not predict on-disk WAL residency, SSD writes or battery drain.",
+    "fix": "Retain existing chunking. Consider adaptive batching only after representative streaming measurements; keep bounded flush delay and exact shutdown/error flush behavior.",
+    "verify": "Compare input/WAL ratio and CPU at realistic rates with default checkpointing. Avoid turning the 250 ms buffer into unbounded pending memory or losing output on close.",
+    "references": [
+      "src/main/terminal-manager.ts:68",
+      "src/main/terminal-manager.ts:2329",
+      "src/main/store.ts:1866",
+      "src/main/store.ts:2758"
+    ]
+  }
+]
