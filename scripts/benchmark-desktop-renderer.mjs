@@ -108,7 +108,9 @@ if (!process.versions.electron) {
       const markdownCases = []
       for (const images of [10, 100, 500]) {
         await evaluate(`window.renderMarkdown(${images})`)
-        await waitFor(`document.querySelectorAll('.markdown-body img').length===${images} && document.querySelectorAll('img[data-markdown-image-status="queued"]').length===0 && window.fixtureStats.imageInFlight===0`)
+        // React commits image elements before the resource effect starts. Require
+        // every image to have a final status, rather than accepting that gap.
+        await waitFor(`document.querySelectorAll('.markdown-body img[data-markdown-image-status]:not([data-markdown-image-status="queued"])').length===${images} && window.fixtureStats.imageInFlight===0`)
         markdownCases.push({
           ...await evaluate('window.readFixtureStats()'),
           inputImages: images,
