@@ -136,7 +136,7 @@ if (!process.versions.electron) {
 
 function editorStub() {
   return `import React,{useEffect} from 'react';
-    export const monaco={};
+    export const monaco={};export function discardEditorDraft(){}export function forgetEditorModel(){}
     export function Editor({value,onChange,onMount,options}) {
       useEffect(()=>{onMount({addAction:()=>({dispose(){}}),setPosition(p){window.revealed=p},revealPositionInCenter(){},focus(){}})},[]);
       return <textarea aria-label="Source editor" value={value} readOnly={options.readOnly} onChange={event=>onChange(event.target.value)}/>;

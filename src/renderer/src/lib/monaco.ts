@@ -1,4 +1,4 @@
-import Editor, { loader } from '@monaco-editor/react'
+import { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import editorWorker from 'monaco-editor/editor/editor.worker.js?worker'
 import cssWorker from 'monaco-editor/language/css/css.worker.js?worker'
@@ -17,4 +17,5 @@ self.MonacoEnvironment = {
   }
 }
 
-export { Editor, monaco }
+export { ManagedEditor as Editor, discardEditorDraft, forgetEditorModel } from './ManagedEditor'
+export { monaco }

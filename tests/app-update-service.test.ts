@@ -208,8 +208,10 @@ describe('Sparkle configuration and lifecycle', () => {
   it('clears deleted-project guards and ignores late cache flushes from the removed workspace', () => {
     cachedUpdateRestartGuard('files:deleted', 'Save a deleted project.')
     cachedUpdateRestartGuard('latex:deleted\u0000main.tex', 'Save deleted source.')
+    cachedUpdateRestartGuard('notes:deleted\u0000draft.md', 'Save deleted note.')
     forgetProjectUpdateRestartGuards('deleted')
     cachedUpdateRestartGuard('files:deleted', 'Late unmount flush')
+    cachedUpdateRestartGuard('notes:deleted\u0000draft.md', 'Late note flush')
     expect(updateRestartBlocker()).toBeNull()
   })
   it('keeps update IPC restricted to the main app frame and exposes no URL arguments', () => {

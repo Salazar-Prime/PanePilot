@@ -1,10 +1,6 @@
-import Editor, { loader, type OnMount } from '@monaco-editor/react'
-import * as monaco from 'monaco-editor'
-import editorWorker from 'monaco-editor/editor/editor.worker.js?worker'
-import cssWorker from 'monaco-editor/language/css/css.worker.js?worker'
-import htmlWorker from 'monaco-editor/language/html/html.worker.js?worker'
-import jsonWorker from 'monaco-editor/language/json/json.worker.js?worker'
-import tsWorker from 'monaco-editor/language/typescript/ts.worker.js?worker'
+import type { OnMount } from '@monaco-editor/react'
+import { Editor, monaco, discardEditorDraft } from '../lib/monaco'
+import { LatexSourceCache, type LatexSourceSnapshot } from '../lib/latexSourceCache'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { cachedUpdateRestartGuard, useUpdateRestartGuard } from '../lib/updateRestartGuards'
 import {
@@ -52,17 +48,6 @@ import {
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
 import type { TerminalFileTarget } from '../lib/terminalFileLinks'
 
-loader.config({ monaco })
-self.MonacoEnvironment = {
-  getWorker(_workerId, label) {
-    if (label === 'json') return new jsonWorker()
-    if (['css', 'scss', 'less'].includes(label)) return new cssWorker()
-    if (['html', 'handlebars', 'razor'].includes(label)) return new htmlWorker()
-    if (['typescript', 'javascript'].includes(label)) return new tsWorker()
-    return new editorWorker()
-  }
-}
-
 if (!monaco.languages.getLanguages().some((language) => language.id === 'latex')) {
   monaco.languages.register({ id: 'latex', extensions: ['.tex'] })
   monaco.languages.setMonarchTokensProvider('latex', latexMonarchLanguage)
@@ -89,13 +74,7 @@ monaco.editor.defineTheme('panepilot-latex', {
   }
 })
 
-interface LatexSourceSnapshot {
-  savedContent: string
-  draft: string
-}
-
-const MAX_CACHED_LATEX_SOURCES = 32
-const latexSourceSnapshots = new Map<string, LatexSourceSnapshot>()
+const latexSourceSnapshots = new LatexSourceCache((key) => cachedUpdateRestartGuard(`latex:${key}`, null))
 
 function sourceSnapshotKey(projectId: string, path: string): string {
   return `${projectId}\u0000${path}`
@@ -110,12 +89,6 @@ function rememberSourceSnapshot(
   latexSourceSnapshots.delete(key)
   latexSourceSnapshots.set(key, snapshot)
   cachedUpdateRestartGuard(`latex:${key}`, snapshot.draft !== snapshot.savedContent ? 'Save your LaTeX source before updating PanePilot.' : null)
-  while (latexSourceSnapshots.size > MAX_CACHED_LATEX_SOURCES) {
-    const oldest = latexSourceSnapshots.keys().next().value
-    if (typeof oldest !== 'string') break
-    latexSourceSnapshots.delete(oldest)
-    cachedUpdateRestartGuard(`latex:${oldest}`, null)
-  }
 }
 
 function mergeInlineEditIntoCachedDraft(
@@ -715,7 +688,12 @@ export function LatexManuscript({
   }
 
   function canNavigate(): boolean {
-    return !dirty || window.confirm('Discard your unsaved LaTeX changes?')
+    if (!dirty) return true
+    if (!window.confirm('Discard your unsaved LaTeX changes?')) return false
+    discardEditorDraft(`panepilot-latex/${project.id}/${path}`, savedContent)
+    rememberSourceSnapshot(project.id, path, { savedContent, draft: savedContent })
+    setDraft(savedContent)
+    return true
   }
 
   function selectSection(section: LatexSection | null) {
@@ -1594,8 +1572,8 @@ export function LatexManuscript({
           <div className="latex-editor-stage">
             <div className={`latex-editor-shell ${loading ? 'loading' : ''}`}>
             <Editor
-              path={`${project.id}/${path}`}
-              keepCurrentModel
+              path={`panepilot-latex/${project.id}/${path}`}
+              savedValue={savedContent}
               language="latex"
               theme="panepilot-latex"
               value={draft}

@@ -5,7 +5,7 @@ const cachedGuards = new Map<string, string>()
 const removedProjects = new Set<string>()
 
 function belongsToProject(key: string, projectId: string): boolean {
-  return key === `files:${projectId}` || key.startsWith(`latex:${projectId}\u0000`)
+  return key === `files:${projectId}` || key.startsWith(`latex:${projectId}\u0000`) || key.startsWith(`notes:${projectId}\u0000`)
 }
 
 export function forgetProjectUpdateRestartGuards(projectId: string): void {

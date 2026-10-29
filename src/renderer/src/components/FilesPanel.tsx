@@ -30,11 +30,12 @@ import { addFileManagementActions } from '../lib/monacoFinderAction'
 import { isMarkdownPath } from '../lib/markdown'
 import { isHtmlPath } from '../lib/htmlPreview'
 import { keepFileTab, openPreviewTab, protectFileTab, type OpenFileTab } from '../lib/fileTabs'
+import { FilesWorkspaceCache, restoreEvictedPreview, type CachedFileTab } from '../lib/filesWorkspaceCache'
 import { useActiveTabVisibility } from '../lib/useActiveTabVisibility'
 import { HtmlPreview } from './HtmlPreview'
 import { cachedUpdateRestartGuard, useUpdateRestartGuard } from '../lib/updateRestartGuards'
 import type { ProjectFileOpenRequest } from '../lib/terminalFileLinks'
-import { Editor, monaco } from '../lib/monaco'
+import { Editor, monaco, discardEditorDraft, forgetEditorModel } from '../lib/monaco'
 import {
   MarkdownPreview,
   type MarkdownPreviewAnchor
@@ -55,7 +56,7 @@ interface FilesPanelProps {
 interface FilesPanelSnapshot {
   path: string
   entries: FileEntry[]
-  openFiles: OpenFileTab[]
+  openFiles: CachedFileTab[]
   activeFilePath: string | null
   loaded: boolean
   searchQuery: string
@@ -72,7 +73,7 @@ interface FileEntryDialogRequest {
   entry: FileEntry | null
 }
 
-const filesPanelCache = new Map<string, FilesPanelSnapshot>()
+const filesPanelCache = new FilesWorkspaceCache<FilesPanelSnapshot>()
 const fileImportListeners = new Map<string, Set<() => void>>()
 
 function notifyFilesImported(projectId: string): void {
@@ -103,7 +104,7 @@ function FilesPanelInstance({
     entries: uniqueEntries(cached?.entries ?? []),
     loaded: cached?.loaded ?? false
   }))
-  const [openFiles, setOpenFiles] = useState<OpenFileTab[]>(
+  const [openFiles, setOpenFiles] = useState<CachedFileTab[]>(
     cached?.openFiles ?? []
   )
   const [activeFilePath, setActiveFilePath] = useState<string | null>(
@@ -118,6 +119,8 @@ function FilesPanelInstance({
   const [searchRevision, setSearchRevision] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [imageReloadError, setImageReloadError] = useState<{ path: string; message: string } | null>(null)
+  const [imageReloadRevision, setImageReloadRevision] = useState(0)
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [dropHover, setDropHover] = useState(false)
@@ -214,6 +217,7 @@ function FilesPanelInstance({
   }, [])
 
   useEffect(() => {
+    const releaseCache = filesPanelCache.acquire(project.id)
     mountedRef.current = true
     let active = true
     const resetDrag = () => { dragDepthRef.current = 0; setDropHover(false) }
@@ -246,8 +250,24 @@ function FilesPanelInstance({
       if (!listeners.size) fileImportListeners.delete(project.id)
       window.removeEventListener('blur', resetDrag)
       window.removeEventListener('dragend', resetDrag)
+      releaseCache()
     }
   }, [project.id])
+
+  useEffect(() => {
+    if (!activeFile?.previewEvicted) return
+    const filePath = activeFile.preview.path
+    let active = true
+    setImageReloadError(null)
+    void window.projectConsole.files.preview(project.id, filePath).then((nextPreview) => {
+      if (!active) return
+      if (nextPreview.path !== filePath) throw new Error('The file preview returned a different path.')
+      setOpenFiles((current) => current.map((file) => restoreEvictedPreview(file, nextPreview)))
+    }).catch((caught) => {
+      if (active) setImageReloadError({ path: filePath, message: caught instanceof Error ? caught.message : String(caught) })
+    })
+    return () => { active = false }
+  }, [project.id, activeFilePath, activeFile?.previewEvicted, imageReloadRevision])
 
   async function importDroppedFiles(files: File[]): Promise<void> {
     if (dropPendingRef.current) {
@@ -347,7 +367,7 @@ function FilesPanelInstance({
     requestedViewMode?: 'preview' | 'source',
     keepOpen = false
   ): void {
-    setOpenFiles((current) => openPreviewTab(current, {
+    setOpenFiles((current) => openPreviewTab(current.map((file) => restoreEvictedPreview(file, nextPreview)), {
       preview: nextPreview,
       draft: nextPreview.content,
       editing: false,
@@ -471,6 +491,7 @@ function FilesPanelInstance({
       return
     }
     cancelPendingFileOpen()
+    forgetEditorModel(`panepilot-files/${project.id}/${filePath}`, editorRef.current)
     const remaining = openFiles.filter(
       (candidate) => candidate.preview.path !== filePath
     )
@@ -647,6 +668,11 @@ function FilesPanelInstance({
       name
     )
     const previousPath = entry.path
+    for (const file of openFiles) {
+      if (file.preview.path === previousPath || file.preview.path.startsWith(`${previousPath}/`)) {
+        forgetEditorModel(`panepilot-files/${project.id}/${file.preview.path}`, editorRef.current)
+      }
+    }
     setOpenFiles((current) =>
       current.map((file) => {
         const remapped = remapDescendantPath(
@@ -1167,6 +1193,7 @@ function FilesPanelInstance({
                       <button
                         className="secondary-button"
                         onClick={() => {
+                          discardEditorDraft(`panepilot-files/${project.id}/${preview.path}`, preview.content)
                           updateOpenFile(preview.path, (file) => ({
                             ...file,
                             draft: file.preview.content,
@@ -1201,7 +1228,16 @@ function FilesPanelInstance({
                   ))}
               </div>
             </div>
-            {preview.imageDataUrl ? (
+            {activeFile?.previewEvicted ? (
+              <div className="preview-empty" role="status">
+                {imageReloadError?.path === preview.path ? (
+                  <div>
+                    <p>Could not reload this image: {imageReloadError.message}</p>
+                    <button className="secondary-button" onClick={() => setImageReloadRevision((revision) => revision + 1)}>Retry preview</button>
+                  </div>
+                ) : 'Loading image preview…'}
+              </div>
+            ) : preview.imageDataUrl ? (
               <div className="file-image-preview">
                 <img
                   src={preview.imageDataUrl}
@@ -1241,7 +1277,8 @@ function FilesPanelInstance({
             ) : (
               <div className="file-editor-shell">
                 <Editor
-                  path={`${project.id}/${preview.path}`}
+                  path={`panepilot-files/${project.id}/${preview.path}`}
+                  savedValue={preview.content}
                   language={languageForPath(preview.path)}
                   theme="vs-dark"
                   value={editing ? draft : preview.content}

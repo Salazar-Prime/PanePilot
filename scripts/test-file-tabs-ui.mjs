@@ -18,7 +18,7 @@ if (!process.versions.electron) {
       plugins: [{ name: 'fixture-editor', setup(builder) {
         builder.onResolve({ filter: /\/lib\/monaco$/ }, () => ({ path: 'editor', namespace: 'fixture' }))
         builder.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ loader: 'tsx', resolveDir: root, contents: `
-          import React,{useEffect} from 'react';export const monaco={};
+          import React,{useEffect} from 'react';export const monaco={};export function discardEditorDraft(){}export function forgetEditorModel(){}
           export function Editor({value,onChange,onMount,options}){
             useEffect(()=>{onMount({addAction:()=>({dispose(){}}),setPosition(p){window.revealed=p},revealPositionInCenter(){},focus(){}})},[]);
             return <textarea aria-label="Source editor" value={value} readOnly={options.readOnly} onChange={e=>onChange(e.target.value)}/>;

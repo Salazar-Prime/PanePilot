@@ -57,9 +57,8 @@ describe('LaTeX workspace navigation cache', () => {
       'utf8'
     )
 
-    expect(source).toContain('const latexSourceSnapshots = new Map')
-    expect(source).toContain('MAX_CACHED_LATEX_SOURCES = 32')
-    expect(source).toContain('keepCurrentModel')
+    expect(source).toContain('const latexSourceSnapshots = new LatexSourceCache')
+    expect(source).toContain('savedValue={savedContent}')
     expect(source).toContain('inlineEditAppliedPathRef.current === path')
   })
 })

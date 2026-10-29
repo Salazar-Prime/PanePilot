@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { useUpdateRestartGuard } from '../lib/updateRestartGuards'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { cachedUpdateRestartGuard, useUpdateRestartGuard } from '../lib/updateRestartGuards'
 import {
   FilePlus2,
   FileText,
@@ -16,7 +16,7 @@ import type {
   ProjectNoteSummary
 } from '@shared/types'
 import { useModalEscape } from '../lib/modalEscape'
-import { Editor, monaco } from '../lib/monaco'
+import { Editor, monaco, discardEditorDraft } from '../lib/monaco'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
 import {
   noteProjectPath,
@@ -39,7 +39,22 @@ interface NotesPanelProps {
   onOpenFile?(target: TerminalFileTarget): void
 }
 
-export function NotesPanel({ project, onOpenFile }: NotesPanelProps) {
+interface NoteDraft { note: ProjectNote; saved: string; draft: string; viewMode: NoteViewMode }
+const noteDrafts = new Map<string, NoteDraft>()
+const noteSelections = new Map<string, string>()
+const noteKey = (projectId: string, path: string) => `${projectId}\u0000${path}`
+function rememberNoteDraft(projectId: string, value: NoteDraft): void {
+  const key = noteKey(projectId, value.note.path)
+  if (value.draft !== value.saved) noteDrafts.set(key, value)
+  else noteDrafts.delete(key)
+  cachedUpdateRestartGuard(`notes:${key}`, value.draft !== value.saved ? 'Save your project note before updating PanePilot.' : null)
+}
+
+export function NotesPanel(props: NotesPanelProps) {
+  return <NotesPanelInstance key={props.project.id} {...props} />
+}
+
+function NotesPanelInstance({ project, onOpenFile }: NotesPanelProps) {
   const [notes, setNotes] = useState<ProjectNoteSummary[]>([])
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [note, setNote] = useState<ProjectNote | null>(null)
@@ -65,14 +80,38 @@ export function NotesPanel({ project, onOpenFile }: NotesPanelProps) {
     ? `.panepilot/notes/${note.path}`
     : null
 
+  useLayoutEffect(() => {
+    if (!note) return
+    noteSelections.set(project.id, note.path)
+    rememberNoteDraft(project.id, { note, saved, draft, viewMode })
+  }, [project.id, note, saved, draft, viewMode])
+
+  function discardNoteDraft(): void {
+    if (!note) return
+    noteDrafts.delete(noteKey(project.id, note.path))
+    cachedUpdateRestartGuard(`notes:${noteKey(project.id, note.path)}`, null)
+    discardEditorDraft(`panepilot-notes/${project.id}/${note.path}`, saved)
+    setDraft(saved)
+  }
+
   function canDiscard(): boolean {
-    return (
-      !dirty ||
-      window.confirm('Discard your unsaved project note changes?')
-    )
+    if (!dirty) return true
+    if (!window.confirm('Discard your unsaved project note changes?')) return false
+    discardNoteDraft()
+    return true
   }
 
   async function loadNote(path: string) {
+    const cached = noteDrafts.get(noteKey(project.id, path))
+    if (cached) {
+      setMarkdownAnchor(null)
+      setSelectedPath(path)
+      setNote(cached.note)
+      setSaved(cached.saved)
+      setDraft(cached.draft)
+      setViewModes((modes) => ({ ...modes, [path]: cached.viewMode }))
+      return
+    }
     const next = await window.projectConsole.notes.read(project.id, path)
     setMarkdownAnchor(null)
     setSelectedPath(next.path)
@@ -135,6 +174,8 @@ export function NotesPanel({ project, onOpenFile }: NotesPanelProps) {
         note.path,
         content
       )
+      const cached = noteDrafts.get(noteKey(project.id, next.path))
+      rememberNoteDraft(project.id, { note: next, saved: next.content, draft: cached?.draft ?? content, viewMode: cached?.viewMode ?? viewMode })
       setNote(next)
       setSaved(next.content)
       setDraft((current) => current === content ? next.content : current)
@@ -198,6 +239,7 @@ export function NotesPanel({ project, onOpenFile }: NotesPanelProps) {
     setError('')
     try {
       await window.projectConsole.notes.delete(project.id, note.path)
+      discardNoteDraft()
       setNote(null)
       setSaved('')
       setDraft('')
@@ -222,7 +264,7 @@ export function NotesPanel({ project, onOpenFile }: NotesPanelProps) {
     setViewModes({})
     setMarkdownAnchor(null)
     setError('')
-    void refresh(null, false)
+    void refresh(noteSelections.get(project.id) ?? null, false)
   }, [project.id])
 
   useEffect(
@@ -418,6 +460,7 @@ export function NotesPanel({ project, onOpenFile }: NotesPanelProps) {
               <div className="notes-editor-shell">
                 <Editor
                   path={`panepilot-notes/${project.id}/${note.path}`}
+                  savedValue={saved}
                   language="markdown"
                   theme="vs-dark"
                   value={draft}
