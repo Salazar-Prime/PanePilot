@@ -79,10 +79,10 @@ describe('LaTeX auto compile', () => {
       'utf8'
     )
 
-    expect(source).toContain('const pdfSnapshotCache = new Map')
+    expect(source).toContain('window.projectConsole.latex.getPdfSnapshot(projectId, expectedPath)')
     expect(source).toContain('loadLatexAutoCompile(projectId)')
     expect(source).toContain('previous != null && previous !== revision')
-    expect(source).toContain('window.projectConsole.latex.compile(projectId)')
+    expect(source).toContain('window.projectConsole.latex.compilePdfSnapshot(projectId)')
     expect(source).not.toContain('Reload from disk')
     expect(source).not.toContain('Reload compiled PDF from disk')
   })

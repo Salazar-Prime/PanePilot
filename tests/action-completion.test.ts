@@ -202,7 +202,7 @@ exec /bin/sh -c "$command"
     await f.internals.finishActionWhenPaneExits(f.runtime)
     expect(resolve).toHaveBeenCalledExactlyOnceWith(f.runtime.session.id, { exitCode: 0, output })
     expect(f.store.getSession(f.runtime.session.id)).toMatchObject({ state: 'response-ready', output: '' })
-    expect(f.manager.attach(f.runtime.session.id, 80, 24).output).toBe(output)
+    expect((await f.manager.attach(f.runtime.session.id, 80, 24)).output).toBe(output)
     expect(f.kill).not.toHaveBeenCalled()
   })
 })

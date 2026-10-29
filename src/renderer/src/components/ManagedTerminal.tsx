@@ -28,6 +28,7 @@ import {
 import { terminalAcceptsInput } from '../lib/terminalTransport'
 import { terminalTheme } from '../lib/terminalTheme'
 import { terminalReasoningShortcut } from '../lib/terminalReasoningShortcut'
+import { subscribeTerminalOutput } from '../lib/terminalOutputSubscription'
 
 interface Props {
   session: TerminalSession
@@ -70,6 +71,8 @@ export function ManagedTerminal({
   const transportRef = useRef(transport)
   transportRef.current = transport
   const [inputReady, setInputReady] = useState(false)
+  const [outputSubscriptionVersion, setOutputSubscriptionVersion] = useState(0)
+  const [outputSubscriptionError, setOutputSubscriptionError] = useState<string | null>(null)
   const dropPendingRef = useRef(false)
   const dropFocusVersionRef = useRef(0)
   const [draggingFiles, setDraggingFiles] = useState(false)
@@ -181,6 +184,7 @@ export function ManagedTerminal({
     writableRef.current = false
     replayingRef.current = true
     setInputReady(false)
+    setOutputSubscriptionError(null)
     setContextMenu(null)
     const initialTransport: TerminalTransportEvent = {
       sessionId: session.id,
@@ -288,9 +292,6 @@ export function ManagedTerminal({
         )
       }
     })
-    const removeDataListener = window.projectConsole.terminals.onData((event) => {
-      if (event.sessionId === session.id) terminal.write(event.data)
-    })
     const removeTransportListener =
       window.projectConsole.terminals.onTransport((event) => {
         if (event.sessionId !== session.id) return
@@ -308,48 +309,51 @@ export function ManagedTerminal({
     const attachStartedAt = performance.now()
     const attachCount = (terminalAttachCounts.get(session.id) ?? 0) + 1
     terminalAttachCounts.set(session.id, attachCount)
-    void window.projectConsole.terminals
-      .attach(session.id, terminal.cols, terminal.rows)
-      .then(({ output }) => {
-        terminal.write(output, () => {
-          replaying = false
-          replayingRef.current = false
-          writableRef.current = terminalAcceptsInput(
-            activeRef.current,
-            false,
-            terminalEndedRef.current,
-            transportRef.current.state
-          )
-          setInputReady(writableRef.current)
-          if (activeRef.current) terminal.focus()
-          if (import.meta.env.DEV) {
-            console.debug('[PanePilot performance] terminal ready', {
-              sessionId: session.id,
-              attachCount,
-              durationMs: Math.round(performance.now() - attachStartedAt)
-            })
-            const selectionName = `panepilot:terminal-select:${session.id}`
-            const selectionMark = performance
-              .getEntriesByName(selectionName, 'mark')
-              .at(-1)
-            if (selectionMark && activeRef.current) {
-              console.debug('[PanePilot performance] terminal focused', {
-                sessionId: session.id,
-                durationMs: Math.round(
-                  performance.now() - selectionMark.startTime
-                ),
-                warm: false
-              })
-              performance.clearMarks(selectionName)
-            }
-          }
-        })
-      })
-      .catch((error) => {
+    const removeOutputSubscription = subscribeTerminalOutput({
+      bridge: window.projectConsole.terminals,
+      sessionId: session.id,
+      cols: terminal.cols,
+      rows: terminal.rows,
+      write: (data, parsed) => terminal.write(data, parsed),
+      onReady: () => {
         replaying = false
         replayingRef.current = false
+        writableRef.current = terminalAcceptsInput(
+          activeRef.current,
+          false,
+          terminalEndedRef.current,
+          transportRef.current.state
+        )
+        setInputReady(writableRef.current)
+        if (activeRef.current) terminal.focus()
+        if (import.meta.env.DEV) {
+          console.debug('[PanePilot performance] terminal ready', {
+            sessionId: session.id,
+            attachCount,
+            durationMs: Math.round(performance.now() - attachStartedAt)
+          })
+          const selectionName = `panepilot:terminal-select:${session.id}`
+          const selectionMark = performance
+            .getEntriesByName(selectionName, 'mark')
+            .at(-1)
+          if (selectionMark && activeRef.current) {
+            console.debug('[PanePilot performance] terminal focused', {
+              sessionId: session.id,
+              durationMs: Math.round(
+                performance.now() - selectionMark.startTime
+              ),
+              warm: false
+            })
+            performance.clearMarks(selectionName)
+          }
+        }
+      },
+      onError: (error) => {
+        replaying = true
+        replayingRef.current = true
         writableRef.current = false
         setInputReady(false)
+        setOutputSubscriptionError(String(error))
         setTransport({
           sessionId: session.id,
           state: 'offline',
@@ -363,7 +367,8 @@ export function ManagedTerminal({
           message: String(error)
         }
         terminal.writeln(`\r\n\x1b[31mPanePilot: ${String(error)}\x1b[0m`)
-      })
+      }
+    })
 
     const resizeObserver = new ResizeObserver(() => {
       if (!activeRef.current) return
@@ -375,7 +380,7 @@ export function ManagedTerminal({
 
     return () => {
       resizeObserver.disconnect()
-      removeDataListener()
+      removeOutputSubscription()
       removeTransportListener()
       dataDisposable.dispose()
       linkDisposable?.dispose()
@@ -386,7 +391,7 @@ export function ManagedTerminal({
       if (fitRef.current === fit) fitRef.current = null
       terminal.dispose()
     }
-  }, [session.id, projectFolder])
+  }, [session.id, projectFolder, outputSubscriptionVersion])
 
   useEffect(() => {
     const terminal = terminalRef.current
@@ -475,6 +480,10 @@ export function ManagedTerminal({
   }, [contextMenu])
 
   async function retry() {
+    if (outputSubscriptionError !== null) {
+      setOutputSubscriptionVersion((current) => current + 1)
+      return
+    }
     setTransport((current) => ({
       ...current,
       state: 'reconnecting',
@@ -496,12 +505,13 @@ export function ManagedTerminal({
     }
   }
 
-  const interrupted =
+  const interrupted = outputSubscriptionError !== null || (
     transport.state !== 'attached' &&
     !(
       retainOutputOnExit &&
       (terminalEnded || transport.state === 'detached')
     )
+  )
 
   return (
     <div
@@ -557,13 +567,15 @@ export function ManagedTerminal({
           )}
           <span>
             <strong>
-              {transport.state === 'offline'
+              {outputSubscriptionError !== null
+                ? 'Terminal display paused'
+                : transport.state === 'offline'
                 ? 'Remote host offline'
                 : transport.state === 'reconnecting'
                   ? 'Reconnecting'
                   : 'Terminal detached'}
             </strong>
-            <small>{transport.message ?? 'Input is paused until tmux reconnects.'}</small>
+            <small>{outputSubscriptionError ?? transport.message ?? 'Input is paused until tmux reconnects.'}</small>
           </span>
           <button onClick={() => void retry()}>
             <RefreshCw size={12} />{' '}

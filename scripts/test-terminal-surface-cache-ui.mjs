@@ -135,6 +135,7 @@ if (!process.versions.electron) {
       assert.equal(await evaluate(`window.attaches.filter(id=>id==='writing-chat').length`), 1)
       await evaluate(`window.changeFixture({mounted:false})`)
       await waitFor('window.dataListeners.size===0 && window.transportListeners.size===0')
+      assert.equal(await evaluate('window.outputConsumers.size'), 0, 'Unmount releases every output consumer')
       assert.deepEqual(await evaluate('window.backendMutations'), [], 'Eviction/hiding/unmounting never stops a backend')
       assert.deepEqual(await evaluate('window.errors'), [])
       process.stdout.write(`Terminal surface UI passed: real xterm counts ${counts.join(' → ')}, four-surface LRU, subscription cleanup, warm reuse, unchanged tab order, and hidden LaTeX input/resize suppression with preserved chat/draft.\n`)
@@ -159,6 +160,7 @@ function fixture() {
     window.addEventListener('error',event=>window.errors.push(event.message));
     window.addEventListener('unhandledrejection',event=>window.errors.push(String(event.reason)));
     window.dataListeners=new Set();window.transportListeners=new Set();
+    window.outputConsumers=new Map();
     window.attaches=[];window.writes=[];window.resizes=[];window.prompts=[];window.backendMutations=[];
     const observers=new Map();const NativeResizeObserver=window.ResizeObserver;
     window.ResizeObserver=class extends NativeResizeObserver{
@@ -175,7 +177,12 @@ function fixture() {
     const noop=()=>{};const asyncNoop=async()=>{};
     window.projectConsole={
       terminals:{
-        attach:async(id)=>{window.attaches.push(id);return {output:'Replay for '+id+'\\r\\n'}},
+        attach:async(id,cols,rows,consumerId)=>{
+          window.attaches.push(id);window.outputConsumers.set(consumerId,id);
+          return {output:'Replay for '+id+'\\r\\n',generation:consumerId+'-generation',sequence:0}
+        },
+        acknowledgeOutput:()=>{},
+        unsubscribeOutput:(id,consumerId)=>{window.outputConsumers.delete(consumerId)},
         onData:(callback)=>listen(window.dataListeners,callback),
         onTransport:(callback)=>listen(window.transportListeners,callback),
         resize:async(id,cols,rows)=>{window.resizes.push({id,cols,rows})},

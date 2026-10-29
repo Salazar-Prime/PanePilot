@@ -32,7 +32,7 @@ describe('LaTeX PDF print layout', () => {
 
     expect(source).toContain('className="latex-pdf-pages"')
     expect(source).toContain('data-pdf-page={pageNumber}')
-    expect(source).toContain('window.projectConsole.latex.compile(projectId)')
+    expect(source).toContain('window.projectConsole.latex.compilePdfSnapshot(projectId)')
     expect(source).toContain('window.projectConsole.latex.printPdf({')
     expect(source).not.toContain('latex-pdf-print-root')
     expect(source).not.toContain('printCurrentWindow')

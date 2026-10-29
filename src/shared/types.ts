@@ -247,6 +247,10 @@ export interface LatexPdfDocument {
   dataBase64: string
 }
 
+export interface LatexPdfSnapshot extends LatexPdfDocument {
+  snapshotId: string
+}
+
 export interface PrintLatexPdfInput {
   path: string
   dataBase64: string
@@ -363,6 +367,15 @@ export interface LatexChangeSet {
 export interface TerminalDataEvent {
   sessionId: string
   data: string
+  consumerId?: string
+  generation?: string
+  sequence?: number
+}
+
+export interface TerminalAttachResult {
+  output: string
+  generation?: string
+  sequence?: number
 }
 
 export interface TerminalStateEvent {
@@ -601,7 +614,9 @@ export interface ProjectConsoleApi {
     subagentSummary(sessionId: string): Promise<CodexSubagentSummary>
     start(input: StartTerminalInput): Promise<TerminalSession>
     discover(connectionId?: string): Promise<number>
-    attach(sessionId: string, cols: number, rows: number): Promise<{ output: string }>
+    attach(sessionId: string, cols: number, rows: number, consumerId?: string): Promise<TerminalAttachResult>
+    acknowledgeOutput(sessionId: string, consumerId: string, generation: string, sequence: number): void
+    unsubscribeOutput(sessionId: string, consumerId: string): void
     retryAttach(sessionId: string, cols: number, rows: number): Promise<void>
     write(sessionId: string, data: string): Promise<void>
     captureBuffer(sessionId: string): Promise<string>
@@ -688,6 +703,11 @@ export interface ProjectConsoleApi {
     sourceRevision(projectId: string): Promise<string>
     getPdf(projectId: string): Promise<LatexPdfDocument>
     compile(projectId: string): Promise<LatexPdfDocument>
+    getPdfSnapshot(projectId: string, expectedPath: string): Promise<LatexPdfSnapshot>
+    compilePdfSnapshot(projectId: string): Promise<LatexPdfSnapshot>
+    acceptPdfSnapshot(snapshotId: string): Promise<void>
+    readPdfSnapshot(snapshotId: string): Promise<LatexPdfSnapshot>
+    releasePdfSnapshot(snapshotId: string): Promise<void>
     printPdf(input: PrintLatexPdfInput): Promise<void>
     update(input: UpdateLatexProjectInput): Promise<LatexWorkspace>
     startChat(input: StartLatexChatInput): Promise<TerminalSession>

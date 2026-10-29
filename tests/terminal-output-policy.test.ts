@@ -20,7 +20,7 @@ describe('terminal output persistence policy', () => {
     appDataPath = null
   })
 
-  it('keeps Codex output volatile while preserving other terminal output', () => {
+  it('keeps Codex output volatile while preserving other terminal output', async () => {
     appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-output-policy-'))
     const store = new Store(appDataPath)
     store.syncConnections([])
@@ -69,7 +69,7 @@ describe('terminal output persistence policy', () => {
     expect(store.getSession(shell.id)?.output).toBe('saved shell output')
 
     store.setSessionState(codex.id, 'completed')
-    expect(manager.attach(codex.id, 100, 30).output).toBe('volatile Codex output')
+    expect((await manager.attach(codex.id, 100, 30)).output).toBe('volatile Codex output')
     manager.shutdown()
 
     const reopenedManager = new TerminalManager(
@@ -78,7 +78,7 @@ describe('terminal output persistence policy', () => {
       new ConversationIndexer(),
       new RemoteConversationIndexer()
     )
-    expect(reopenedManager.attach(codex.id, 100, 30).output).toBe('')
+    expect((await reopenedManager.attach(codex.id, 100, 30)).output).toBe('')
     reopenedManager.shutdown()
     store.close()
   })

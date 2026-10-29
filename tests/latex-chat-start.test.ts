@@ -15,7 +15,7 @@ describe('LaTeX chat launch metadata', () => {
     appDataPath = null
   })
 
-  it('attaches the writing scope before the first tmux launch', () => {
+  it('attaches the writing scope before the first tmux launch', async () => {
     appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-latex-chat-start-'))
     const store = new Store(appDataPath)
     store.syncConnections([])
@@ -57,7 +57,7 @@ describe('LaTeX chat launch metadata', () => {
     )
 
     try {
-      const session = manager.startLatexChat(
+      const session = await manager.startLatexChat(
         {
           projectId: project.id,
           profile: 'codex',

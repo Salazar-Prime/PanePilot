@@ -21,18 +21,21 @@ import {
   GlobalWorkerOptions,
   getDocument,
   type PDFDocumentProxy,
+  type PDFDocumentLoadingTask,
   type RenderTask
 } from 'pdfjs-dist'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import type { LatexPdfDocument } from '@shared/types'
+import type { LatexPdfDocument, LatexPdfSnapshot } from '@shared/types'
 import {
   loadLatexAutoCompile,
   saveLatexAutoCompile
 } from '../lib/latexAutoCompile'
 import {
   loadLatexPdfView,
-  saveLatexPdfView
+  saveLatexPdfView,
+  type LatexPdfViewMemory
 } from '../lib/latexViewMemory'
+import { loadPdfPageSize, savePdfPageSize } from '../lib/pdfPageLayout'
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
@@ -50,13 +53,14 @@ interface LatexPdfPreviewProps {
 }
 
 interface LatexPdfPageProps {
+  snapshotId: string
+  beforeLayoutChange(): void
+  afterLayoutChange(): void
   pdf: PDFDocumentProxy
   pageNumber: number
   scrollRoot: HTMLDivElement | null
   zoom: number
 }
-
-const pdfSnapshotCache = new Map<string, LatexPdfDocument>()
 
 function decodeBase64(value: string): Uint8Array {
   const decoded = window.atob(value)
@@ -78,6 +82,9 @@ function compiledPdfPath(mainFile: string): string {
 }
 
 function LatexPdfPage({
+  snapshotId,
+  beforeLayoutChange,
+  afterLayoutChange,
   pdf,
   pageNumber,
   scrollRoot,
@@ -87,10 +94,12 @@ function LatexPdfPage({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [nearViewport, setNearViewport] = useState(false)
   const [rendering, setRendering] = useState(false)
-  const [size, setSize] = useState({
-    width: DEFAULT_PAGE_WIDTH * zoom,
-    height: DEFAULT_PAGE_HEIGHT * zoom
+  const [size, setSize] = useState(() => loadPdfPageSize(snapshotId, pageNumber) ?? {
+    width: DEFAULT_PAGE_WIDTH,
+    height: DEFAULT_PAGE_HEIGHT
   })
+  const sizeRef = useRef(size)
+  useLayoutEffect(afterLayoutChange, [afterLayoutChange, size.width, size.height])
 
   useEffect(() => {
     const shell = shellRef.current
@@ -117,6 +126,7 @@ function LatexPdfPage({
       canvas.width = 1
       canvas.height = 1
       setRendering(false)
+      return
     }
 
     void pdf
@@ -124,7 +134,16 @@ function LatexPdfPage({
       .then((page) => {
         if (cancelled) return
         const viewport = page.getViewport({ scale: zoom })
-        setSize({ width: viewport.width, height: viewport.height })
+        const naturalSize = page.getViewport({ scale: 1 })
+        if (sizeRef.current.width !== naturalSize.width || sizeRef.current.height !== naturalSize.height) {
+          beforeLayoutChange()
+          const nextSize = { width: naturalSize.width, height: naturalSize.height }
+          sizeRef.current = nextSize
+          savePdfPageSize(snapshotId, pageNumber, nextSize)
+          setSize(nextSize)
+        } else {
+          savePdfPageSize(snapshotId, pageNumber, sizeRef.current)
+        }
         if (!nearViewport || !canvasRef.current) return
         const target = canvasRef.current
         const context = target.getContext('2d', { alpha: false })
@@ -159,14 +178,14 @@ function LatexPdfPage({
       cancelled = true
       renderTask?.cancel()
     }
-  }, [nearViewport, pageNumber, pdf, zoom])
+  }, [beforeLayoutChange, nearViewport, pageNumber, pdf, snapshotId, zoom])
 
   return (
     <div
       ref={shellRef}
       className="latex-pdf-page"
       data-pdf-page={pageNumber}
-      style={{ width: size.width, height: size.height }}
+      style={{ width: size.width * zoom, height: size.height * zoom }}
       aria-label={`Page ${pageNumber}`}
       aria-busy={rendering}
     >
@@ -190,6 +209,7 @@ export function LatexPdfPreview({
 }: LatexPdfPreviewProps) {
   const savedViewRef = useRef(loadLatexPdfView(projectId))
   const documentRef = useRef<PDFDocumentProxy | null>(null)
+  const snapshotIdRef = useRef<string | null>(null)
   const loadVersionRef = useRef(0)
   const printVersionRef = useRef(0)
   const compileInFlightRef = useRef(false)
@@ -216,29 +236,96 @@ export function LatexPdfPreview({
   const [error, setError] = useState('')
   const [autoCompileError, setAutoCompileError] = useState('')
   const expectedPath = compiledPdfPath(mainFile)
+  const scrollRootRef = useRef(scrollRoot)
+  const pageElementsRef = useRef<HTMLElement[]>([])
+  const zoomRef = useRef(zoom)
+  scrollRootRef.current = scrollRoot
+  zoomRef.current = zoom
+  const latestViewRef = useRef<LatexPdfViewMemory>(savedViewRef.current ?? {
+    pageNumber: 1, scrollTop: 0, pageOffset: -34, zoom
+  })
+  const pendingAnchorRef = useRef<LatexPdfViewMemory | null>(null)
+
+  const currentView = useCallback((): LatexPdfViewMemory => {
+    const root = scrollRootRef.current
+    if (!root?.isConnected || !root.clientHeight) return latestViewRef.current
+    const cachedPage = pageElementsRef.current[pageNumberRef.current - 1]
+    const page = cachedPage?.isConnected ? cachedPage : root.querySelector<HTMLElement>(`[data-pdf-page="${pageNumberRef.current}"]`)
+    return {
+      pageNumber: pageNumberRef.current, scrollTop: root.scrollTop, zoom: zoomRef.current,
+      pageOffset: page ? root.getBoundingClientRect().top - page.getBoundingClientRect().top : undefined
+    }
+  }, [])
+
+  const beforeLayoutChange = useCallback(() => {
+    pendingAnchorRef.current ??= currentView()
+  }, [currentView])
+
+  const afterLayoutChange = useCallback(() => {
+    const root = scrollRootRef.current
+    const anchor = pendingAnchorRef.current
+    const document = documentRef.current
+    if (!root?.clientHeight || !anchor || !document) return
+    const page = Math.max(1, Math.min(document.numPages, anchor.pageNumber))
+    const cachedPage = pageElementsRef.current[page - 1]
+    const element = cachedPage?.isConnected ? cachedPage : root.querySelector<HTMLElement>(`[data-pdf-page="${page}"]`)
+    if (!element) return
+    if (anchor.pageOffset == null) root.scrollTop = anchor.scrollTop
+    else root.scrollTop += element.getBoundingClientRect().top - root.getBoundingClientRect().top + anchor.pageOffset * zoomRef.current / anchor.zoom
+    pageNumberRef.current = page
+    setPageNumber(page)
+    latestViewRef.current = currentView()
+    pendingAnchorRef.current = null
+  }, [currentView])
+
+  const releaseSnapshot = (id: string) => {
+    void window.projectConsole.latex.releasePdfSnapshot(id).catch(() => {
+      // Window destruction also releases every owner-scoped snapshot.
+    })
+  }
 
   const installPdf = useCallback(
-    async (document: LatexPdfDocument, version: number) => {
-      const { dataBase64, ...nextMetadata } = document
-      const loadingTask = getDocument({ data: decodeBase64(dataBase64) })
-      const nextDocument = await loadingTask.promise
-      if (version !== loadVersionRef.current) {
-        await nextDocument.destroy()
-        return
+    async (document: LatexPdfSnapshot, version: number) => {
+      const { dataBase64, snapshotId, ...nextMetadata } = document
+      let installed = false
+      let nextDocument: PDFDocumentProxy | null = null
+      let loadingTask: PDFDocumentLoadingTask | null = null
+      try {
+        if (version !== loadVersionRef.current) return
+        loadingTask = getDocument({ data: decodeBase64(dataBase64) })
+        nextDocument = await loadingTask.promise
+        if (version !== loadVersionRef.current) {
+          return
+        }
+        await window.projectConsole.latex.acceptPdfSnapshot(snapshotId)
+        if (version !== loadVersionRef.current) {
+          return
+        }
+        beforeLayoutChange()
+        const previousDocument = documentRef.current
+        const previousSnapshot = snapshotIdRef.current
+        documentRef.current = nextDocument
+        snapshotIdRef.current = snapshotId
+        installed = true
+        setPdf(nextDocument)
+        setMetadata(nextMetadata)
+        const numPages = nextDocument.numPages
+        setPageNumber((current) => {
+          const nextPage = Math.max(1, Math.min(numPages, current))
+          pageNumberRef.current = nextPage
+          return nextPage
+        })
+        if (previousSnapshot) releaseSnapshot(previousSnapshot)
+        if (previousDocument) await previousDocument.destroy()
+      } finally {
+        if (!installed) {
+          releaseSnapshot(snapshotId)
+          if (nextDocument) await nextDocument.destroy()
+          else if (loadingTask) await loadingTask.destroy()
+        }
       }
-      const previousDocument = documentRef.current
-      documentRef.current = nextDocument
-      pdfSnapshotCache.set(projectId, document)
-      setPdf(nextDocument)
-      setMetadata(nextMetadata)
-      setPageNumber((current) => {
-        const nextPage = Math.max(1, Math.min(nextDocument.numPages, current))
-        pageNumberRef.current = nextPage
-        return nextPage
-      })
-      if (previousDocument) await previousDocument.destroy()
     },
-    [projectId]
+    [beforeLayoutChange]
   )
 
   const loadPdf = useCallback(async () => {
@@ -246,11 +333,8 @@ export function LatexPdfPreview({
     setLoading(true)
     setError('')
     try {
-      const cached = pdfSnapshotCache.get(projectId)
       await installPdf(
-        cached?.path === expectedPath
-          ? cached
-          : await window.projectConsole.latex.getPdf(projectId),
+        await window.projectConsole.latex.getPdfSnapshot(projectId, expectedPath),
         version
       )
     } catch (caught) {
@@ -273,7 +357,7 @@ export function LatexPdfPreview({
     setError('')
     try {
       await installPdf(
-        await window.projectConsole.latex.compile(projectId),
+        await window.projectConsole.latex.compilePdfSnapshot(projectId),
         version
       )
       void window.projectConsole.latex
@@ -303,6 +387,9 @@ export function LatexPdfPreview({
       printVersionRef.current += 1
       const currentDocument = documentRef.current
       documentRef.current = null
+      const currentSnapshot = snapshotIdRef.current
+      snapshotIdRef.current = null
+      if (currentSnapshot) releaseSnapshot(currentSnapshot)
       if (currentDocument) void currentDocument.destroy()
     }
   }, [loadPdf])
@@ -349,85 +436,82 @@ export function LatexPdfPreview({
   }, [autoCompile, projectId, recompilePdf])
 
   useLayoutEffect(() => {
-    if (!pdf || !scrollRoot || restoredScrollRef.current) return
-    restoredScrollRef.current = true
-    scrollRoot.scrollTop = savedViewRef.current?.scrollTop ?? 0
-  }, [pdf, scrollRoot])
+    if (!pdf || !scrollRoot) return
+    pageElementsRef.current = Array.from(scrollRoot.querySelectorAll<HTMLElement>('[data-pdf-page]'))
+    if (!restoredScrollRef.current) {
+      restoredScrollRef.current = true
+      pendingAnchorRef.current = savedViewRef.current ?? latestViewRef.current
+    }
+    afterLayoutChange()
+  }, [afterLayoutChange, pdf, scrollRoot, zoom])
 
   useEffect(() => {
     if (!scrollRoot || !pdf) return
     let frame = 0
+    // The stack is ordered and page heights may differ. Cache its nodes once,
+    // then locate the reading anchor with O(log pages) geometry reads per frame.
+    const pages = pageElementsRef.current
     const updateCurrentPage = () => {
-      window.cancelAnimationFrame(frame)
+      if (frame) return
       frame = window.requestAnimationFrame(() => {
+        frame = 0
         const rootBounds = scrollRoot.getBoundingClientRect()
         const anchor = rootBounds.top + Math.min(140, rootBounds.height / 3)
-        const pages = Array.from(
-          scrollRoot.querySelectorAll<HTMLElement>('[data-pdf-page]')
-        )
+        let low = 0
+        let high = pages.length
+        while (low < high) {
+          const middle = (low + high) >>> 1
+          if (pages[middle].getBoundingClientRect().bottom <= anchor) low = middle + 1
+          else high = middle
+        }
         let closestPage = pageNumberRef.current
         let closestDistance = Number.POSITIVE_INFINITY
-        for (const page of pages) {
+        for (const index of [low - 1, low]) {
+          const page = pages[index]
+          if (!page) continue
           const bounds = page.getBoundingClientRect()
-          const value = Number(page.dataset.pdfPage)
-          if (bounds.top <= anchor && bounds.bottom > anchor) {
-            closestPage = value
-            closestDistance = 0
-            break
-          }
-          const distance = Math.min(
-            Math.abs(bounds.top - anchor),
-            Math.abs(bounds.bottom - anchor)
-          )
+          const distance = bounds.top <= anchor && bounds.bottom > anchor ? 0
+            : Math.min(Math.abs(bounds.top - anchor), Math.abs(bounds.bottom - anchor))
           if (distance < closestDistance) {
             closestDistance = distance
-            closestPage = value
+            closestPage = Number(page.dataset.pdfPage)
           }
         }
         pageNumberRef.current = closestPage
         setPageNumber(closestPage)
-        saveLatexPdfView(projectId, {
-          pageNumber: closestPage,
-          scrollTop: scrollRoot.scrollTop,
-          zoom
-        })
+        latestViewRef.current = currentView()
+        saveLatexPdfView(projectId, latestViewRef.current)
       })
     }
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateCurrentPage)
+    const stack = scrollRoot.firstElementChild
+    if (stack) resizeObserver?.observe(stack)
     scrollRoot.addEventListener('scroll', updateCurrentPage, { passive: true })
     updateCurrentPage()
     return () => {
+      resizeObserver?.disconnect()
       scrollRoot.removeEventListener('scroll', updateCurrentPage)
       window.cancelAnimationFrame(frame)
     }
-  }, [pdf, projectId, scrollRoot, zoom])
+  }, [currentView, pdf, projectId, scrollRoot, zoom])
 
-  useEffect(() => {
-    saveLatexPdfView(projectId, {
-      pageNumber,
-      scrollTop: scrollRoot?.scrollTop ?? savedViewRef.current?.scrollTop ?? 0,
-      zoom
-    })
-  }, [pageNumber, projectId, scrollRoot, zoom])
+  useLayoutEffect(() => {
+    latestViewRef.current = currentView()
+    saveLatexPdfView(projectId, latestViewRef.current)
+  }, [currentView, pageNumber, projectId, scrollRoot, zoom])
 
-  useEffect(
-    () => () => {
-      saveLatexPdfView(projectId, {
-        pageNumber: pageNumberRef.current,
-        scrollTop: scrollRoot?.scrollTop ?? 0,
-        zoom
-      })
-    },
-    [projectId, scrollRoot, zoom]
-  )
+  useLayoutEffect(() => () => {
+    // Layout cleanup runs before DOM detachment resets scrollTop to zero.
+    latestViewRef.current = currentView()
+    saveLatexPdfView(projectId, latestViewRef.current)
+  }, [currentView, projectId])
 
   function goToPage(nextPage: number) {
     if (!pdf || !scrollRoot || !Number.isFinite(nextPage)) return
     const targetPage = Math.max(1, Math.min(pdf.numPages, nextPage))
     pageNumberRef.current = targetPage
     setPageNumber(targetPage)
-    const target = scrollRoot.querySelector<HTMLElement>(
-      `[data-pdf-page="${targetPage}"]`
-    )
+    const target = pageElementsRef.current[targetPage - 1]
     if (!target) return
     const rootBounds = scrollRoot.getBoundingClientRect()
     const targetBounds = target.getBoundingClientRect()
@@ -440,6 +524,7 @@ export function LatexPdfPreview({
   }
 
   function changeZoom(delta: number) {
+    beforeLayoutChange()
     setZoom((current) =>
       Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, current + delta))
     )
@@ -468,18 +553,13 @@ export function LatexPdfPreview({
   async function printPdf() {
     if (!pdf || !metadata || printing) return
     const version = ++printVersionRef.current
-    const snapshot = pdfSnapshotCache.get(projectId)
+    const snapshotId = snapshotIdRef.current
     setPrinting(true)
     setError('')
 
     try {
-      if (
-        !snapshot ||
-        snapshot.path !== metadata.path ||
-        snapshot.modifiedAt !== metadata.modifiedAt
-      ) {
-        throw new Error('Reload the PDF preview before printing this document.')
-      }
+      if (!snapshotId) throw new Error('Reload the PDF preview before printing this document.')
+      const snapshot = await window.projectConsole.latex.readPdfSnapshot(snapshotId)
       await window.projectConsole.latex.printPdf({
         path: snapshot.path,
         dataBase64: snapshot.dataBase64
@@ -673,7 +753,10 @@ export function LatexPdfPreview({
         <div className="latex-pdf-pages">
           {Array.from({ length: pdf.numPages }, (_, index) => (
             <LatexPdfPage
-              key={index + 1}
+              key={`${snapshotIdRef.current}:${index + 1}`}
+              snapshotId={snapshotIdRef.current!}
+              beforeLayoutChange={beforeLayoutChange}
+              afterLayoutChange={afterLayoutChange}
               pdf={pdf}
               pageNumber={index + 1}
               scrollRoot={scrollRoot}

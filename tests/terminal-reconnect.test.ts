@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConversationIndexer } from '../src/main/conversation-indexer'
 import { RemoteConversationIndexer } from '../src/main/remote-conversation-indexer'
 import { Store } from '../src/main/store'
@@ -11,16 +11,27 @@ import { TerminalManager } from '../src/main/terminal-manager'
 
 describe('terminal tmux reconnect', () => {
   let appDataPath: string | null = null
+  let tmuxDataPath: string | null = null
 
   afterEach(() => {
+    if (tmuxDataPath) {
+      spawnSync('tmux', ['kill-server'], { env: { ...process.env, TMUX_TMPDIR: tmuxDataPath } })
+      rmSync(tmuxDataPath, { recursive: true, force: true })
+    }
     if (appDataPath) rmSync(appDataPath, { recursive: true, force: true })
     appDataPath = null
+    tmuxDataPath = null
+    vi.unstubAllEnvs()
   })
 
   it.skipIf(spawnSync('tmux', ['-V']).status !== 0)(
     'replaces the PanePilot client while preserving the exact tmux session',
     async () => {
       appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-reconnect-'))
+      tmuxDataPath = mkdtempSync('/tmp/panepilot-reconnect-tmux-')
+      vi.stubEnv('TMUX_TMPDIR', tmuxDataPath)
+      vi.stubEnv('TMUX', undefined)
+      vi.stubEnv('TMUX_PANE', undefined)
       const store = new Store(appDataPath)
       store.syncConnections([])
       const folder = join(appDataPath, 'project')
@@ -87,7 +98,7 @@ describe('terminal tmux reconnect', () => {
           ).stdout.trim()
         ).toBe(tmuxId)
       } finally {
-        if (store.getSession(session.id)) manager.delete(session.id)
+        if (store.getSession(session.id)) await manager.delete(session.id)
         manager.shutdown()
         store.close()
       }

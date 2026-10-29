@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -17,10 +16,14 @@ import {
 import type { TerminalSession } from '../src/shared/types'
 
 // Never launch real agents or touch the user's tmux server in recovery tests.
+const subprocess = vi.hoisted(() => ({ execFile: vi.fn() }))
 vi.mock('node-pty', () => ({ spawn: vi.fn() }))
 vi.mock('node:child_process', async (importOriginal) => ({
   ...await importOriginal<typeof import('node:child_process')>(),
-  spawnSync: vi.fn()
+  execFile: Object.assign(vi.fn(), {
+    [Symbol.for('nodejs.util.promisify.custom')]: subprocess.execFile
+  }),
+  spawnSync: vi.fn(() => { throw new Error('Unexpected synchronous subprocess in recovery test') })
 }))
 
 describe('terminal reboot recovery', () => {
@@ -74,7 +77,7 @@ describe('terminal reboot recovery', () => {
     listing = ''
     listError = ''
     vi.stubEnv('SHELL', '')
-    vi.mocked(spawnSync).mockImplementation((_command, args) => {
+    subprocess.execFile.mockImplementation(async (_command, args) => {
       const arguments_ = args as string[]
       let stdout = ''
       let stderr = ''
@@ -86,7 +89,8 @@ describe('terminal reboot recovery', () => {
         status = listError ? 1 : 0
       } else if (arguments_.includes('has-session')) status = listing ? 0 : 1
       else throw new Error(`Unexpected subprocess in recovery test: ${arguments_.join(' ')}`)
-      return { pid: 1, output: [null, stdout, stderr], stdout, stderr, status, signal: null }
+      if (status !== 0) throw Object.assign(new Error(stderr || 'tmux session missing'), { code: status, stdout, stderr })
+      return { stdout, stderr }
     })
     vi.mocked(pty.spawn).mockImplementation(() => ({
       pid: 1, cols: 100, rows: 30, process: 'fake tmux', handleFlowControl: false,
@@ -117,9 +121,9 @@ describe('terminal reboot recovery', () => {
     const threadId = randomUUID()
     store.setSessionProviderId(selected.id, 'codex', threadId)
     const instance = manager()
-    expect(instance.prepareLocalSessionsAfterReboot(Date.now() + 60_000)).toBe(80)
+    expect(await instance.prepareLocalSessionsAfterReboot(Date.now() + 60_000)).toBe(80)
     expect(pty.spawn).not.toHaveBeenCalled()
-    expect(vi.mocked(spawnSync).mock.calls.filter((call) =>
+    expect(subprocess.execFile.mock.calls.filter((call) =>
       (call[1] as string[]).includes('list-sessions'))).toHaveLength(1)
     await instance.reconcileSessions('local')
     const findProvider = vi.spyOn(ConversationIndexer.prototype, 'findProviderSessionId')
@@ -127,8 +131,10 @@ describe('terminal reboot recovery', () => {
     expect(findProvider).not.toHaveBeenCalled()
     expect(pty.spawn).not.toHaveBeenCalled()
     expect(sessions.every((value) => store.getSession(value.id)?.state === 'idle')).toBe(true)
-    instance.attach(selected.id, 120, 40)
-    instance.attach(selected.id, 120, 40)
+    await Promise.all([
+      instance.attach(selected.id, 120, 40),
+      instance.attach(selected.id, 120, 40)
+    ])
     expect(pty.spawn).toHaveBeenCalledTimes(1)
     const [, args, options] = vi.mocked(pty.spawn).mock.calls[0]
     expect(args).toEqual(expect.arrayContaining(['new-session', selected.name]))
@@ -142,48 +148,48 @@ describe('terminal reboot recovery', () => {
     const waiting = session({ profile: 'shell' })
     store.replaceOutput(waiting.id, 'Saved shell output')
     const first = manager()
-    first.prepareLocalSessionsAfterReboot(Date.now() + 60_000)
+    await first.prepareLocalSessionsAfterReboot(Date.now() + 60_000)
     store.setSessionPinned(waiting.id, true)
     first.shutdown()
     store.close()
     store = new Store(appDataPath)
     const reopened = manager()
-    expect(reopened.prepareLocalSessionsAfterReboot(bootTime)).toBe(1)
+    expect(await reopened.prepareLocalSessionsAfterReboot(bootTime)).toBe(1)
     await reopened.reconcileSessions('local')
     expect(pty.spawn).not.toHaveBeenCalled()
     expect(store.getSession(waiting.id)).toMatchObject({ state: 'idle', pinned: true })
-    expect(reopened.attach(waiting.id, 100, 30).output).toBe('Saved shell output')
+    expect((await reopened.attach(waiting.id, 100, 30)).output).toBe('Saved shell output')
     expect(pty.spawn).toHaveBeenCalledTimes(1)
     expect(store.getProject(projectId)?.activities.filter((activity) =>
       activity.kind === 'terminal-reboot-pending')).toHaveLength(1)
   })
 
-  it('adopts an already restored owned session without starting a new agent', () => {
+  it('adopts an already restored owned session without starting a new agent', async () => {
     const existing = session()
     live(existing)
     const instance = manager()
-    expect(instance.prepareLocalSessionsAfterReboot(bootTime)).toBe(1)
+    expect(await instance.prepareLocalSessionsAfterReboot(bootTime)).toBe(1)
     expect(pty.spawn).not.toHaveBeenCalled()
-    instance.attach(existing.id, 100, 30)
+    await instance.attach(existing.id, 100, 30)
     expect(vi.mocked(pty.spawn).mock.calls[0][1]).toEqual(['attach-session', '-t', `=${existing.name}`])
   })
 
-  it('rechecks ownership when another client restores a waiting session', () => {
+  it('rechecks ownership when another client restores a waiting session', async () => {
     const waiting = session()
     const instance = manager()
-    instance.prepareLocalSessionsAfterReboot(bootTime)
+    await instance.prepareLocalSessionsAfterReboot(bootTime)
     live(waiting)
-    instance.attach(waiting.id, 100, 30)
+    await instance.attach(waiting.id, 100, 30)
     expect(vi.mocked(pty.spawn).mock.calls[0][1]).toEqual(['attach-session', '-t', `=${waiting.name}`])
     expect(store.isSessionPendingRebootRecovery(waiting.id)).toBe(false)
   })
 
-  it('never attaches to an unrelated session that takes a waiting name', () => {
+  it('never attaches to an unrelated session that takes a waiting name', async () => {
     const waiting = session()
     const instance = manager()
-    instance.prepareLocalSessionsAfterReboot(bootTime)
+    await instance.prepareLocalSessionsAfterReboot(bootTime)
     live(waiting, randomUUID())
-    expect(() => instance.attach(waiting.id, 100, 30)).toThrow('Another tmux session')
+    await expect(instance.attach(waiting.id, 100, 30)).rejects.toThrow('Another tmux session')
     expect(pty.spawn).not.toHaveBeenCalled()
     expect(store.isSessionPendingRebootRecovery(waiting.id)).toBe(true)
   })
@@ -191,30 +197,43 @@ describe('terminal reboot recovery', () => {
   it('leaves failed attachment pending so Retry can restore that exact tab', async () => {
     const waiting = session({ profile: 'shell' })
     const instance = manager()
-    instance.prepareLocalSessionsAfterReboot(bootTime)
+    await instance.prepareLocalSessionsAfterReboot(bootTime)
     vi.mocked(pty.spawn).mockImplementationOnce(() => { throw new Error('spawn failed') })
-    expect(() => instance.attach(waiting.id, 100, 30)).toThrow('spawn failed')
+    await expect(instance.attach(waiting.id, 100, 30)).rejects.toThrow('spawn failed')
     expect(store.isSessionPendingRebootRecovery(waiting.id)).toBe(true)
     await instance.retryAttach(waiting.id, 110, 35)
     expect(store.isSessionPendingRebootRecovery(waiting.id)).toBe(false)
     expect(pty.spawn).toHaveBeenCalledTimes(2)
   })
 
-  it('distinguishes a missing tmux socket from a failed read', () => {
+  it('does not create a late PTY when shutdown occurs during asynchronous attachment', async () => {
+    const waiting = session({ profile: 'shell' })
+    const instance = manager()
+    await instance.prepareLocalSessionsAfterReboot(bootTime)
+    const attachment = instance.attach(waiting.id, 100, 30)
+    instance.shutdown()
+    // Closing may reject the attachment or acknowledge it without a runtime.
+    // In either case, pending async discovery must never launch after shutdown.
+    await Promise.allSettled([attachment])
+    expect(vi.mocked(pty.spawn).mock.calls.length).toBe(0)
+    expect(store.isSessionPendingRebootRecovery(waiting.id)).toBe(true)
+  })
+
+  it('distinguishes a missing tmux socket from a failed read', async () => {
     const waiting = session()
     const instance = manager()
     listError = 'error connecting to /tmp/tmux-test/default (Permission denied)'
-    expect(instance.prepareLocalSessionsAfterReboot(bootTime)).toBe(0)
+    expect(await instance.prepareLocalSessionsAfterReboot(bootTime)).toBe(0)
     expect(store.isSessionPendingRebootRecovery(waiting.id)).toBe(false)
     listError = 'error connecting to /tmp/tmux-test/default (No such file or directory)'
-    expect(instance.prepareLocalSessionsAfterReboot(bootTime)).toBe(1)
+    expect(await instance.prepareLocalSessionsAfterReboot(bootTime)).toBe(1)
     listError = 'error connecting to /tmp/tmux-test/default (Permission denied)'
-    expect(() => instance.attach(waiting.id, 100, 30)).toThrow('Could not check tmux')
+    await expect(instance.attach(waiting.id, 100, 30)).rejects.toThrow('Could not check tmux')
     expect(store.isSessionPendingRebootRecovery(waiting.id)).toBe(true)
     expect(pty.spawn).not.toHaveBeenCalled()
   })
 
-  it('does not recover Actions, stopped tabs, PTYs, archived projects, or SSH sessions', () => {
+  it('does not recover Actions, stopped tabs, PTYs, archived projects, or SSH sessions', async () => {
     const action = session({ kind: 'action', profile: 'custom', customCommand: 'do not execute' })
     const stopped = session()
     store.setSessionState(stopped.id, 'completed')
@@ -230,7 +249,7 @@ describe('terminal reboot recovery', () => {
     const db = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
     db.prepare('UPDATE projects SET archived = 1 WHERE id = ?').run(archivedProject.id)
     db.close()
-    expect(manager().prepareLocalSessionsAfterReboot(Date.now() + 60_000)).toBe(0)
+    expect(await manager().prepareLocalSessionsAfterReboot(Date.now() + 60_000)).toBe(0)
     expect(store.getSession(action.id)?.state).toBe('completed')
     for (const value of [action, stopped, failed, plain, remote, archived]) {
       expect(store.isSessionPendingRebootRecovery(value.id)).toBe(false)
@@ -238,30 +257,30 @@ describe('terminal reboot recovery', () => {
     expect(pty.spawn).not.toHaveBeenCalled()
   })
 
-  it('keeps explicitly stopped waiting tabs stopped after another app launch', () => {
+  it('keeps explicitly stopped waiting tabs stopped after another app launch', async () => {
     const waiting = session({ kind: 'temporary-chat' })
     const instance = manager()
-    instance.prepareLocalSessionsAfterReboot(bootTime)
-    instance.stop(waiting.id)
+    await instance.prepareLocalSessionsAfterReboot(bootTime)
+    await instance.stop(waiting.id)
     expect(store.isSessionPendingRebootRecovery(waiting.id)).toBe(false)
-    expect(instance.prepareLocalSessionsAfterReboot(Date.now() + 60_000)).toBe(0)
+    expect(await instance.prepareLocalSessionsAfterReboot(Date.now() + 60_000)).toBe(0)
     expect(store.getSession(waiting.id)?.state).toBe('completed')
     expect(pty.spawn).not.toHaveBeenCalled()
   })
 
-  it('resumes Claude by its exact saved ID with safe permissions unchanged', () => {
+  it('resumes Claude by its exact saved ID with safe permissions unchanged', async () => {
     const waiting = session({ profile: 'claude' })
     const providerId = randomUUID()
     store.setSessionProviderId(waiting.id, 'claude', providerId)
     const instance = manager()
-    instance.prepareLocalSessionsAfterReboot(Date.now() + 60_000)
-    instance.attach(waiting.id, 100, 30)
+    await instance.prepareLocalSessionsAfterReboot(Date.now() + 60_000)
+    await instance.attach(waiting.id, 100, 30)
     const command = vi.mocked(pty.spawn).mock.calls[0][1]?.at(-1)
     expect(command).toContain(`exec claude --resume '${providerId}'`)
     expect(command).not.toContain('--dangerously-skip-permissions')
   })
 
-  it('leaves one-shot inline edits stopped while deferring writing and quick chats', () => {
+  it('leaves one-shot inline edits stopped while deferring writing and quick chats', async () => {
     const paper = store.createProject({ type: 'latex', name: 'Paper',
       connectionId: 'local', folder: join(appDataPath, 'paper'), repositoryUrl: null,
       latex: { mainFile: 'main.tex', overleafUrl: null, contextFolder: 'context' } })
@@ -274,7 +293,7 @@ describe('terminal reboot recovery', () => {
     }
     const quick = session({ kind: 'temporary-chat' })
     const instance = manager()
-    expect(instance.prepareLocalSessionsAfterReboot(Date.now() + 60_000)).toBe(2)
+    expect(await instance.prepareLocalSessionsAfterReboot(Date.now() + 60_000)).toBe(2)
     expect(store.getSession(inline.id)?.state).toBe('completed')
     expect(store.isSessionPendingRebootRecovery(inline.id)).toBe(false)
     expect(store.isSessionPendingRebootRecovery(writing.id)).toBe(true)
@@ -286,7 +305,7 @@ describe('terminal reboot recovery', () => {
     const current = session()
     store.setSessionState(current.id, 'running')
     const instance = manager()
-    expect(instance.prepareLocalSessionsAfterReboot(bootTime)).toBe(0)
+    expect(await instance.prepareLocalSessionsAfterReboot(bootTime)).toBe(0)
     await instance.reconcileSessions('local')
     expect(store.getSession(current.id)?.state).toBe('completed')
     expect(pty.spawn).not.toHaveBeenCalled()

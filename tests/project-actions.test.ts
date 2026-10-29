@@ -92,11 +92,11 @@ describe('project actions persistence', () => {
     }
   })
 
-  it('shares Action definitions through .panepilot/actions.json', () => {
+  it('shares Action definitions through .panepilot/actions.json', async () => {
     const { store, project } = createStoreAndProject()
     const metadata = new ProjectMetadataService(store)
     try {
-      const action = metadata.createAction({
+      const action = await metadata.createAction({
         projectId: project.id,
         name: 'Run tests',
         command: 'npm test'
@@ -141,7 +141,7 @@ describe('project actions persistence', () => {
         )}\n`
       )
 
-      expect(metadata.syncActions(project.id)).toEqual([
+      expect(await metadata.syncActions(project.id)).toEqual([
         expect.objectContaining({
           id: action.id,
           name: 'Check project',
@@ -298,14 +298,14 @@ describe('project actions persistence', () => {
         new RemoteConversationIndexer()
       )
       const token = `panepilot-action-${randomUUID()}`
-      const action = manager.createAction({
+      const action = await manager.createAction({
         projectId: project.id,
         name: token,
         command: `printf '%s\\n' '${token}'`
       })
       let sessionId: string | null = null
       try {
-        const session = manager.runAction(action.id)
+        const session = await manager.runAction(action.id)
         sessionId = session.id
         expect(session.kind).toBe('action')
         expect(session.backend).toBe('tmux')
@@ -349,12 +349,12 @@ describe('project actions persistence', () => {
           'panepilot-action',
           'panepilot-replacement'
         )
-        manager.updateAction({
+        await manager.updateAction({
           actionId: action.id,
           name: replacement,
           command: `printf '%s\\n' '${replacement}'; exit 7`
         })
-        const rerun = manager.runAction(action.id)
+        const rerun = await manager.runAction(action.id)
         sessionId = rerun.id
         expect(store.getSession(session.id)).toBeNull()
 
@@ -375,7 +375,7 @@ describe('project actions persistence', () => {
       } finally {
         const latest = sessionId ? store.getSession(sessionId) : null
         if (latest && !['completed', 'error'].includes(latest.state)) {
-          manager.stopAction(action.id)
+          await manager.stopAction(action.id)
         }
         manager.shutdown()
         store.close()

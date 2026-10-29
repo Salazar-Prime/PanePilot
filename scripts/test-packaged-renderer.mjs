@@ -162,12 +162,12 @@ function preload() {
       updates:{get:async()=>({phase:'disabled',currentVersion:'smoke',version:null,percent:null,stage:'download',message:'Smoke'}),onChanged:unsubscribe},
       connections:{list:async()=>[{id:'local',name:'Synthetic local',kind:'local',sshAlias:null}]},
       projects:{list:async()=>projects,get:async(id)=>projects.find(p=>p.id===id)},
-      terminals:{onState:unsubscribe,onMetadata:unsubscribe,onTransport:unsubscribe,onData:unsubscribe,discover:async()=>0,attach:async()=>({output:'\\x1b[32mPACKAGED_XTERM_OK\\x1b[0m\\r\\n'}),resize:async()=>{},acknowledge:async()=>{}},
+      terminals:{onState:unsubscribe,onMetadata:unsubscribe,onTransport:unsubscribe,onData:unsubscribe,discover:async()=>0,attach:async()=>({output:'\\x1b[32mPACKAGED_XTERM_OK\\x1b[0m\\r\\n',generation:'packaged-smoke',sequence:0}),acknowledgeOutput:noop,unsubscribeOutput:noop,resize:async()=>{},acknowledge:async()=>{}},
       actions:{sync:empty},
       git:{status:async()=>({isRepository:false,root:null,originUrl:null,branch:null,detached:false,head:null,upstream:null,ahead:0,behind:0,stashCount:0,clean:true,changes:[],message:null})},
       files:{list:async()=>entries,preview:async(_,path)=>preview(path),open:async(_,path)=>({kind:'file',path,directoryPath:'.',entries,preview:preview(path)}),search:empty},
       googleDrive:{status:async()=>({available:false,connected:false,remoteName:null,folderPath:null,folderUrl:null,destination:null})},
-      latex:{getWorkspace:async()=>({details,sections:[],contextAvailable:true}),listComments:empty,listInlineEdits:empty,sourceRevision:async()=>'fixed',getPdf:async()=>({path:'main.pdf',size:pdf.length*3/4,modifiedAt:'2026-01-01T00:00:00.000Z',dataBase64:pdf})},
+      latex:{getWorkspace:async()=>({details,sections:[],contextAvailable:true}),listComments:empty,listInlineEdits:empty,sourceRevision:async()=>'fixed',getPdf:async()=>({path:'main.pdf',size:pdf.length*3/4,modifiedAt:'2026-01-01T00:00:00.000Z',dataBase64:pdf}),getPdfSnapshot:async()=>({snapshotId:'packaged-smoke-pdf',path:'main.pdf',size:pdf.length*3/4,modifiedAt:'2026-01-01T00:00:00.000Z',dataBase64:pdf}),readPdfSnapshot:async()=>({snapshotId:'packaged-smoke-pdf',path:'main.pdf',size:pdf.length*3/4,modifiedAt:'2026-01-01T00:00:00.000Z',dataBase64:pdf}),acceptPdfSnapshot:async()=>{},releasePdfSnapshot:async()=>{}},
       workspaceHistory:{setSwitcherOpen:noop},system:{setZoomFactor:noop},portForwards:{onChanged:unsubscribe},terminalDrops:{onProgress:unsubscribe,list:empty}
     });`
 }

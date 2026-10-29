@@ -87,8 +87,12 @@ const api: ProjectConsoleApi = {
     start: (input: StartTerminalInput) => ipcRenderer.invoke('terminals:start', input),
     discover: (connectionId?: string) =>
       ipcRenderer.invoke('terminals:discover', connectionId),
-    attach: (sessionId: string, cols: number, rows: number) =>
-      ipcRenderer.invoke('terminals:attach', sessionId, cols, rows),
+    attach: (sessionId: string, cols: number, rows: number, consumerId?: string) =>
+      ipcRenderer.invoke('terminals:attach', sessionId, cols, rows, consumerId),
+    acknowledgeOutput: (sessionId: string, consumerId: string, generation: string, sequence: number) =>
+      ipcRenderer.send('terminals:acknowledge-output', sessionId, consumerId, generation, sequence),
+    unsubscribeOutput: (sessionId: string, consumerId: string) =>
+      ipcRenderer.send('terminals:unsubscribe-output', sessionId, consumerId),
     retryAttach: (sessionId: string, cols: number, rows: number) =>
       ipcRenderer.invoke('terminals:retry-attach', sessionId, cols, rows),
     write: (sessionId: string, data: string) =>
@@ -243,6 +247,16 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('latex:source-revision', projectId),
     getPdf: (projectId: string) => ipcRenderer.invoke('latex:get-pdf', projectId),
     compile: (projectId: string) => ipcRenderer.invoke('latex:compile', projectId),
+    getPdfSnapshot: (projectId: string, expectedPath: string) =>
+      ipcRenderer.invoke('latex:get-pdf-snapshot', projectId, expectedPath),
+    compilePdfSnapshot: (projectId: string) =>
+      ipcRenderer.invoke('latex:compile-pdf-snapshot', projectId),
+    acceptPdfSnapshot: (snapshotId: string) =>
+      ipcRenderer.invoke('latex:accept-pdf-snapshot', snapshotId),
+    readPdfSnapshot: (snapshotId: string) =>
+      ipcRenderer.invoke('latex:read-pdf-snapshot', snapshotId),
+    releasePdfSnapshot: (snapshotId: string) =>
+      ipcRenderer.invoke('latex:release-pdf-snapshot', snapshotId),
     printPdf: (input: PrintLatexPdfInput) =>
       ipcRenderer.invoke('latex:print-pdf', input),
     update: (input: UpdateLatexProjectInput) => ipcRenderer.invoke('latex:update', input),

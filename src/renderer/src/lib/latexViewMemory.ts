@@ -12,6 +12,7 @@ export interface LatexManuscriptViewMemory {
 
 export interface LatexPdfViewMemory {
   pageNumber: number
+  pageOffset?: number
   scrollTop: number
   zoom: number
 }

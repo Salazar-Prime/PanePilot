@@ -17,6 +17,7 @@ import type {
   CreateProjectInput,
   CreateProjectActionInput,
   LatexChatMode,
+  LatexPdfDocument,
   PrintLatexPdfInput,
   ProjectFolderSelectionPurpose,
   SendLatexInlineEditInput,
@@ -25,7 +26,8 @@ import type {
   UpdateLatexProjectInput,
   UpdateProjectActionInput
 } from '../shared/types'
-import { ConversationIndexer } from './conversation-indexer'
+import type { AsyncConversationIndexer } from './conversation-indexer-client'
+import { createConversationIndexer } from './conversation-indexer-service'
 import { CodexSubagentReader } from './codex-subagents'
 import {
   createLocalDirectory,
@@ -42,9 +44,10 @@ import {
 } from './file-service'
 import { GoogleDriveService } from './google-drive-service'
 import { GitService } from './git'
-import { LatexProjectService } from './latex-project-service'
+import { LatexProjectService, latexPdfPath } from './latex-project-service'
 import { normalizeOptionalWebUrl } from './latex-paths'
 import { printLatexPdf } from './pdf-printer'
+import { PdfSnapshotStore } from './pdf-snapshot-store'
 import { PortForwardManager, testSshConnection } from './port-forward-manager'
 import { ProjectMetadataService } from './project-metadata-service'
 import { projectTypeServices } from './project-type-services'
@@ -72,12 +75,15 @@ import type { OpenInteractiveHtmlInput } from '../shared/types'
 protocol.registerSchemesAsPrivileged([{ scheme: HTML_PREVIEW_SCHEME, privileges: HTML_PREVIEW_PRIVILEGES }])
 
 let mainWindow: BrowserWindow | null = null
+let rendererOwnerSequence = 0
+const rendererOwners = new WeakMap<Electron.WebContents, number>()
 let store: Store
 let terminals: TerminalManager
 let terminalDrops: TerminalDropService
-let conversations: ConversationIndexer
+let conversations: AsyncConversationIndexer
 let remoteConversations: RemoteConversationIndexer
 const codexSubagents = new CodexSubagentReader()
+const pdfSnapshots = new PdfSnapshotStore()
 const interactiveHtml = new InteractiveHtmlPreviewService(async (projectId, path) => {
   const project = store.getProjectForRuntime(projectId)
   if (!project || project.archived) throw new Error('Project not found.')
@@ -137,6 +143,27 @@ function createWindow(): void {
   })
   mainWindow.webContents.on('did-start-loading', () => {
     mainWindow?.webContents.setIgnoreMenuShortcuts(false)
+  })
+  const windowContents = mainWindow.webContents
+  let rendererOwnerId = ++rendererOwnerSequence
+  rendererOwners.set(windowContents, rendererOwnerId)
+  const discardRendererResources = (renewOwner: boolean): void => {
+    if (!mainWindow || mainWindow.webContents === windowContents) terminals.clearOutputConsumers()
+    const previousOwnerId = rendererOwnerId
+    if (renewOwner) rendererOwners.set(windowContents, (rendererOwnerId = ++rendererOwnerSequence))
+    else rendererOwners.delete(windowContents)
+    void pdfSnapshots.disposeOwner(previousOwnerId).catch((error) => {
+      console.warn('Could not remove closed-window PDF snapshots.', error)
+    })
+  }
+  mainWindow.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) discardRendererResources(true)
+  })
+  mainWindow.webContents.on('render-process-gone', () => {
+    discardRendererResources(true)
+  })
+  mainWindow.webContents.once('destroyed', () => {
+    discardRendererResources(false)
   })
   guardInteractiveHtmlNavigation(mainWindow.webContents, interactiveHtml)
   mainWindow.webContents.setWindowOpenHandler(({ url, referrer }) => {
@@ -241,9 +268,9 @@ function registerIpc(): void {
       store.setProjectIcon(projectId, icon)
     }
   )
-  ipcMain.handle('projects:archive', (_event, projectId: string) => {
+  ipcMain.handle('projects:archive', (_event, projectId: string) =>
     terminals.archiveProject(projectId)
-  })
+  )
   ipcMain.handle('projects:restore', (_event, projectId: string) => {
     store.archiveProject(projectId, false)
   })
@@ -306,29 +333,29 @@ function registerIpc(): void {
   ipcMain.handle('terminals:subagents', (event, sessionId: string) => readSubagents(event, sessionId, false))
   ipcMain.handle('terminals:subagent-summary', (event, sessionId: string) => readSubagents(event, sessionId, true))
   ipcMain.handle('actions:sync', (_event, projectId: string) =>
-    terminals.syncActions(projectId)
+    appUpdates.protectRestartWhile(() => terminals.syncActions(projectId))
   )
   ipcMain.handle('actions:create', (_event, input: CreateProjectActionInput) =>
-    terminals.createAction(input)
+    appUpdates.protectRestartWhile(() => terminals.createAction(input))
   )
   ipcMain.handle('actions:update', (_event, input: UpdateProjectActionInput) =>
-    terminals.updateAction(input)
+    appUpdates.protectRestartWhile(() => terminals.updateAction(input))
   )
   ipcMain.handle('actions:run', (_event, actionId: string) =>
     terminals.runAction(actionId)
   )
-  ipcMain.handle('actions:stop', (_event, actionId: string) => {
+  ipcMain.handle('actions:stop', (_event, actionId: string) =>
     terminals.stopAction(actionId)
-  })
-  ipcMain.handle('actions:delete', (_event, actionId: string) => {
-    terminals.deleteAction(actionId)
-  })
+  )
+  ipcMain.handle('actions:delete', (_event, actionId: string) =>
+    appUpdates.protectRestartWhile(() => terminals.deleteAction(actionId))
+  )
   ipcMain.handle('temporary-chats:start', (_event, projectId: string) =>
     terminals.startTemporaryCodexChat(projectId)
   )
-  ipcMain.handle('temporary-chats:clear', (_event, sessionId: string) => {
+  ipcMain.handle('temporary-chats:clear', (_event, sessionId: string) =>
     terminals.clearTemporaryCodexChat(sessionId)
-  })
+  )
   ipcMain.handle(
     'temporary-chats:send-prompt',
     (_event, sessionId: string, prompt: string) => {
@@ -340,9 +367,32 @@ function registerIpc(): void {
   )
   ipcMain.handle(
     'terminals:attach',
-    (_event, sessionId: string, cols: number, rows: number) =>
-      terminals.attach(sessionId, cols, rows)
+    async (event, sessionId: string, cols: number, rows: number, consumerId?: string) => {
+      if (event.sender !== mainWindow?.webContents || event.sender.isDestroyed() || event.senderFrame !== event.sender.mainFrame ||
+        typeof sessionId !== 'string' || (consumerId !== undefined && typeof consumerId !== 'string')) {
+        throw new Error('Invalid terminal attach request.')
+      }
+      const ownerId = rendererOwners.get(event.sender)
+      const result = await terminals.attach(sessionId, cols, rows, consumerId)
+      if (event.sender.isDestroyed() || event.sender !== mainWindow?.webContents ||
+        rendererOwners.get(event.sender) !== ownerId) {
+        if (consumerId) terminals.unsubscribeOutput(sessionId, consumerId)
+        throw new Error('The terminal preview window has closed.')
+      }
+      return result
+    }
   )
+  ipcMain.on('terminals:acknowledge-output', (event, sessionId: unknown, consumerId: unknown, generation: unknown, sequence: unknown) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame ||
+      typeof sessionId !== 'string' || typeof consumerId !== 'string' || typeof generation !== 'string' ||
+      typeof sequence !== 'number' || !Number.isSafeInteger(sequence) || sequence < 0) return
+    terminals.acknowledgeOutput(sessionId, consumerId, generation, sequence)
+  })
+  ipcMain.on('terminals:unsubscribe-output', (event, sessionId: unknown, consumerId: unknown) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame ||
+      typeof sessionId !== 'string' || typeof consumerId !== 'string') return
+    terminals.unsubscribeOutput(sessionId, consumerId)
+  })
   ipcMain.handle(
     'terminals:retry-attach',
     (_event, sessionId: string, cols: number, rows: number) =>
@@ -364,6 +414,58 @@ function registerIpc(): void {
   ipcMain.handle('latex:compile', (_event, projectId: string) =>
     appUpdates.protectRestartWhile(() => latex.compile(projectId))
   )
+  const pdfSnapshotOwner = (event: Electron.IpcMainInvokeEvent): number => {
+    if (event.sender !== mainWindow?.webContents || event.sender.isDestroyed() ||
+      event.senderFrame !== event.sender.mainFrame) {
+      throw new Error('Invalid PDF preview sender.')
+    }
+    const ownerId = rendererOwners.get(event.sender)
+    if (ownerId === undefined) throw new Error('The PDF preview window has closed.')
+    return ownerId
+  }
+  const pdfSnapshotPath = (projectId: string): string => {
+    if (typeof projectId !== 'string') throw new Error('Choose a LaTeX project.')
+    const project = store.getProjectForRuntime(projectId)
+    if (!project || project.archived || !project.latex) throw new Error('LaTeX project not found.')
+    return latexPdfPath(project.latex.mainFile)
+  }
+  const expectedPdfSnapshot = async (path: string, load: () => Promise<LatexPdfDocument>): Promise<LatexPdfDocument> => {
+    const document = await load()
+    if (document.path !== path) throw new Error('The configured PDF path has changed. Reopen the preview.')
+    return document
+  }
+  ipcMain.handle('latex:get-pdf-snapshot', (event, projectId: string, expectedPath: string) => {
+    const ownerId = pdfSnapshotOwner(event)
+    const path = pdfSnapshotPath(projectId)
+    if (expectedPath !== path) throw new Error('The configured PDF path has changed. Reopen the preview.')
+    return pdfSnapshots.acquire(ownerId, `${projectId}\0${path}`, () =>
+      expectedPdfSnapshot(path, () => latex.getPdf(projectId))
+    )
+  })
+  ipcMain.handle('latex:compile-pdf-snapshot', (event, projectId: string) => {
+    const ownerId = pdfSnapshotOwner(event)
+    const path = pdfSnapshotPath(projectId)
+    return appUpdates.protectRestartWhile(() =>
+      pdfSnapshots.acquire(ownerId, `${projectId}\0${path}`, () =>
+        expectedPdfSnapshot(path, () => latex.compile(projectId)), true
+      )
+    )
+  })
+  ipcMain.handle('latex:accept-pdf-snapshot', (event, snapshotId: string) => {
+    const ownerId = pdfSnapshotOwner(event)
+    if (typeof snapshotId !== 'string') throw new Error('Choose an open PDF snapshot.')
+    return pdfSnapshots.accept(ownerId, snapshotId)
+  })
+  ipcMain.handle('latex:read-pdf-snapshot', (event, snapshotId: string) => {
+    const ownerId = pdfSnapshotOwner(event)
+    if (typeof snapshotId !== 'string') throw new Error('Choose an open PDF snapshot.')
+    return pdfSnapshots.read(ownerId, snapshotId)
+  })
+  ipcMain.handle('latex:release-pdf-snapshot', (event, snapshotId: string) => {
+    const ownerId = pdfSnapshotOwner(event)
+    if (typeof snapshotId !== 'string') throw new Error('Choose an open PDF snapshot.')
+    return pdfSnapshots.release(ownerId, snapshotId)
+  })
   ipcMain.handle('latex:print-pdf', (_event, input: PrintLatexPdfInput) =>
     printLatexPdf(input)
   )
@@ -429,16 +531,14 @@ function registerIpc(): void {
   })
   ipcMain.handle(
     'terminals:resume-agent',
-    (_event, sessionId: string) => {
-      terminals.resumeAgent(sessionId)
-    }
+    (_event, sessionId: string) => terminals.resumeAgent(sessionId)
   )
   ipcMain.handle('terminals:force-reload-agent', (_event, sessionId: string) =>
     terminals.forceReloadAgent(sessionId)
   )
-  ipcMain.handle('terminals:rename', (_event, sessionId: string, name: string) => {
+  ipcMain.handle('terminals:rename', (_event, sessionId: string, name: string) =>
     terminals.rename(sessionId, name)
-  })
+  )
   ipcMain.handle(
     'terminals:transfer',
     (_event, sessionId: string, targetProjectId: string) =>
@@ -751,14 +851,14 @@ if (!ownsSingleInstanceLock) {
 
   app
     .whenReady()
-    .then(() => {
+    .then(async () => {
       protocol.handle(HTML_PREVIEW_SCHEME, (request) => interactiveHtml.handle(request))
       store = new Store(app.getPath('userData'))
       terminalDrops = new TerminalDropService(store, (progress) => {
         if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('terminal-drops:progress', progress)
       })
       store.syncConnections(discoverSshAliases())
-      conversations = new ConversationIndexer()
+      conversations = createConversationIndexer()
       remoteConversations = new RemoteConversationIndexer()
       metadata = new ProjectMetadataService(store)
       terminals = new TerminalManager(
@@ -768,7 +868,8 @@ if (!ownsSingleInstanceLock) {
         remoteConversations,
         metadata
       )
-      const restoredLocalSessions = terminals.prepareLocalSessionsAfterReboot()
+      const restoredLocalSessions = await terminals.prepareLocalSessionsAfterReboot()
+      if (shutdownStarted) return
       if (restoredLocalSessions > 0) {
         console.info(
           `Prepared ${restoredLocalSessions} local tmux session${restoredLocalSessions === 1 ? '' : 's'} for on-demand recovery after reboot.`
@@ -808,12 +909,25 @@ if (!ownsSingleInstanceLock) {
     })
 }
 
-app.on('before-quit', () => {
+let shutdownStarted = false
+let shutdownComplete = false
+app.on('before-quit', (event) => {
+  if (shutdownComplete) return
+  event.preventDefault()
+  if (shutdownStarted) return
+  shutdownStarted = true
   appUpdates.dispose()
   terminalDrops?.shutdown()
   terminals?.shutdown()
   portForwards?.shutdown()
-  store?.close()
+  conversations?.dispose()
+  void pdfSnapshots.dispose().catch((error) => {
+    console.warn('Could not remove PDF snapshots during shutdown.', error)
+  }).finally(() => {
+    store?.close()
+    shutdownComplete = true
+    app.quit()
+  })
 })
 
 app.on('window-all-closed', () => {

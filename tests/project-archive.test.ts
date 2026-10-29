@@ -16,7 +16,7 @@ describe('project archiving', () => {
     appDataPath = null
   })
 
-  it('stops active terminal and capability sessions before archiving', () => {
+  it('stops active terminal and capability sessions before archiving', async () => {
     appDataPath = mkdtempSync(join(tmpdir(), 'panepilot-project-archive-'))
     const store = new Store(appDataPath)
     store.syncConnections([])
@@ -60,7 +60,7 @@ describe('project archiving', () => {
         'Stop every running terminal or chat before archiving this project.'
       )
 
-      manager.archiveProject(project.id)
+      await manager.archiveProject(project.id)
 
       expect(store.getProject(project.id)?.archived).toBe(true)
       expect(sessions.map((session) => store.getSession(session.id)?.state)).toEqual(

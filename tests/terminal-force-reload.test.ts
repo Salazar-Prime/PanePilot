@@ -108,7 +108,7 @@ describe('terminal agent force reload', () => {
           spawnSync('tmux', ['has-session', '-t', `=${tmuxName}`]).status
         ).toBe(0)
 
-        manager.delete(session.id)
+        await manager.delete(session.id)
         rmSync(argsFile, { force: true })
 
         const unlinkedTmuxName = `Force reload unlinked ${randomUUID()}`
@@ -149,9 +149,9 @@ describe('terminal agent force reload', () => {
           spawnSync('tmux', ['has-session', '-t', `=${unlinkedTmuxName}`]).status
         ).toBe(0)
       } finally {
-        if (store.getSession(session.id)) manager.delete(session.id)
+        if (store.getSession(session.id)) await manager.delete(session.id)
         if (unlinkedSessionId && store.getSession(unlinkedSessionId)) {
-          manager.delete(unlinkedSessionId)
+          await manager.delete(unlinkedSessionId)
         }
         manager.shutdown()
         store.close()

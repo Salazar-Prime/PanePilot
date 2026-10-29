@@ -1,18 +1,8 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-  writeFileSync
-} from 'node:fs'
-import { realpath } from 'node:fs/promises'
+  lstat, mkdir, readFile, readdir, realpath, rename, stat, unlink, writeFile
+} from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { TextDecoder } from 'node:util'
 import type {
@@ -45,21 +35,21 @@ const MAX_SHARED_LATEX_COMMENTS = 1_000
 // the same folder. Atomic replacement alone does not protect read/modify/write.
 // This queue coordinates this process only; other PanePilot processes or SSH
 // aliases for the same host still need host-side transaction coordination.
-const latexCommentTransactions = new Map<string, Promise<void>>()
+const metadataTransactions = new Map<string, Promise<void>>()
 
-async function serializeLatexCommentTransaction<T>(
+async function serializeMetadataTransaction<T>(
   key: string,
   operation: () => Promise<T>
 ): Promise<T> {
-  const result = (latexCommentTransactions.get(key) ?? Promise.resolve()).then(operation)
+  const result = (metadataTransactions.get(key) ?? Promise.resolve()).then(operation)
   // A failed transaction must not poison the next operation on this folder.
   const settled = result.then(() => {}, () => {})
-  latexCommentTransactions.set(key, settled)
+  metadataTransactions.set(key, settled)
   try {
     return await result
   } finally {
-    if (latexCommentTransactions.get(key) === settled) {
-      latexCommentTransactions.delete(key)
+    if (metadataTransactions.get(key) === settled) {
+      metadataTransactions.delete(key)
     }
   }
 }
@@ -103,44 +93,57 @@ function decodeUtf8(bytes: Buffer, label: string): string {
   }
 }
 
-function checkedDirectory(path: string, label: string): void {
-  const existing = lstatSync(path, { throwIfNoEntry: false })
-  if (!existing) {
-    mkdirSync(path, { mode: 0o700 })
-    return
+async function optionalStat(path: string) {
+  try {
+    return await lstat(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
   }
+}
+
+async function checkedDirectory(path: string, label: string): Promise<void> {
+  if (!await optionalStat(path)) {
+    try {
+      await mkdir(path, { mode: 0o700 })
+    } catch (error) {
+      // A simultaneous client may create the directory. Recheck its type below.
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    }
+  }
+  const existing = await lstat(path)
   if (existing.isSymbolicLink() || !existing.isDirectory()) {
     throw new Error(`${label} must be a regular directory inside the project folder.`)
   }
 }
 
-function nextLegacyNotePath(notesDirectory: string): string {
+async function nextLegacyNotePath(notesDirectory: string): Promise<string> {
   const initial = resolve(notesDirectory, 'Project notes.md')
-  if (!existsSync(initial)) return initial
+  if (!await optionalStat(initial)) return initial
   for (let suffix = 2; suffix < 1_000; suffix += 1) {
     const candidate = resolve(notesDirectory, `Project notes ${suffix}.md`)
-    if (!existsSync(candidate)) return candidate
+    if (!await optionalStat(candidate)) return candidate
   }
   throw new Error('Could not migrate the legacy PanePilot notes file.')
 }
 
-function ensureLocalMetadata(root: string): LocalMetadataPaths {
-  const realRoot = realpathSync(root)
-  if (!statSync(realRoot).isDirectory()) {
+async function ensureLocalMetadata(root: string): Promise<LocalMetadataPaths> {
+  const realRoot = await realpath(root)
+  if (!(await stat(realRoot)).isDirectory()) {
     throw new Error('The project folder does not exist.')
   }
   const metadata = resolve(realRoot, PANEPILOT_DIRECTORY)
   const notes = resolve(metadata, NOTES_DIRECTORY)
-  checkedDirectory(metadata, PANEPILOT_DIRECTORY)
-  checkedDirectory(notes, `${PANEPILOT_DIRECTORY}/${NOTES_DIRECTORY}`)
+  await checkedDirectory(metadata, PANEPILOT_DIRECTORY)
+  await checkedDirectory(notes, `${PANEPILOT_DIRECTORY}/${NOTES_DIRECTORY}`)
 
   const legacy = resolve(realRoot, LEGACY_NOTES_FILE)
-  const legacyStat = lstatSync(legacy, { throwIfNoEntry: false })
+  const legacyStat = await optionalStat(legacy)
   if (legacyStat) {
     if (legacyStat.isSymbolicLink() || !legacyStat.isFile()) {
       throw new Error(`${LEGACY_NOTES_FILE} must be a regular file to migrate it.`)
     }
-    renameSync(legacy, nextLegacyNotePath(notes))
+    await rename(legacy, await nextLegacyNotePath(notes))
   }
 
   return {
@@ -182,113 +185,112 @@ function noteNameForPath(path: string): string {
   return path.replace(/\.md$/i, '')
 }
 
-function checkedNoteFile(notesDirectory: string, path: string): string {
+async function checkedNoteFile(notesDirectory: string, path: string): Promise<string> {
   const safePath = validatedNotePath(path)
   const target = resolve(notesDirectory, safePath)
-  const stat = lstatSync(target, { throwIfNoEntry: false })
-  if (!stat || stat.isSymbolicLink() || !stat.isFile()) {
+  const file = await optionalStat(target)
+  if (!file || file.isSymbolicLink() || !file.isFile()) {
     throw new Error('Project note not found.')
   }
   return target
 }
 
-function atomicWrite(path: string, content: string): void {
+async function atomicWrite(path: string, content: string): Promise<void> {
   const temporaryPath = resolve(
     dirname(path),
     `.${basename(path)}.${randomUUID()}.tmp`
   )
   try {
-    writeFileSync(temporaryPath, content, { encoding: 'utf8', mode: 0o600 })
-    renameSync(temporaryPath, path)
+    await writeFile(temporaryPath, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+    await rename(temporaryPath, path)
   } finally {
-    if (existsSync(temporaryPath)) unlinkSync(temporaryPath)
+    try {
+      await unlink(temporaryPath)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
   }
 }
 
-function noteFromLocalFile(
+async function noteFromLocalFile(
   notesDirectory: string,
   path: string
-): ProjectNote {
-  const target = checkedNoteFile(notesDirectory, path)
-  const stat = statSync(target)
-  if (stat.size > MAX_METADATA_BYTES) {
+): Promise<ProjectNote> {
+  const target = await checkedNoteFile(notesDirectory, path)
+  const file = await stat(target)
+  if (file.size > MAX_METADATA_BYTES) {
     throw new Error('Project notes must be 1 MB or smaller.')
   }
   return {
     path,
     name: noteNameForPath(path),
-    updatedAt: stat.mtime.toISOString(),
-    content: decodeUtf8(readFileSync(target), 'Project notes')
+    updatedAt: file.mtime.toISOString(),
+    content: decodeUtf8(await readFile(target), 'Project notes')
   }
 }
 
-function listLocalNotes(root: string): ProjectNoteSummary[] {
-  const { notes } = ensureLocalMetadata(root)
-  return readdirSync(notes)
-    .filter((path) => path.toLowerCase().endsWith('.md'))
-    .flatMap((path): ProjectNoteSummary[] => {
-      const target = resolve(notes, path)
-      const stat = lstatSync(target, { throwIfNoEntry: false })
-      if (!stat || stat.isSymbolicLink() || !stat.isFile()) return []
-      return [{
-        path,
-        name: noteNameForPath(path),
-        updatedAt: stat.mtime.toISOString()
-      }]
-    })
-    .sort((left, right) => left.name.localeCompare(right.name))
+async function listLocalNotes(root: string): Promise<ProjectNoteSummary[]> {
+  const { notes } = await ensureLocalMetadata(root)
+  const result: ProjectNoteSummary[] = []
+  for (const path of await readdir(notes)) {
+    if (!path.toLowerCase().endsWith('.md')) continue
+    const file = await optionalStat(resolve(notes, path))
+    if (!file || file.isSymbolicLink() || !file.isFile()) continue
+    result.push({ path, name: noteNameForPath(path), updatedAt: file.mtime.toISOString() })
+  }
+  return result.sort((left, right) => left.name.localeCompare(right.name))
 }
 
-function createLocalNote(root: string, rawName: string): ProjectNote {
-  const { notes } = ensureLocalMetadata(root)
+async function createLocalNote(root: string, rawName: string): Promise<ProjectNote> {
+  const { notes } = await ensureLocalMetadata(root)
   const name = validatedNoteName(rawName)
   const path = `${name}.md`
   const target = resolve(notes, path)
-  if (lstatSync(target, { throwIfNoEntry: false })) {
+  if (await optionalStat(target)) {
     throw new Error(`A note named “${name}” already exists.`)
   }
-  atomicWrite(target, `# ${name}\n\n`)
+  await atomicWrite(target, `# ${name}\n\n`)
   return noteFromLocalFile(notes, path)
 }
 
-function readLocalNote(root: string, path: string): ProjectNote {
-  return noteFromLocalFile(ensureLocalMetadata(root).notes, validatedNotePath(path))
+async function readLocalNote(root: string, path: string): Promise<ProjectNote> {
+  return noteFromLocalFile((await ensureLocalMetadata(root)).notes, validatedNotePath(path))
 }
 
-function writeLocalNote(root: string, path: string, content: string): ProjectNote {
+async function writeLocalNote(root: string, path: string, content: string): Promise<ProjectNote> {
   if (Buffer.byteLength(content, 'utf8') > MAX_METADATA_BYTES) {
     throw new Error('Project notes must be 1 MB or smaller.')
   }
-  const { notes } = ensureLocalMetadata(root)
+  const { notes } = await ensureLocalMetadata(root)
   const safePath = validatedNotePath(path)
-  const target = checkedNoteFile(notes, safePath)
-  atomicWrite(target, content)
+  const target = await checkedNoteFile(notes, safePath)
+  await atomicWrite(target, content)
   return noteFromLocalFile(notes, safePath)
 }
 
-function renameLocalNote(
+async function renameLocalNote(
   root: string,
   path: string,
   rawName: string
-): ProjectNote {
-  const { notes } = ensureLocalMetadata(root)
+): Promise<ProjectNote> {
+  const { notes } = await ensureLocalMetadata(root)
   const currentPath = validatedNotePath(path)
-  const current = checkedNoteFile(notes, currentPath)
+  const current = await checkedNoteFile(notes, currentPath)
   const name = validatedNoteName(rawName)
   const nextPath = `${name}.md`
   if (nextPath !== currentPath) {
     const next = resolve(notes, nextPath)
-    if (lstatSync(next, { throwIfNoEntry: false })) {
+    if (await optionalStat(next)) {
       throw new Error(`A note named “${name}” already exists.`)
     }
-    renameSync(current, next)
+    await rename(current, next)
   }
   return noteFromLocalFile(notes, nextPath)
 }
 
-function deleteLocalNote(root: string, path: string): void {
-  const { notes } = ensureLocalMetadata(root)
-  unlinkSync(checkedNoteFile(notes, validatedNotePath(path)))
+async function deleteLocalNote(root: string, path: string): Promise<void> {
+  const { notes } = await ensureLocalMetadata(root)
+  await unlink(await checkedNoteFile(notes, validatedNotePath(path)))
 }
 
 function parseSharedActions(value: unknown): SharedActionsFile {
@@ -330,9 +332,9 @@ function parseSharedActions(value: unknown): SharedActionsFile {
   return { version: 1, actions }
 }
 
-function readLocalActions(root: string): SharedActionsFile | null {
-  const { actions } = ensureLocalMetadata(root)
-  const stat = lstatSync(actions, { throwIfNoEntry: false })
+async function readLocalActions(root: string): Promise<SharedActionsFile | null> {
+  const { actions } = await ensureLocalMetadata(root)
+  const stat = await optionalStat(actions)
   if (!stat) return null
   if (stat.isSymbolicLink() || !stat.isFile()) {
     throw new Error(`${PANEPILOT_DIRECTORY}/${ACTIONS_FILE} must be a regular file.`)
@@ -342,7 +344,7 @@ function readLocalActions(root: string): SharedActionsFile | null {
   }
   let parsed: unknown
   try {
-    parsed = JSON.parse(decodeUtf8(readFileSync(actions), 'Shared actions'))
+    parsed = JSON.parse(decodeUtf8(await readFile(actions), 'Shared actions'))
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error(`${PANEPILOT_DIRECTORY}/${ACTIONS_FILE} is not valid JSON.`)
@@ -352,13 +354,13 @@ function readLocalActions(root: string): SharedActionsFile | null {
   return parseSharedActions(parsed)
 }
 
-function writeLocalActions(root: string, file: SharedActionsFile): void {
-  const { actions } = ensureLocalMetadata(root)
+async function writeLocalActions(root: string, file: SharedActionsFile): Promise<void> {
+  const { actions } = await ensureLocalMetadata(root)
   const content = `${JSON.stringify(parseSharedActions(file), null, 2)}\n`
   if (Buffer.byteLength(content, 'utf8') > MAX_METADATA_BYTES) {
     throw new Error(`${PANEPILOT_DIRECTORY}/${ACTIONS_FILE} must be 1 MB or smaller.`)
   }
-  atomicWrite(actions, content)
+  await atomicWrite(actions, content)
 }
 
 function parseSharedLatexComments(
@@ -451,9 +453,9 @@ function sharedLatexCommentsFile(
   }
 }
 
-function readLocalLatexComments(root: string): unknown | null {
-  const { latexComments } = ensureLocalMetadata(root)
-  const stat = lstatSync(latexComments, { throwIfNoEntry: false })
+async function readLocalLatexComments(root: string): Promise<unknown | null> {
+  const { latexComments } = await ensureLocalMetadata(root)
+  const stat = await optionalStat(latexComments)
   if (!stat) return null
   if (stat.isSymbolicLink() || !stat.isFile()) {
     throw new Error(
@@ -466,7 +468,7 @@ function readLocalLatexComments(root: string): unknown | null {
     )
   }
   try {
-    return JSON.parse(decodeUtf8(readFileSync(latexComments), 'LaTeX comments'))
+    return JSON.parse(decodeUtf8(await readFile(latexComments), 'LaTeX comments'))
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error(
@@ -477,18 +479,18 @@ function readLocalLatexComments(root: string): unknown | null {
   }
 }
 
-function writeLocalLatexComments(
+async function writeLocalLatexComments(
   root: string,
   file: SharedLatexCommentsFile
-): void {
-  const { latexComments } = ensureLocalMetadata(root)
+): Promise<void> {
+  const { latexComments } = await ensureLocalMetadata(root)
   const content = `${JSON.stringify(file, null, 2)}\n`
   if (Buffer.byteLength(content, 'utf8') > MAX_METADATA_BYTES) {
     throw new Error(
       `${PANEPILOT_DIRECTORY}/${LATEX_COMMENTS_FILE} must be 1 MB or smaller.`
     )
   }
-  atomicWrite(latexComments, content)
+  await atomicWrite(latexComments, content)
 }
 
 const REMOTE_METADATA_SCRIPT = String.raw`
@@ -706,52 +708,6 @@ else:
     raise RuntimeError("Unsupported PanePilot metadata operation.")
 `
 
-function runRemoteMetadata<T>(
-  sshAlias: string,
-  root: string,
-  operation: string,
-  payload: Record<string, unknown> = {}
-): T {
-  const encodedScript = Buffer.from(REMOTE_METADATA_SCRIPT, 'utf8').toString('base64')
-  const loader = `import base64;exec(base64.b64decode('${encodedScript}'))`
-  const result = spawnSync(
-    'ssh',
-    [
-      '-T',
-      '-o',
-      'BatchMode=yes',
-      '-o',
-      'ConnectTimeout=10',
-      sshAlias,
-      `python3 -c ${quote(loader)}`
-    ],
-    {
-      encoding: 'utf8',
-      input: JSON.stringify({ ...payload, root, operation }),
-      maxBuffer: 4 * 1024 * 1024,
-      timeout: 15_000
-    }
-  )
-  if (result.error) {
-    throw new Error(
-      result.error.message.includes('ETIMEDOUT')
-        ? `Timed out connecting to ${sshAlias}.`
-        : result.error.message
-    )
-  }
-  if (result.status !== 0) {
-    const detail = (result.stderr ?? '').trim().split(/\r?\n/).at(-1)
-    throw new Error(
-      detail || `Could not update project metadata on ${sshAlias}.`
-    )
-  }
-  try {
-    return JSON.parse(result.stdout || 'null') as T
-  } catch {
-    throw new Error(`The metadata response from ${sshAlias} was not valid JSON.`)
-  }
-}
-
 function runRemoteMetadataAsync<T>(
   sshAlias: string,
   root: string,
@@ -850,77 +806,64 @@ export class ProjectMetadataService {
     return { project, connection }
   }
 
-  listNotes(projectId: string): ProjectNoteSummary[] {
-    const { project, connection } = this.target(projectId)
-    return connection.kind === 'local'
-      ? listLocalNotes(project.folder)
-      : runRemoteMetadata<ProjectNoteSummary[]>(
-          connection.sshAlias!,
-          project.folder,
-          'note-list'
-        )
+  async listNotes(projectId: string): Promise<ProjectNoteSummary[]> {
+    return this.withMetadataTransaction(projectId, (project, connection) =>
+      connection.kind === 'local'
+        ? listLocalNotes(project.folder)
+        : runRemoteMetadataAsync<ProjectNoteSummary[]>(
+            connection.sshAlias!, project.folder, 'note-list'
+          )
+    )
   }
 
-  createNote(projectId: string, name: string): ProjectNote {
-    const { project, connection } = this.target(projectId)
-    return connection.kind === 'local'
-      ? createLocalNote(project.folder, name)
-      : runRemoteMetadata<ProjectNote>(
-          connection.sshAlias!,
-          project.folder,
-          'note-create',
-          { name }
-        )
+  async createNote(projectId: string, name: string): Promise<ProjectNote> {
+    return this.withMetadataTransaction(projectId, (project, connection) =>
+      connection.kind === 'local'
+        ? createLocalNote(project.folder, name)
+        : runRemoteMetadataAsync<ProjectNote>(
+            connection.sshAlias!, project.folder, 'note-create', { name }
+          )
+    )
   }
 
-  readNote(projectId: string, path: string): ProjectNote {
-    const { project, connection } = this.target(projectId)
-    return connection.kind === 'local'
-      ? readLocalNote(project.folder, path)
-      : runRemoteMetadata<ProjectNote>(
-          connection.sshAlias!,
-          project.folder,
-          'note-read',
-          { path }
-        )
+  async readNote(projectId: string, path: string): Promise<ProjectNote> {
+    return this.withMetadataTransaction(projectId, (project, connection) =>
+      connection.kind === 'local'
+        ? readLocalNote(project.folder, path)
+        : runRemoteMetadataAsync<ProjectNote>(
+            connection.sshAlias!, project.folder, 'note-read', { path }
+          )
+    )
   }
 
-  writeNote(projectId: string, path: string, content: string): ProjectNote {
-    const { project, connection } = this.target(projectId)
-    return connection.kind === 'local'
-      ? writeLocalNote(project.folder, path, content)
-      : runRemoteMetadata<ProjectNote>(
-          connection.sshAlias!,
-          project.folder,
-          'note-write',
-          { path, content }
-        )
+  async writeNote(projectId: string, path: string, content: string): Promise<ProjectNote> {
+    return this.withMetadataTransaction(projectId, (project, connection) =>
+      connection.kind === 'local'
+        ? writeLocalNote(project.folder, path, content)
+        : runRemoteMetadataAsync<ProjectNote>(
+            connection.sshAlias!, project.folder, 'note-write', { path, content }
+          )
+    )
   }
 
-  renameNote(projectId: string, path: string, name: string): ProjectNote {
-    const { project, connection } = this.target(projectId)
-    return connection.kind === 'local'
-      ? renameLocalNote(project.folder, path, name)
-      : runRemoteMetadata<ProjectNote>(
-          connection.sshAlias!,
-          project.folder,
-          'note-rename',
-          { path, name }
-        )
+  async renameNote(projectId: string, path: string, name: string): Promise<ProjectNote> {
+    return this.withMetadataTransaction(projectId, (project, connection) =>
+      connection.kind === 'local'
+        ? renameLocalNote(project.folder, path, name)
+        : runRemoteMetadataAsync<ProjectNote>(
+            connection.sshAlias!, project.folder, 'note-rename', { path, name }
+          )
+    )
   }
 
-  deleteNote(projectId: string, path: string): void {
-    const { project, connection } = this.target(projectId)
-    if (connection.kind === 'local') {
-      deleteLocalNote(project.folder, path)
-    } else {
-      runRemoteMetadata<Record<string, never>>(
-        connection.sshAlias!,
-        project.folder,
-        'note-delete',
-        { path }
-      )
-    }
+  async deleteNote(projectId: string, path: string): Promise<void> {
+    await this.withMetadataTransaction(projectId, (project, connection) =>
+      connection.kind === 'local'
+        ? deleteLocalNote(project.folder, path)
+        : runRemoteMetadataAsync<void>(
+            connection.sshAlias!, project.folder, 'note-delete', { path }
+          )
+    )
   }
 
   private async readLatexComments(
@@ -943,7 +886,7 @@ export class ProjectMetadataService {
   ): Promise<void> {
     const file = sharedLatexCommentsFile(project.id, comments)
     if (connection.kind === 'local') {
-      writeLocalLatexComments(project.folder, file)
+      await writeLocalLatexComments(project.folder, file)
       return
     }
     await runRemoteMetadataAsync<Record<string, never>>(
@@ -954,12 +897,11 @@ export class ProjectMetadataService {
     )
   }
 
-  private async withLatexCommentTransaction<T>(
+  private async withMetadataTransaction<T>(
     projectId: string,
     operation: (project: Project, connection: Connection) => Promise<T>
   ): Promise<T> {
     let { project, connection } = this.target(projectId)
-    if (project.type !== 'latex') throw new Error('LaTeX project not found.')
     // Capture the canonical folder for both the lock and every IO in this
     // transaction, including project records opened through a directory symlink.
     if (connection.kind === 'local') {
@@ -970,7 +912,17 @@ export class ProjectMetadataService {
       connection.kind === 'local' ? '' : connection.sshAlias,
       project.folder
     ])
-    return serializeLatexCommentTransaction(key, () => operation(project, connection))
+    return serializeMetadataTransaction(key, () => operation(project, connection))
+  }
+
+  private async withLatexCommentTransaction<T>(
+    projectId: string,
+    operation: (project: Project, connection: Connection) => Promise<T>
+  ): Promise<T> {
+    return this.withMetadataTransaction(projectId, (project, connection) => {
+      if (project.type !== 'latex') throw new Error('LaTeX project not found.')
+      return operation(project, connection)
+    })
   }
 
   // Call only inside withLatexCommentTransaction: the initial legacy migration
@@ -1047,42 +999,46 @@ export class ProjectMetadataService {
     })
   }
 
-  private readActions(project: Project, connection: Connection): SharedActionsFile | null {
-    const raw =
+  private async readActions(
+    project: Project,
+    connection: Connection
+  ): Promise<SharedActionsFile | null> {
+    const raw = await (
       connection.kind === 'local'
         ? readLocalActions(project.folder)
-        : runRemoteMetadata<unknown>(
-            connection.sshAlias!,
-            project.folder,
-            'actions-read'
+        : runRemoteMetadataAsync<unknown>(
+            connection.sshAlias!, project.folder, 'actions-read'
           )
+    )
     return raw == null ? null : parseSharedActions(raw)
   }
 
-  private writeActions(
+  private async writeActions(
     project: Project,
     connection: Connection,
     actions: SharedActionDefinition[]
-  ): void {
+  ): Promise<void> {
     const file = parseSharedActions({ version: 1, actions })
     if (connection.kind === 'local') {
-      writeLocalActions(project.folder, file)
+      await writeLocalActions(project.folder, file)
     } else {
-      runRemoteMetadata<Record<string, never>>(
-        connection.sshAlias!,
-        project.folder,
-        'actions-write',
-        { file }
+      await runRemoteMetadataAsync<Record<string, never>>(
+        connection.sshAlias!, project.folder, 'actions-write', { file }
       )
     }
   }
 
-  syncActions(projectId: string): ProjectAction[] {
-    const { project, connection } = this.target(projectId)
-    const shared = this.readActions(project, connection)
+  // The authoritative read, initial migration, and definition mutation share one
+  // transaction. Keep client-local latest runs/output out of the shared file.
+  private async loadActions(project: Project, connection: Connection): Promise<ProjectAction[]> {
+    const projectId = project.id
+    const shared = await this.readActions(project, connection)
     if (!shared) {
-      this.writeActions(project, connection, definitions(project.actions))
-      return project.actions
+      // Discovery and Action lifecycle changes can occur while the read/write
+      // yields. Migrate current definitions and return the latest local run state.
+      const current = this.store.getProjectWithoutOutput(projectId)?.actions ?? []
+      await this.writeActions(project, connection, definitions(current))
+      return this.store.getProjectWithoutOutput(projectId)?.actions ?? []
     }
 
     for (const action of shared.actions) {
@@ -1101,58 +1057,65 @@ export class ProjectMetadataService {
     return this.store.getProjectWithoutOutput(projectId)?.actions ?? []
   }
 
-  createAction(input: CreateProjectActionInput): ProjectAction {
-    const current = this.syncActions(input.projectId)
-    const { project, connection } = this.target(input.projectId)
-    const next: SharedActionDefinition = {
-      id: randomUUID(),
-      name: validatedActionName(input.name),
-      command: validatedActionCommand(input.command)
-    }
-    this.writeActions(project, connection, [...definitions(current), next])
-    return this.store.createProjectAction({ ...next, projectId: input.projectId })
-  }
-
-  updateAction(input: UpdateProjectActionInput): ProjectAction {
-    const currentAction = this.store.getProjectAction(input.actionId)
-    if (!currentAction) throw new Error('Action not found.')
-    const current = this.syncActions(currentAction.projectId)
-    const action = current.find((candidate) => candidate.id === input.actionId)
-    if (!action) throw new Error('Action not found.')
-    const next: SharedActionDefinition = {
-      id: action.id,
-      name: validatedActionName(input.name),
-      command: validatedActionCommand(input.command)
-    }
-    const { project, connection } = this.target(action.projectId)
-    this.writeActions(
-      project,
-      connection,
-      definitions(current).map((candidate) =>
-        candidate.id === next.id ? next : candidate
-      )
+  async syncActions(projectId: string): Promise<ProjectAction[]> {
+    return this.withMetadataTransaction(projectId, (project, connection) =>
+      this.loadActions(project, connection)
     )
-    return this.store.updateProjectAction(action.id, next)
   }
 
-  deleteAction(actionId: string): void {
+  async createAction(input: CreateProjectActionInput): Promise<ProjectAction> {
+    return this.withMetadataTransaction(input.projectId, async (project, connection) => {
+      const current = await this.loadActions(project, connection)
+      const next: SharedActionDefinition = {
+        id: randomUUID(),
+        name: validatedActionName(input.name),
+        command: validatedActionCommand(input.command)
+      }
+      await this.writeActions(project, connection, [...definitions(current), next])
+      return this.store.createProjectAction({ ...next, projectId: input.projectId })
+    })
+  }
+
+  async updateAction(input: UpdateProjectActionInput): Promise<ProjectAction> {
+    const initial = this.store.getProjectAction(input.actionId)
+    if (!initial) throw new Error('Action not found.')
+    return this.withMetadataTransaction(initial.projectId, async (project, connection) => {
+      const current = await this.loadActions(project, connection)
+      const action = current.find((candidate) => candidate.id === input.actionId)
+      if (!action) throw new Error('Action not found.')
+      const next: SharedActionDefinition = {
+        id: action.id,
+        name: validatedActionName(input.name),
+        command: validatedActionCommand(input.command)
+      }
+      await this.writeActions(
+        project,
+        connection,
+        definitions(current).map((candidate) => candidate.id === next.id ? next : candidate)
+      )
+      return this.store.updateProjectAction(action.id, next)
+    })
+  }
+
+  async deleteAction(actionId: string): Promise<void> {
     const initial = this.store.getProjectAction(actionId)
     if (!initial) throw new Error('Action not found.')
-    const current = this.syncActions(initial.projectId)
-    const action = current.find((candidate) => candidate.id === actionId)
-    if (!action) return
-    const session = action.lastSessionId
-      ? this.store.getSession(action.lastSessionId)
-      : null
-    if (session && !['completed', 'error'].includes(session.state)) {
-      throw new Error('Stop the current action run before deleting it.')
-    }
-    const { project, connection } = this.target(action.projectId)
-    this.writeActions(
-      project,
-      connection,
-      definitions(current).filter((candidate) => candidate.id !== actionId)
-    )
-    this.store.deleteProjectAction(actionId)
+    await this.withMetadataTransaction(initial.projectId, async (project, connection) => {
+      const current = await this.loadActions(project, connection)
+      const action = current.find((candidate) => candidate.id === actionId)
+      if (!action) return
+      const session = action.lastSessionId
+        ? this.store.getSession(action.lastSessionId)
+        : null
+      if (session && !['completed', 'error'].includes(session.state)) {
+        throw new Error('Stop the current action run before deleting it.')
+      }
+      await this.writeActions(
+        project,
+        connection,
+        definitions(current).filter((candidate) => candidate.id !== actionId)
+      )
+      this.store.deleteProjectAction(actionId)
+    })
   }
 }
