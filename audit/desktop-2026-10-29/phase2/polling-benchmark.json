@@ -1,0 +1,68 @@
+{
+  "measuredAt": "2026-10-29T18:26:37.675Z",
+  "sourceCommit": "0cf07047e56001e59fd54a613cf18407684e500b",
+  "protocol": {
+    "intervalMs": 120,
+    "requestLatencyMs": 250,
+    "foregroundMs": 600,
+    "hiddenMs": 1200,
+    "resumedMs": 300
+  },
+  "limitations": "Scaled real-timer request-count fixture with artificial latency; no real Git/SSH, battery, watts, or Chromium hidden-window throttling is measured.",
+  "samples": [
+    {
+      "previous": {
+        "mode": "previous-fixed-interval",
+        "requests": 18,
+        "hiddenRequests": 10,
+        "peakConcurrentRequests": 3,
+        "foregroundDelayMs": 15.044499999999971,
+        "elapsedMs": 2314.617792
+      },
+      "current": {
+        "mode": "settlement-and-visibility",
+        "requests": 3,
+        "hiddenRequests": 0,
+        "peakConcurrentRequests": 1,
+        "foregroundDelayMs": 0.028375000000778527,
+        "elapsedMs": 2104.523625
+      }
+    },
+    {
+      "previous": {
+        "mode": "previous-fixed-interval",
+        "requests": 18,
+        "hiddenRequests": 10,
+        "peakConcurrentRequests": 3,
+        "foregroundDelayMs": 12.459665999999743,
+        "elapsedMs": 2309.216625
+      },
+      "current": {
+        "mode": "settlement-and-visibility",
+        "requests": 3,
+        "hiddenRequests": 0,
+        "peakConcurrentRequests": 1,
+        "foregroundDelayMs": 0.05833300000085728,
+        "elapsedMs": 2102.7178329999997
+      }
+    },
+    {
+      "previous": {
+        "mode": "previous-fixed-interval",
+        "requests": 18,
+        "hiddenRequests": 10,
+        "peakConcurrentRequests": 3,
+        "foregroundDelayMs": 17.06458399999974,
+        "elapsedMs": 2316.2260000000006
+      },
+      "current": {
+        "mode": "settlement-and-visibility",
+        "requests": 3,
+        "hiddenRequests": 0,
+        "peakConcurrentRequests": 1,
+        "foregroundDelayMs": 0.03299999999944703,
+        "elapsedMs": 2105.847833
+      }
+    }
+  ]
+}

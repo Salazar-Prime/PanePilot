@@ -1,0 +1,404 @@
+{
+  "capturedAt": "2026-10-29T18:24:51.276Z",
+  "passed": true,
+  "electron": "39.8.10",
+  "method": "Actual out/main/index.js, production preload and built renderer in installed Electron. Temporary SQLite/profile/projects, patched test-only OS adapters, private tmux socket with empty config, fake SSH executable. No synthetic projectConsole bridge or replaced application modules.",
+  "steps": [
+    "Real isolated tmux shell and PTY output rendered through production IPC.",
+    "Real isolated Action launches, renders command output, and reaches completed state.",
+    "Production asynchronous SSH folder and connection IPC use a rejecting synthetic SSH executable.",
+    "Actual archive worker, full-text search and transcript rendering use synthetic roots; query typing avoids redundant detail IPC while Refresh reloads it.",
+    "Files reads real fixture Markdown and its local image through production file IPC.",
+    "Real Monaco Files and LaTeX drafts survive capability/project switches without writing the unsaved text to disk.",
+    "Actual PDF IPC, PDF.js worker, and canvas render complete for a synthetic PDF."
+  ],
+  "realIpcInvocations": 75,
+  "ipcCounts": {
+    "updates:get": 3,
+    "connections:list": 3,
+    "projects:list": 2,
+    "terminal-drops:list": 2,
+    "projects:create": 2,
+    "terminals:start": 1,
+    "actions:create": 1,
+    "google-drive:status": 4,
+    "notes:list": 3,
+    "files:list": 2,
+    "git:status": 4,
+    "terminals:discover": 1,
+    "google-drive:list-remotes": 4,
+    "terminals:attach": 2,
+    "terminals:resize": 4,
+    "terminals:acknowledge": 2,
+    "terminals:write": 5,
+    "actions:sync": 2,
+    "actions:run": 1,
+    "projects:get": 6,
+    "remote-folders:list": 1,
+    "connections:test": 1,
+    "conversations:list": 2,
+    "conversations:get": 2,
+    "files:preview": 4,
+    "latex:get-workspace": 1,
+    "latex:list-inline-edits": 2,
+    "latex:list-comments": 2,
+    "latex:get-pdf-snapshot": 2,
+    "latex:accept-pdf-snapshot": 2,
+    "latex:release-pdf-snapshot": 1,
+    "terminals:stop": 1
+  },
+  "childProcesses": [
+    {
+      "command": "sh",
+      "args": [
+        "-lc",
+        "command -v tmux"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/fixture-shell",
+      "args": [
+        "-lic",
+        "printf \"\\npanepilot_path<%s>panepilot_end\\n\" \"$PATH\""
+      ]
+    },
+    {
+      "command": "<fixture>/bin/tmux",
+      "args": [
+        "-u",
+        "list-sessions",
+        "-F",
+        "#{session_id}\u001f#{session_name}\u001f#{session_attached}\u001f#{pane_title}\u001f#{pane_current_command}\u001f#{pane_dead}\u001f#{@panepilot_managed}\u001f#{@panepilot_schema}\u001f#{@panepilot_terminal_id}\u001f#{@panepilot_project_id}\u001f#{@panepilot_project_path}\u001f#{@panepilot_profile}\u001f#{@panepilot_provider_session_id}\u001f#{@panepilot_provider_session_name}\u001f#{@panepilot_created_at}\u001f#{@panepilot_dangerous_mode}\u001f#{@panepilot_session_kind}\u001f#{@panepilot_action_id}\u001f#{@panepilot_action_name}\u001f#{@panepilot_action_command}\u001f#{@panepilot_latex_scope}\u001f#{@panepilot_latex_mode}\u001f#{@panepilot_latex_purpose}\u001f#{@panepilot_latex_section_id}\u001f#{@panepilot_latex_section_source}\u001f#{@panepilot_latex_section_title}\u001f#{@panepilot_latex_section_level}"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "-C",
+        "<fixture>/projects/terminal",
+        "config",
+        "--get",
+        "remote.origin.url"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "-C",
+        "<fixture>/projects/manuscript",
+        "config",
+        "--get",
+        "remote.origin.url"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/tmux",
+      "args": [
+        "has-session",
+        "-t",
+        "=Workflow shell"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/tmux",
+      "args": [
+        "new-session",
+        "-s",
+        "Workflow shell",
+        "-c",
+        "<fixture>/projects/terminal",
+        "('<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_managed' '0' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_schema' '1' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_terminal_id' '48592a7c-4ff8-4d49-8786-d627ac54679a' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_project_id' '452f7f28-2f71-4ba1-a7dd-658e72d6267d' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_project_path' 'L3ByaXZhdGUvdmFyL2ZvbGRlcnMva3IvY3M5OHoyN3MzMTUzOWtybTdqeGxkOF93MDAwMGduL1QvcGFuZXBpbG90LWRlc2t0b3Atd29ya2Zsb3dzLUZPSVRLUS9wcm9qZWN0cy90ZXJtaW5hbA' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_profile' 'shell' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_created_at' '2026-10-29T18:24:49.171Z' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_dangerous_mode' '0' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_session_kind' 'terminal' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_managed' '1') || true; exec \"${SHELL:-/bin/sh}\" -l"
+      ],
+      "pty": true
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/terminal",
+        "rev-parse",
+        "--show-toplevel"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/terminal",
+        "config",
+        "--get",
+        "remote.origin.url"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/terminal",
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        "--show-stash",
+        "-z",
+        "--untracked-files=all"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/tmux",
+      "args": [
+        "-u",
+        "list-sessions",
+        "-F",
+        "#{session_id}\u001f#{session_name}\u001f#{session_attached}\u001f#{pane_title}\u001f#{pane_current_command}\u001f#{pane_dead}\u001f#{@panepilot_managed}\u001f#{@panepilot_schema}\u001f#{@panepilot_terminal_id}\u001f#{@panepilot_project_id}\u001f#{@panepilot_project_path}\u001f#{@panepilot_profile}\u001f#{@panepilot_provider_session_id}\u001f#{@panepilot_provider_session_name}\u001f#{@panepilot_created_at}\u001f#{@panepilot_dangerous_mode}\u001f#{@panepilot_session_kind}\u001f#{@panepilot_action_id}\u001f#{@panepilot_action_name}\u001f#{@panepilot_action_command}\u001f#{@panepilot_latex_scope}\u001f#{@panepilot_latex_mode}\u001f#{@panepilot_latex_purpose}\u001f#{@panepilot_latex_section_id}\u001f#{@panepilot_latex_section_source}\u001f#{@panepilot_latex_section_title}\u001f#{@panepilot_latex_section_level}"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/rclone",
+      "args": [
+        "listremotes"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/tmux",
+      "args": [
+        "has-session",
+        "-t",
+        "=Action · Workflow action"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/tmux",
+      "args": [
+        "new-session",
+        "-s",
+        "Action · Workflow action",
+        "-c",
+        "<fixture>/projects/terminal",
+        "('<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_managed' '0' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_schema' '1' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_terminal_id' '7e5f249f-811b-4b0e-bff9-34e0bebd04a8' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_project_id' '452f7f28-2f71-4ba1-a7dd-658e72d6267d' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_project_path' 'L3ByaXZhdGUvdmFyL2ZvbGRlcnMva3IvY3M5OHoyN3MzMTUzOWtybTdqeGxkOF93MDAwMGduL1QvcGFuZXBpbG90LWRlc2t0b3Atd29ya2Zsb3dzLUZPSVRLUS9wcm9qZWN0cy90ZXJtaW5hbA' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_profile' 'custom' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_created_at' '2026-10-29T18:24:49.391Z' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_dangerous_mode' '0' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_session_kind' 'action' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_action_id' 'f416cae2-30a0-4005-b943-142db01b73e2' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_action_name' 'V29ya2Zsb3cgYWN0aW9u' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_action_command' 'cHJpbnRmICdXT1JLRkxPV19BQ1RJT05fT0tcbic' && '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_managed' '1') || true; '<fixture>/bin/tmux' set-option -q -p -t \"$TMUX_PANE\" remain-on-exit on || true; '<fixture>/bin/tmux' set-option -q -u -t \"$TMUX_PANE\" '@panepilot_action_exit_status' 2>/dev/null || true; ( exec \"${SHELL:-/bin/sh}\" -lc 'printf '\\''WORKFLOW_ACTION_OK\\n'\\'''\n); panepilot_action_status=$?; '<fixture>/bin/tmux' set-option -q -t \"$TMUX_PANE\" '@panepilot_action_exit_status' \"$panepilot_action_status\" || exit \"$panepilot_action_status\"; while :; do sleep 3600; done"
+      ],
+      "pty": true
+    },
+    {
+      "command": "<fixture>/bin/tmux",
+      "args": [
+        "display-message",
+        "-p",
+        "-t",
+        "=Action · Workflow action:",
+        "#{@panepilot_action_exit_status}:#{pane_dead}:#{pane_dead_status}"
+      ]
+    },
+    {
+      "command": "/bin/sh",
+      "args": [
+        "-c",
+        "'<fixture>/bin/tmux' 'capture-pane' '-p' '-e' '-S' '-' '-t' '=Action · Workflow action:' | tail -c 1048576"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/tmux",
+      "args": [
+        "has-session",
+        "-t",
+        "=Action · Workflow action"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/tmux",
+      "args": [
+        "kill-session",
+        "-t",
+        "=Action · Workflow action"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/tmux",
+      "args": [
+        "has-session",
+        "-t",
+        "=Action · Workflow action"
+      ]
+    },
+    {
+      "command": "ssh",
+      "args": [
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+        "fixture-ssh",
+        "python3 -c 'import base64;exec(base64.b64decode('\\''CmltcG9ydCBqc29uLCBvcywgc3lzCnBheWxvYWQgPSBqc29uLmxvYWQoc3lzLnN0ZGluKQpyZXF1ZXN0ZWQgPSBwYXlsb2FkLmdldCgicGF0aCIpIG9yIG9zLnBhdGguZXhwYW5kdXNlcigifiIpCmN1cnJlbnQgPSBvcy5wYXRoLnJlYWxwYXRoKG9zLnBhdGguZXhwYW5kdXNlcihyZXF1ZXN0ZWQpKQppZiBub3Qgb3MucGF0aC5pc2RpcihjdXJyZW50KToKICAgIHJhaXNlIFJ1bnRpbWVFcnJvcigiVGhlIHJlbW90ZSBmb2xkZXIgZG9lcyBub3QgZXhpc3QuIikKZW50cmllcyA9IFtdCmZvciBpdGVtIGluIG9zLnNjYW5kaXIoY3VycmVudCk6CiAgICB0cnk6CiAgICAgICAgc3RhdCA9IGl0ZW0uc3RhdChmb2xsb3dfc3ltbGlua3M9VHJ1ZSkKICAgICAgICBpc19kaXIgPSBpdGVtLmlzX2Rpcihmb2xsb3dfc3ltbGlua3M9VHJ1ZSkKICAgICAgICBlbnRyaWVzLmFwcGVuZCh7CiAgICAgICAgICAgICJuYW1lIjogaXRlbS5uYW1lLAogICAgICAgICAgICAicGF0aCI6IG9zLnBhdGgucmVhbHBhdGgoaXRlbS5wYXRoKSwKICAgICAgICAgICAgImtpbmQiOiAiZGlyZWN0b3J5IiBpZiBpc19kaXIgZWxzZSAiZmlsZSIsCiAgICAgICAgICAgICJzaXplIjogTm9uZSBpZiBpc19kaXIgZWxzZSBzdGF0LnN0X3NpemUsCiAgICAgICAgfSkKICAgIGV4Y2VwdCBPU0Vycm9yOgogICAgICAgIHBhc3MKZW50cmllcy5zb3J0KGtleT1sYW1iZGEgaXRlbTogKGl0ZW1bImtpbmQiXSAhPSAiZGlyZWN0b3J5IiwgaXRlbVsibmFtZSJdLmxvd2VyKCkpKQpwYXJlbnQgPSBvcy5wYXRoLmRpcm5hbWUoY3VycmVudCkKcHJpbnQoanNvbi5kdW1wcyh7ImN1cnJlbnRQYXRoIjogY3VycmVudCwgInBhcmVudFBhdGgiOiBOb25lIGlmIHBhcmVudCA9PSBjdXJyZW50IGVsc2UgcGFyZW50LCAiZW50cmllcyI6IGVudHJpZXN9KSkK'\\''))'"
+      ]
+    },
+    {
+      "command": "ssh",
+      "args": [
+        "-T",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=6",
+        "-o",
+        "ClearAllForwardings=yes",
+        "fixture-ssh",
+        "printf panepilot-ok"
+      ]
+    },
+    {
+      "worker": true,
+      "roots": [
+        {
+          "provider": "codex",
+          "path": "<fixture>/synthetic-home/.codex/sessions"
+        },
+        {
+          "provider": "claude",
+          "path": "<fixture>/synthetic-home/.claude/projects"
+        }
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/manuscript",
+        "rev-parse",
+        "--show-toplevel"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/manuscript",
+        "config",
+        "--get",
+        "remote.origin.url"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/manuscript",
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        "--show-stash",
+        "-z",
+        "--untracked-files=all"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/rclone",
+      "args": [
+        "listremotes"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/terminal",
+        "rev-parse",
+        "--show-toplevel"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/terminal",
+        "config",
+        "--get",
+        "remote.origin.url"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/terminal",
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        "--show-stash",
+        "-z",
+        "--untracked-files=all"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/rclone",
+      "args": [
+        "listremotes"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/manuscript",
+        "rev-parse",
+        "--show-toplevel"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/manuscript",
+        "config",
+        "--get",
+        "remote.origin.url"
+      ]
+    },
+    {
+      "command": "git",
+      "args": [
+        "--no-optional-locks",
+        "-C",
+        "<fixture>/projects/manuscript",
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        "--show-stash",
+        "-z",
+        "--untracked-files=all"
+      ]
+    },
+    {
+      "command": "<fixture>/bin/rclone",
+      "args": [
+        "listremotes"
+      ]
+    }
+  ],
+  "pdfPixels": {
+    "dark": 12100,
+    "light": 96800
+  },
+  "warnings": [],
+  "errors": [],
+  "blockedRequests": [],
+  "failedRequests": [],
+  "limits": [
+    "Development-runtime launch, not the installed/signed application; updater remains disabled.",
+    "SSH is a deterministic synthetic executable, so real SSH authentication, latency, disconnections, and remote shells are not validated.",
+    "No agent/provider launch, external service, user archive, compile toolchain, OS permission prompt, or native printing is exercised.",
+    "Monaco draft input uses its edit API through a test-only React ref lookup; native keyboard/IME behavior is not exercised.",
+    "Functional smoke checks are not timing or power measurements."
+  ],
+  "sourceRevision": "0cf07047e56001e59fd54a613cf18407684e500b"
+}

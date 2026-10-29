@@ -1,0 +1,881 @@
+{
+  "generatedAt": "2026-10-29T18:25:34.251Z",
+  "smoke": false,
+  "provenance": {
+    "sourceCommit": "0cf07047e56001e59fd54a613cf18407684e500b",
+    "baselineCommit": "8022d4dcbee44b71b1218f8d0775714ed122997a",
+    "trackedWorkingTreeDirty": false,
+    "sourceSha256": {
+      "src/main/conversation-indexer.ts": "b7c872c4ea735d612aa054bab41e251950361637b42a1747bb71ff5191c1f551",
+      "src/main/conversation-indexer-client.ts": "df45fd37efe71e51c8a37f3a4f6131cfa61262b82752901cd9613d060738a991",
+      "src/main/conversation-indexer-worker.ts": "93a82b6bd1c91b12b9594b5721065734e33c0c126334249a0dff8e7d452f4e03",
+      "src/shared/conversation-hierarchy.ts": "2ad81a325377ea297c88f8bdd2095b8592e212486fdfb656f6789dc181267655",
+      "src/shared/conversation-messages.ts": "cecf6da63d966f63e2434937487f670c884e956a1f2106572e71dec3000cd0ed",
+      "src/main/codex-subagents.ts": "5f63bb696079e84beacccc04619045dfab1c162eba3751b84fbaef6c79027cc5"
+    },
+    "baselineIndexerSha256": "0190474ea39bc81625120e65f43d49ad948aa9be6a4708520af8cf53f432f69e"
+  },
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "24.6.0",
+    "cpu": "Apple M4",
+    "logicalCpus": 10,
+    "memoryBytes": 17179869184,
+    "versions": {
+      "node": "22.22.1",
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.5",
+      "ares": "1.34.6",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.2.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "140",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "4.2.4",
+      "simdutf": "7.3.3",
+      "sqlite": "3.51.2",
+      "tz": "2025b",
+      "undici": "6.23.0",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "14.2.231.22-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "39.8.10",
+      "chrome": "142.0.7444.265"
+    }
+  },
+  "methodology": [
+    "Actual legacy synchronous indexer and current AsyncConversationIndexer with the production worker; temporary synthetic Codex archives only.",
+    "Cold means a new catalog with the worker already started; startupWallMs reports initialization and its diagnostic GC separately. OS filesystem caches are warm after fixture generation.",
+    "Cold has three samples, warm and full-text search each have seven; smoke mode is a setup check with one sample and ten archives.",
+    "Wall and process CPU exclude fixture setup and diagnostic GC. Process CPU includes worker threads. Reads are sequential; host applications are not stopped.",
+    "Zero-delay timer and 5 ms heartbeat run on the calling/main thread. Heartbeat max gap includes the first callback after a blocking operation. Neither is an animation-frame metric.",
+    "Retained-heap deltas use explicit GC before and after the cold list, in each heap separately. Worker GC is injected only before untimed diagnostics. GC/runtime-sensitive estimates include returned summaries.",
+    "Legacy detailBytes is a lower bound from UTF-16 message content; worker detailBytes is the production conservative cache charge including message and metadata overhead. These counters are not directly equivalent.",
+    "The catalog retains summaries proportional to archive count. Only full-transcript detail caching is bounded to eight entries and 16 MiB; individual archive parsing still needs transient memory.",
+    "Append correctness verifies list count, full-text search and full detail. No real provider archives, SSH hosts, app profile or network are used.",
+    "CPU is an energy proxy; no watts, battery discharge or kernel wakeups are measured."
+  ],
+  "results": [
+    {
+      "fileCount": 100,
+      "sourceBytes": 5894990,
+      "messagesPerFile": 100,
+      "charactersPerMessage": 480,
+      "matchingProjectFraction": 0.1,
+      "modes": [
+        {
+          "mode": "baseline-main-thread-unbounded",
+          "cold": {
+            "samples": [
+              {
+                "wallMs": 12.754,
+                "processCpuMs": 17.219,
+                "zeroDelayTimerMs": 12.88,
+                "maxHeartbeatGapMs": 13.107,
+                "heartbeatCallbacksDuringOperation": 0,
+                "startupWallMs": 0.936,
+                "mainRetainedHeapDeltaBytes": 8923368,
+                "workerRetainedHeapDeltaBytes": 0,
+                "combinedRetainedHeapDeltaBytes": 8923368,
+                "diagnostics": {
+                  "catalogFiles": 100,
+                  "detailEntries": 100,
+                  "detailBytes": 9600000,
+                  "maxDetailBytes": null,
+                  "maxDetailEntries": null,
+                  "heapUsed": 11560252
+                }
+              },
+              {
+                "wallMs": 11.092,
+                "processCpuMs": 17.563,
+                "zeroDelayTimerMs": 11.131,
+                "maxHeartbeatGapMs": 11.167,
+                "heartbeatCallbacksDuringOperation": 0,
+                "startupWallMs": 1.443,
+                "mainRetainedHeapDeltaBytes": 8808864,
+                "workerRetainedHeapDeltaBytes": 0,
+                "combinedRetainedHeapDeltaBytes": 8808864,
+                "diagnostics": {
+                  "catalogFiles": 100,
+                  "detailEntries": 100,
+                  "detailBytes": 9600000,
+                  "maxDetailBytes": null,
+                  "maxDetailEntries": null,
+                  "heapUsed": 11607056
+                }
+              },
+              {
+                "wallMs": 9.959,
+                "processCpuMs": 15.159,
+                "zeroDelayTimerMs": 9.997,
+                "maxHeartbeatGapMs": 10.036,
+                "heartbeatCallbacksDuringOperation": 0,
+                "startupWallMs": 1.108,
+                "mainRetainedHeapDeltaBytes": 8799664,
+                "workerRetainedHeapDeltaBytes": 0,
+                "combinedRetainedHeapDeltaBytes": 8799664,
+                "diagnostics": {
+                  "catalogFiles": 100,
+                  "detailEntries": 100,
+                  "detailBytes": 9600000,
+                  "maxDetailBytes": null,
+                  "maxDetailEntries": null,
+                  "heapUsed": 11641920
+                }
+              }
+            ],
+            "medianWallMs": 11.092,
+            "medianProcessCpuMs": 17.219,
+            "medianZeroDelayTimerMs": 11.131,
+            "medianMaxHeartbeatGapMs": 11.167
+          },
+          "warm": {
+            "samples": [
+              {
+                "wallMs": 0.482,
+                "processCpuMs": 1.39,
+                "zeroDelayTimerMs": 1.77,
+                "maxHeartbeatGapMs": 6.866,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.506,
+                "processCpuMs": 0.51,
+                "zeroDelayTimerMs": 1.786,
+                "maxHeartbeatGapMs": 5.359,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.865,
+                "processCpuMs": 1.165,
+                "zeroDelayTimerMs": 2.099,
+                "maxHeartbeatGapMs": 5.153,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.42,
+                "processCpuMs": 0.48,
+                "zeroDelayTimerMs": 1.7,
+                "maxHeartbeatGapMs": 6.171,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.646,
+                "processCpuMs": 0.649,
+                "zeroDelayTimerMs": 1.919,
+                "maxHeartbeatGapMs": 6.945,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.416,
+                "processCpuMs": 0.796,
+                "zeroDelayTimerMs": 1.71,
+                "maxHeartbeatGapMs": 6.221,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.345,
+                "processCpuMs": 0.349,
+                "zeroDelayTimerMs": 1.389,
+                "maxHeartbeatGapMs": 5.687,
+                "heartbeatCallbacksDuringOperation": 0
+              }
+            ],
+            "medianWallMs": 0.482,
+            "medianProcessCpuMs": 0.649,
+            "medianZeroDelayTimerMs": 1.77,
+            "medianMaxHeartbeatGapMs": 6.171
+          },
+          "search": {
+            "samples": [
+              {
+                "wallMs": 0.896,
+                "processCpuMs": 1.558,
+                "zeroDelayTimerMs": 0.935,
+                "maxHeartbeatGapMs": 5.973,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.622,
+                "processCpuMs": 0.627,
+                "zeroDelayTimerMs": 1.897,
+                "maxHeartbeatGapMs": 5.086,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.658,
+                "processCpuMs": 0.751,
+                "zeroDelayTimerMs": 1.95,
+                "maxHeartbeatGapMs": 5.736,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.655,
+                "processCpuMs": 0.659,
+                "zeroDelayTimerMs": 0.681,
+                "maxHeartbeatGapMs": 5.093,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.541,
+                "processCpuMs": 0.544,
+                "zeroDelayTimerMs": 1.813,
+                "maxHeartbeatGapMs": 5.949,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.501,
+                "processCpuMs": 0.827,
+                "zeroDelayTimerMs": 1.775,
+                "maxHeartbeatGapMs": 4.905,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.47,
+                "processCpuMs": 0.471,
+                "zeroDelayTimerMs": 1.743,
+                "maxHeartbeatGapMs": 4.809,
+                "heartbeatCallbacksDuringOperation": 0
+              }
+            ],
+            "medianWallMs": 0.622,
+            "medianProcessCpuMs": 0.659,
+            "medianZeroDelayTimerMs": 1.775,
+            "medianMaxHeartbeatGapMs": 5.093
+          },
+          "changedFile": {
+            "wallMs": 0.54,
+            "processCpuMs": 0.542,
+            "zeroDelayTimerMs": 1.812,
+            "maxHeartbeatGapMs": 5.034,
+            "heartbeatCallbacksDuringOperation": 0,
+            "appendVisibleInListSearchAndDetail": true
+          },
+          "diagnostics": {
+            "catalogFiles": 100,
+            "detailEntries": 100,
+            "detailBytes": 9600050,
+            "maxDetailBytes": null,
+            "maxDetailEntries": null,
+            "heapUsed": 11775776
+          }
+        },
+        {
+          "mode": "worker-bounded-details",
+          "cold": {
+            "samples": [
+              {
+                "wallMs": 13.934,
+                "processCpuMs": 19.116,
+                "zeroDelayTimerMs": 1.311,
+                "maxHeartbeatGapMs": 5.814,
+                "heartbeatCallbacksDuringOperation": 2,
+                "startupWallMs": 29.457,
+                "mainRetainedHeapDeltaBytes": 13228,
+                "workerRetainedHeapDeltaBytes": 1128248,
+                "combinedRetainedHeapDeltaBytes": 1141476,
+                "diagnostics": {
+                  "catalogFiles": 100,
+                  "detailEntries": 8,
+                  "detailBytes": 1080880,
+                  "maxDetailBytes": 16777216,
+                  "maxDetailEntries": 8,
+                  "heapUsed": 3549556
+                }
+              },
+              {
+                "wallMs": 13.45,
+                "processCpuMs": 18.139,
+                "zeroDelayTimerMs": 1.301,
+                "maxHeartbeatGapMs": 5.58,
+                "heartbeatCallbacksDuringOperation": 2,
+                "startupWallMs": 27.834,
+                "mainRetainedHeapDeltaBytes": 8300,
+                "workerRetainedHeapDeltaBytes": 1128248,
+                "combinedRetainedHeapDeltaBytes": 1136548,
+                "diagnostics": {
+                  "catalogFiles": 100,
+                  "detailEntries": 8,
+                  "detailBytes": 1080880,
+                  "maxDetailBytes": 16777216,
+                  "maxDetailEntries": 8,
+                  "heapUsed": 3549556
+                }
+              },
+              {
+                "wallMs": 13.548,
+                "processCpuMs": 18.63,
+                "zeroDelayTimerMs": 1.303,
+                "maxHeartbeatGapMs": 6.316,
+                "heartbeatCallbacksDuringOperation": 2,
+                "startupWallMs": 28.049,
+                "mainRetainedHeapDeltaBytes": 15928,
+                "workerRetainedHeapDeltaBytes": 1128248,
+                "combinedRetainedHeapDeltaBytes": 1144176,
+                "diagnostics": {
+                  "catalogFiles": 100,
+                  "detailEntries": 8,
+                  "detailBytes": 1080880,
+                  "maxDetailBytes": 16777216,
+                  "maxDetailEntries": 8,
+                  "heapUsed": 3549636
+                }
+              }
+            ],
+            "medianWallMs": 13.548,
+            "medianProcessCpuMs": 18.63,
+            "medianZeroDelayTimerMs": 1.303,
+            "medianMaxHeartbeatGapMs": 5.814
+          },
+          "warm": {
+            "samples": [
+              {
+                "wallMs": 0.718,
+                "processCpuMs": 1.562,
+                "zeroDelayTimerMs": 0.731,
+                "maxHeartbeatGapMs": 5.446,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.547,
+                "processCpuMs": 0.627,
+                "zeroDelayTimerMs": 0.553,
+                "maxHeartbeatGapMs": 5.59,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.492,
+                "processCpuMs": 0.734,
+                "zeroDelayTimerMs": 0.502,
+                "maxHeartbeatGapMs": 5.532,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.44,
+                "processCpuMs": 0.519,
+                "zeroDelayTimerMs": 1.474,
+                "maxHeartbeatGapMs": 6.496,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.409,
+                "processCpuMs": 0.414,
+                "zeroDelayTimerMs": 1.685,
+                "maxHeartbeatGapMs": 6.714,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.391,
+                "processCpuMs": 0.396,
+                "zeroDelayTimerMs": 1.665,
+                "maxHeartbeatGapMs": 5.438,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 0.466,
+                "processCpuMs": 0.955,
+                "zeroDelayTimerMs": 1.74,
+                "maxHeartbeatGapMs": 6.766,
+                "heartbeatCallbacksDuringOperation": 0
+              }
+            ],
+            "medianWallMs": 0.466,
+            "medianProcessCpuMs": 0.627,
+            "medianZeroDelayTimerMs": 1.474,
+            "medianMaxHeartbeatGapMs": 5.59
+          },
+          "search": {
+            "samples": [
+              {
+                "wallMs": 1.945,
+                "processCpuMs": 2.706,
+                "zeroDelayTimerMs": 1.158,
+                "maxHeartbeatGapMs": 6.277,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 1.716,
+                "processCpuMs": 2.352,
+                "zeroDelayTimerMs": 1.288,
+                "maxHeartbeatGapMs": 5.574,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 1.59,
+                "processCpuMs": 1.655,
+                "zeroDelayTimerMs": 1.285,
+                "maxHeartbeatGapMs": 5.368,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 1.477,
+                "processCpuMs": 1.581,
+                "zeroDelayTimerMs": 1.282,
+                "maxHeartbeatGapMs": 6.271,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 1.493,
+                "processCpuMs": 1.518,
+                "zeroDelayTimerMs": 1.308,
+                "maxHeartbeatGapMs": 6.268,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 1.721,
+                "processCpuMs": 1.734,
+                "zeroDelayTimerMs": 1.286,
+                "maxHeartbeatGapMs": 6.277,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 1.581,
+                "processCpuMs": 2.638,
+                "zeroDelayTimerMs": 1.332,
+                "maxHeartbeatGapMs": 5.372,
+                "heartbeatCallbacksDuringOperation": 0
+              }
+            ],
+            "medianWallMs": 1.59,
+            "medianProcessCpuMs": 1.734,
+            "medianZeroDelayTimerMs": 1.286,
+            "medianMaxHeartbeatGapMs": 6.268
+          },
+          "changedFile": {
+            "wallMs": 0.551,
+            "processCpuMs": 0.85,
+            "zeroDelayTimerMs": 0.558,
+            "maxHeartbeatGapMs": 5.581,
+            "heartbeatCallbacksDuringOperation": 0,
+            "appendVisibleInListSearchAndDetail": true
+          },
+          "diagnostics": {
+            "catalogFiles": 100,
+            "detailEntries": 8,
+            "detailBytes": 1081288,
+            "maxDetailBytes": 16777216,
+            "maxDetailEntries": 8,
+            "heapUsed": 3645908
+          }
+        }
+      ]
+    },
+    {
+      "fileCount": 1000,
+      "sourceBytes": 58951890,
+      "messagesPerFile": 100,
+      "charactersPerMessage": 480,
+      "matchingProjectFraction": 0.1,
+      "modes": [
+        {
+          "mode": "baseline-main-thread-unbounded",
+          "cold": {
+            "samples": [
+              {
+                "wallMs": 112.682,
+                "processCpuMs": 215.249,
+                "zeroDelayTimerMs": 112.723,
+                "maxHeartbeatGapMs": 112.754,
+                "heartbeatCallbacksDuringOperation": 0,
+                "startupWallMs": 1.288,
+                "mainRetainedHeapDeltaBytes": 87695680,
+                "workerRetainedHeapDeltaBytes": 0,
+                "combinedRetainedHeapDeltaBytes": 87695680,
+                "diagnostics": {
+                  "catalogFiles": 1000,
+                  "detailEntries": 1000,
+                  "detailBytes": 96000000,
+                  "maxDetailBytes": null,
+                  "maxDetailEntries": null,
+                  "heapUsed": 91007692
+                }
+              },
+              {
+                "wallMs": 109.05,
+                "processCpuMs": 212.534,
+                "zeroDelayTimerMs": 109.091,
+                "maxHeartbeatGapMs": 109.12,
+                "heartbeatCallbacksDuringOperation": 0,
+                "startupWallMs": 1.013,
+                "mainRetainedHeapDeltaBytes": 87674032,
+                "workerRetainedHeapDeltaBytes": 0,
+                "combinedRetainedHeapDeltaBytes": 87674032,
+                "diagnostics": {
+                  "catalogFiles": 1000,
+                  "detailEntries": 1000,
+                  "detailBytes": 96000000,
+                  "maxDetailBytes": null,
+                  "maxDetailEntries": null,
+                  "heapUsed": 91009452
+                }
+              },
+              {
+                "wallMs": 105.076,
+                "processCpuMs": 200.882,
+                "zeroDelayTimerMs": 107.065,
+                "maxHeartbeatGapMs": 107.1,
+                "heartbeatCallbacksDuringOperation": 0,
+                "startupWallMs": 5.577,
+                "mainRetainedHeapDeltaBytes": 87669192,
+                "workerRetainedHeapDeltaBytes": 0,
+                "combinedRetainedHeapDeltaBytes": 87669192,
+                "diagnostics": {
+                  "catalogFiles": 1000,
+                  "detailEntries": 1000,
+                  "detailBytes": 96000000,
+                  "maxDetailBytes": null,
+                  "maxDetailEntries": null,
+                  "heapUsed": 91007768
+                }
+              }
+            ],
+            "medianWallMs": 109.05,
+            "medianProcessCpuMs": 212.534,
+            "medianZeroDelayTimerMs": 109.091,
+            "medianMaxHeartbeatGapMs": 109.12
+          },
+          "warm": {
+            "samples": [
+              {
+                "wallMs": 6.715,
+                "processCpuMs": 11.485,
+                "zeroDelayTimerMs": 6.758,
+                "maxHeartbeatGapMs": 6.799,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 4.734,
+                "processCpuMs": 7.434,
+                "zeroDelayTimerMs": 4.76,
+                "maxHeartbeatGapMs": 5.659,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 3.938,
+                "processCpuMs": 3.94,
+                "zeroDelayTimerMs": 3.96,
+                "maxHeartbeatGapMs": 6.304,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 3.885,
+                "processCpuMs": 4.739,
+                "zeroDelayTimerMs": 5.161,
+                "maxHeartbeatGapMs": 6.274,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 3.576,
+                "processCpuMs": 3.579,
+                "zeroDelayTimerMs": 4.856,
+                "maxHeartbeatGapMs": 6.273,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 3.265,
+                "processCpuMs": 3.655,
+                "zeroDelayTimerMs": 4.539,
+                "maxHeartbeatGapMs": 6.16,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 3.077,
+                "processCpuMs": 3.079,
+                "zeroDelayTimerMs": 3.097,
+                "maxHeartbeatGapMs": 6.268,
+                "heartbeatCallbacksDuringOperation": 0
+              }
+            ],
+            "medianWallMs": 3.885,
+            "medianProcessCpuMs": 3.94,
+            "medianZeroDelayTimerMs": 4.76,
+            "medianMaxHeartbeatGapMs": 6.273
+          },
+          "search": {
+            "samples": [
+              {
+                "wallMs": 5.605,
+                "processCpuMs": 5.943,
+                "zeroDelayTimerMs": 8.003,
+                "maxHeartbeatGapMs": 8.012,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 5.596,
+                "processCpuMs": 5.598,
+                "zeroDelayTimerMs": 6.882,
+                "maxHeartbeatGapMs": 6.891,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 4.688,
+                "processCpuMs": 6.014,
+                "zeroDelayTimerMs": 4.71,
+                "maxHeartbeatGapMs": 6.269,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 4.955,
+                "processCpuMs": 6.582,
+                "zeroDelayTimerMs": 4.976,
+                "maxHeartbeatGapMs": 6.267,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 4.447,
+                "processCpuMs": 4.45,
+                "zeroDelayTimerMs": 4.467,
+                "maxHeartbeatGapMs": 6.283,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 4.097,
+                "processCpuMs": 5.795,
+                "zeroDelayTimerMs": 4.117,
+                "maxHeartbeatGapMs": 5.391,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 4.318,
+                "processCpuMs": 4.385,
+                "zeroDelayTimerMs": 4.492,
+                "maxHeartbeatGapMs": 6.281,
+                "heartbeatCallbacksDuringOperation": 0
+              }
+            ],
+            "medianWallMs": 4.688,
+            "medianProcessCpuMs": 5.795,
+            "medianZeroDelayTimerMs": 4.71,
+            "medianMaxHeartbeatGapMs": 6.281
+          },
+          "changedFile": {
+            "wallMs": 3.307,
+            "processCpuMs": 3.309,
+            "zeroDelayTimerMs": 4.584,
+            "maxHeartbeatGapMs": 6.271,
+            "heartbeatCallbacksDuringOperation": 0,
+            "appendVisibleInListSearchAndDetail": true
+          },
+          "diagnostics": {
+            "catalogFiles": 1000,
+            "detailEntries": 1000,
+            "detailBytes": 96000050,
+            "maxDetailBytes": null,
+            "maxDetailEntries": null,
+            "heapUsed": 91166448
+          }
+        },
+        {
+          "mode": "worker-bounded-details",
+          "cold": {
+            "samples": [
+              {
+                "wallMs": 106.497,
+                "processCpuMs": 160.143,
+                "zeroDelayTimerMs": 1.31,
+                "maxHeartbeatGapMs": 6.291,
+                "heartbeatCallbacksDuringOperation": 17,
+                "startupWallMs": 27.563,
+                "mainRetainedHeapDeltaBytes": 67552,
+                "workerRetainedHeapDeltaBytes": 2235960,
+                "combinedRetainedHeapDeltaBytes": 2303512,
+                "diagnostics": {
+                  "catalogFiles": 1000,
+                  "detailEntries": 8,
+                  "detailBytes": 1080912,
+                  "maxDetailBytes": 16777216,
+                  "maxDetailEntries": 8,
+                  "heapUsed": 4657308
+                }
+              },
+              {
+                "wallMs": 104.451,
+                "processCpuMs": 157.128,
+                "zeroDelayTimerMs": 1.344,
+                "maxHeartbeatGapMs": 6.878,
+                "heartbeatCallbacksDuringOperation": 17,
+                "startupWallMs": 27.692,
+                "mainRetainedHeapDeltaBytes": 67508,
+                "workerRetainedHeapDeltaBytes": 2235904,
+                "combinedRetainedHeapDeltaBytes": 2303412,
+                "diagnostics": {
+                  "catalogFiles": 1000,
+                  "detailEntries": 8,
+                  "detailBytes": 1080912,
+                  "maxDetailBytes": 16777216,
+                  "maxDetailEntries": 8,
+                  "heapUsed": 4657236
+                }
+              },
+              {
+                "wallMs": 105.764,
+                "processCpuMs": 157.599,
+                "zeroDelayTimerMs": 1.305,
+                "maxHeartbeatGapMs": 6.403,
+                "heartbeatCallbacksDuringOperation": 17,
+                "startupWallMs": 27.508,
+                "mainRetainedHeapDeltaBytes": 68416,
+                "workerRetainedHeapDeltaBytes": 2235916,
+                "combinedRetainedHeapDeltaBytes": 2304332,
+                "diagnostics": {
+                  "catalogFiles": 1000,
+                  "detailEntries": 8,
+                  "detailBytes": 1080912,
+                  "maxDetailBytes": 16777216,
+                  "maxDetailEntries": 8,
+                  "heapUsed": 4657304
+                }
+              }
+            ],
+            "medianWallMs": 105.764,
+            "medianProcessCpuMs": 157.599,
+            "medianZeroDelayTimerMs": 1.31,
+            "medianMaxHeartbeatGapMs": 6.403
+          },
+          "warm": {
+            "samples": [
+              {
+                "wallMs": 5.802,
+                "processCpuMs": 13.133,
+                "zeroDelayTimerMs": 1.316,
+                "maxHeartbeatGapMs": 5.85,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 3.987,
+                "processCpuMs": 4.889,
+                "zeroDelayTimerMs": 1.117,
+                "maxHeartbeatGapMs": 5.582,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 4.16,
+                "processCpuMs": 4.426,
+                "zeroDelayTimerMs": 1.115,
+                "maxHeartbeatGapMs": 5.35,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 3.887,
+                "processCpuMs": 3.952,
+                "zeroDelayTimerMs": 1.284,
+                "maxHeartbeatGapMs": 5.609,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 3.932,
+                "processCpuMs": 6.429,
+                "zeroDelayTimerMs": 1.292,
+                "maxHeartbeatGapMs": 6.27,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 4.538,
+                "processCpuMs": 4.349,
+                "zeroDelayTimerMs": 1.083,
+                "maxHeartbeatGapMs": 5.347,
+                "heartbeatCallbacksDuringOperation": 0
+              },
+              {
+                "wallMs": 4.05,
+                "processCpuMs": 5.511,
+                "zeroDelayTimerMs": 1.113,
+                "maxHeartbeatGapMs": 5.594,
+                "heartbeatCallbacksDuringOperation": 0
+              }
+            ],
+            "medianWallMs": 4.05,
+            "medianProcessCpuMs": 4.889,
+            "medianZeroDelayTimerMs": 1.117,
+            "medianMaxHeartbeatGapMs": 5.594
+          },
+          "search": {
+            "samples": [
+              {
+                "wallMs": 13.802,
+                "processCpuMs": 16.427,
+                "zeroDelayTimerMs": 1.071,
+                "maxHeartbeatGapMs": 6.28,
+                "heartbeatCallbacksDuringOperation": 2
+              },
+              {
+                "wallMs": 14.855,
+                "processCpuMs": 18.575,
+                "zeroDelayTimerMs": 0.036,
+                "maxHeartbeatGapMs": 6.294,
+                "heartbeatCallbacksDuringOperation": 2
+              },
+              {
+                "wallMs": 14.067,
+                "processCpuMs": 16.728,
+                "zeroDelayTimerMs": 0.048,
+                "maxHeartbeatGapMs": 5.475,
+                "heartbeatCallbacksDuringOperation": 2
+              },
+              {
+                "wallMs": 13.994,
+                "processCpuMs": 16.614,
+                "zeroDelayTimerMs": 0.028,
+                "maxHeartbeatGapMs": 6.276,
+                "heartbeatCallbacksDuringOperation": 2
+              },
+              {
+                "wallMs": 12.733,
+                "processCpuMs": 13.808,
+                "zeroDelayTimerMs": 1.274,
+                "maxHeartbeatGapMs": 6.314,
+                "heartbeatCallbacksDuringOperation": 2
+              },
+              {
+                "wallMs": 14.432,
+                "processCpuMs": 17.577,
+                "zeroDelayTimerMs": 1.116,
+                "maxHeartbeatGapMs": 6.288,
+                "heartbeatCallbacksDuringOperation": 2
+              },
+              {
+                "wallMs": 14.021,
+                "processCpuMs": 19.958,
+                "zeroDelayTimerMs": 1.04,
+                "maxHeartbeatGapMs": 6.284,
+                "heartbeatCallbacksDuringOperation": 2
+              }
+            ],
+            "medianWallMs": 14.021,
+            "medianProcessCpuMs": 16.728,
+            "medianZeroDelayTimerMs": 1.04,
+            "medianMaxHeartbeatGapMs": 6.284
+          },
+          "changedFile": {
+            "wallMs": 3.752,
+            "processCpuMs": 3.77,
+            "zeroDelayTimerMs": 1.285,
+            "maxHeartbeatGapMs": 6.29,
+            "heartbeatCallbacksDuringOperation": 0,
+            "appendVisibleInListSearchAndDetail": true
+          },
+          "diagnostics": {
+            "catalogFiles": 1000,
+            "detailEntries": 8,
+            "detailBytes": 1081318,
+            "maxDetailBytes": 16777216,
+            "maxDetailEntries": 8,
+            "heapUsed": 4594592
+          }
+        }
+      ]
+    }
+  ]
+}

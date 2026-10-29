@@ -1,0 +1,133 @@
+{
+  "generatedAt": "2026-10-29T18:37:06.378251+00:00",
+  "applicationBuildRevision": "0cf0704",
+  "candidateSourceRevision": "25ee6863503e0e3cb674b9d1278db40421d4f295",
+  "baselineRevision": "8022d4dcbee44b71b1218f8d0775714ed122997a",
+  "archive1000": {
+    "sourceBytes": 58951890,
+    "coldTimerDelayMs": {
+      "before": 109.091,
+      "after": 1.31
+    },
+    "coldOperationMsExcludingStartup": {
+      "before": 109.05,
+      "after": 105.764
+    },
+    "startupMs": {
+      "before": 1.288,
+      "after": 27.563
+    },
+    "addedCombinedV8HeapBytesAfterGc": {
+      "before": 87674032,
+      "after": 2303512
+    },
+    "warmSearchMs": {
+      "before": 4.688,
+      "after": 14.021
+    },
+    "detailEntries": {
+      "before": 1000,
+      "after": 8
+    },
+    "rewritesAndAppendVisible": true
+  },
+  "pdf500": {
+    "beforePageRequests": 503,
+    "afterPageRequests": 3,
+    "renderedPages": 3,
+    "remainingPageShells": 500
+  },
+  "pdfRendererRetainedBackingBytes": {
+    "before": 22369632,
+    "after": 0,
+    "note": "Renderer mock fixture only; replacement main-process hot buffers and temporary files are accounted separately."
+  },
+  "pdfSnapshotStore": {
+    "hotBudgetBytes": 16777216,
+    "cases": [
+      {
+        "projects": 8,
+        "hotBytes": [
+          16777216,
+          16777216,
+          16777216
+        ],
+        "temporaryFileBytes": [
+          16777216,
+          16777216,
+          16777216
+        ],
+        "coldRevisitProjectRereads": [
+          0,
+          0,
+          0
+        ],
+        "cleanupBytes": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "projects": 24,
+        "hotBytes": [
+          16777216,
+          16777216,
+          16777216
+        ],
+        "temporaryFileBytes": [
+          50331648,
+          50331648,
+          50331648
+        ],
+        "coldRevisitProjectRereads": [
+          0,
+          0,
+          0
+        ],
+        "cleanupBytes": [
+          0,
+          0,
+          0
+        ]
+      }
+    ]
+  },
+  "terminalFlow": {
+    "inputBytes": 8388608,
+    "peakQueuedBytes": {
+      "before": 8388608,
+      "after": 262144
+    },
+    "consumerWrites": {
+      "before": 8192,
+      "after": 128
+    },
+    "allByteHashesMatch": true,
+    "note": "Actual flow helper with an artificial slow consumer and cooperative producer. This is queue accounting, not total PTY/Electron memory or real parser throughput."
+  },
+  "optionalPolling": {
+    "requests": {
+      "before": 18,
+      "after": 3
+    },
+    "hiddenRequests": {
+      "before": 10,
+      "after": 0
+    },
+    "peakConcurrentRequests": {
+      "before": 3,
+      "after": 1
+    }
+  },
+  "replayControlMedianMs": 2.431790999999066,
+  "limits": [
+    "No watts, battery-life, real SSH bandwidth or full-application CPU measurement.",
+    "Archive startup is measured separately; full-text search can reread evicted transcripts and is slower in this fixture.",
+    "The local catalog still scans metadata and changed files are reparsed in full. Remote response parsing and subagent header discovery remain follow-up work.",
+    "Hot PDF accounting is not total PDF process memory. Cold temporary disk usage grows with visited snapshots; abnormal termination can leave restricted files.",
+    "Dirty/live editor models and active image previews remain pinned; clean limits exclude Monaco internal/undo storage and Files text/navigation state.",
+    "Synthetic SSH and injected Monaco edits do not establish real host authentication or native keyboard/IME behavior.",
+    "Terminal backpressure can pause a live PTY while a living renderer is hung; disposal/navigation/crash release its credits."
+  ]
+}

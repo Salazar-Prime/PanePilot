@@ -1,0 +1,1 @@
+{"headlessTerminal":true,"exactFixturePty":true,"sparkleBridgeLoadedWithoutInitialization":true,"archiveWorker":{"executed":true,"entry":"out/main/conversation-indexer-worker-DISIqctQ.js","syntheticFullTextSearch":true,"detail":true,"exactProviderIdentity":true},"runtimeRoots":["@xterm/headless","node-pty","electron-sparkle-updater"],"electron":"39.8.10"}

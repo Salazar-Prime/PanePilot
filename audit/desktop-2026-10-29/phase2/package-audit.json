@@ -1,0 +1,836 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-10-29T18:31:46.031Z",
+  "method": "Read existing ASAR header and package metadata; SHA-256 streamed from app.asar; allocated disk sizes from du -sk. No application run or package build.",
+  "host": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v22.13.0"
+  },
+  "repository": {
+    "head": "25ee6863503e0e3cb674b9d1278db40421d4f295",
+    "version": "0.17.2"
+  },
+  "artifact": {
+    "path": "PanePilot.app",
+    "version": "0.17.2",
+    "productName": "PanePilot",
+    "packageName": "project-console",
+    "asar": {
+      "path": "app.asar",
+      "modifiedAt": "2026-10-29T18:30:04.911Z",
+      "bytes": 37609874,
+      "sha256": "8771c466baabec70ad46ed0a613c8377a996960d04c9daaf3ff7779d6f88e93a"
+    },
+    "allocatedBytes": 312578048,
+    "resourcesAllocatedBytes": 41615360,
+    "unpackedAllocatedBytes": 3624960,
+    "frameworksAllocatedBytes": 270819328,
+    "frameworkComponents": [
+      {
+        "name": "Electron Framework.framework",
+        "allocatedBytes": 265940992
+      },
+      {
+        "name": "Sparkle.framework",
+        "allocatedBytes": 3092480
+      },
+      {
+        "name": "ReactiveObjC.framework",
+        "allocatedBytes": 397312
+      },
+      {
+        "name": "Squirrel.framework",
+        "allocatedBytes": 319488
+      },
+      {
+        "name": "PanePilot Helper (GPU).app",
+        "allocatedBytes": 237568
+      },
+      {
+        "name": "PanePilot Helper (Plugin).app",
+        "allocatedBytes": 237568
+      },
+      {
+        "name": "PanePilot Helper (Renderer).app",
+        "allocatedBytes": 237568
+      },
+      {
+        "name": "PanePilot Helper.app",
+        "allocatedBytes": 237568
+      },
+      {
+        "name": "Mantle.framework",
+        "allocatedBytes": 118784
+      }
+    ],
+    "entryCount": 946,
+    "logicalEntryBytes": 40402043,
+    "packedLogicalEntryBytes": 37362274,
+    "unpackedLogicalEntryBytes": 3039769,
+    "groups": [
+      {
+        "path": "out/renderer",
+        "files": 99,
+        "logicalBytes": 31214100,
+        "packedBytes": 31214100,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/node-pty",
+        "files": 170,
+        "logicalBytes": 2809726,
+        "packedBytes": 0,
+        "unpackedBytes": 2809726
+      },
+      {
+        "path": "node_modules/node-gyp",
+        "files": 104,
+        "logicalBytes": 1737709,
+        "packedBytes": 1737709,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/lru-cache",
+        "files": 34,
+        "logicalBytes": 629625,
+        "packedBytes": 629625,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/tar",
+        "files": 72,
+        "logicalBytes": 560274,
+        "packedBytes": 560274,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "out/main",
+        "files": 3,
+        "logicalBytes": 526944,
+        "packedBytes": 526944,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/node-addon-api",
+        "files": 17,
+        "logicalBytes": 405098,
+        "packedBytes": 405098,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/iconv-lite",
+        "files": 24,
+        "logicalBytes": 325658,
+        "packedBytes": 325658,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/glob",
+        "files": 20,
+        "logicalBytes": 268267,
+        "packedBytes": 268267,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/electron-sparkle-updater",
+        "files": 17,
+        "logicalBytes": 230043,
+        "packedBytes": 0,
+        "unpackedBytes": 230043
+      },
+      {
+        "path": "node_modules/minimatch",
+        "files": 16,
+        "logicalBytes": 170134,
+        "packedBytes": 170134,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@xterm/headless",
+        "files": 2,
+        "logicalBytes": 142221,
+        "packedBytes": 142221,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/path-scurry",
+        "files": 6,
+        "logicalBytes": 133658,
+        "packedBytes": 133658,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/socks",
+        "files": 19,
+        "logicalBytes": 86228,
+        "packedBytes": 86228,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/ip-address",
+        "files": 11,
+        "logicalBytes": 81262,
+        "packedBytes": 81262,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/semver",
+        "files": 52,
+        "logicalBytes": 75083,
+        "packedBytes": 75083,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass",
+        "files": 6,
+        "logicalBytes": 70446,
+        "packedBytes": 70446,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/picomatch",
+        "files": 9,
+        "logicalBytes": 64103,
+        "packedBytes": 64103,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/smart-buffer",
+        "files": 7,
+        "logicalBytes": 63510,
+        "packedBytes": 63510,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/fdir",
+        "files": 6,
+        "logicalBytes": 48656,
+        "packedBytes": 48656,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass-fetch",
+        "files": 10,
+        "logicalBytes": 45774,
+        "packedBytes": 45774,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/exponential-backoff",
+        "files": 26,
+        "logicalBytes": 43430,
+        "packedBytes": 43430,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/cacache",
+        "files": 16,
+        "logicalBytes": 40414,
+        "packedBytes": 40414,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/make-fetch-happen",
+        "files": 12,
+        "logicalBytes": 38368,
+        "packedBytes": 38368,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minizlib",
+        "files": 8,
+        "logicalBytes": 38218,
+        "packedBytes": 38218,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/tinyglobby",
+        "files": 6,
+        "logicalBytes": 37715,
+        "packedBytes": 37715,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/http-cache-semantics",
+        "files": 3,
+        "logicalBytes": 37195,
+        "packedBytes": 37195,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/safer-buffer",
+        "files": 6,
+        "logicalBytes": 33788,
+        "packedBytes": 33788,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/brace-expansion",
+        "files": 6,
+        "logicalBytes": 30017,
+        "packedBytes": 30017,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/graceful-fs",
+        "files": 6,
+        "logicalBytes": 27363,
+        "packedBytes": 27363,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@isaacs/fs-minipass",
+        "files": 6,
+        "logicalBytes": 27060,
+        "packedBytes": 27060,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/p-map",
+        "files": 3,
+        "logicalBytes": 26137,
+        "packedBytes": 26137,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@npmcli/fs",
+        "files": 12,
+        "logicalBytes": 23607,
+        "packedBytes": 23607,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass-pipeline",
+        "files": 6,
+        "logicalBytes": 22988,
+        "packedBytes": 22988,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass-flush",
+        "files": 6,
+        "logicalBytes": 21581,
+        "packedBytes": 21581,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/debug",
+        "files": 6,
+        "logicalBytes": 20109,
+        "packedBytes": 20109,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/nopt",
+        "files": 7,
+        "logicalBytes": 19832,
+        "packedBytes": 19832,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/isexe",
+        "files": 14,
+        "logicalBytes": 18556,
+        "packedBytes": 18556,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/negotiator",
+        "files": 8,
+        "logicalBytes": 18390,
+        "packedBytes": 18390,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@npmcli/agent",
+        "files": 7,
+        "logicalBytes": 17413,
+        "packedBytes": 17413,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/ssri",
+        "files": 3,
+        "logicalBytes": 17197,
+        "packedBytes": 17197,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@npmcli/redact",
+        "files": 8,
+        "logicalBytes": 15541,
+        "packedBytes": 15541,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/https-proxy-agent",
+        "files": 4,
+        "logicalBytes": 13364,
+        "packedBytes": 13364,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "out/preload",
+        "files": 1,
+        "logicalBytes": 13355,
+        "packedBytes": 13355,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/fs-minipass",
+        "files": 3,
+        "logicalBytes": 11596,
+        "packedBytes": 11596,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/agent-base",
+        "files": 4,
+        "logicalBytes": 11547,
+        "packedBytes": 11547,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/yallist",
+        "files": 4,
+        "logicalBytes": 9848,
+        "packedBytes": 9848,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/socks-proxy-agent",
+        "files": 3,
+        "logicalBytes": 8965,
+        "packedBytes": 8965,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/chownr",
+        "files": 6,
+        "logicalBytes": 8696,
+        "packedBytes": 8696,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/http-proxy-agent",
+        "files": 3,
+        "logicalBytes": 8036,
+        "packedBytes": 8036,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/content-type",
+        "files": 3,
+        "logicalBytes": 7633,
+        "packedBytes": 7633,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass-sized",
+        "files": 6,
+        "logicalBytes": 6525,
+        "packedBytes": 6525,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/@gar/promise-retry",
+        "files": 4,
+        "logicalBytes": 6072,
+        "packedBytes": 6072,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/which",
+        "files": 4,
+        "logicalBytes": 5786,
+        "packedBytes": 5786,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/balanced-match",
+        "files": 6,
+        "logicalBytes": 5687,
+        "packedBytes": 5687,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/proc-log",
+        "files": 3,
+        "logicalBytes": 5107,
+        "packedBytes": 5107,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/ms",
+        "files": 3,
+        "logicalBytes": 4600,
+        "packedBytes": 4600,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/abbrev",
+        "files": 3,
+        "logicalBytes": 4102,
+        "packedBytes": 4102,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/env-paths",
+        "files": 3,
+        "logicalBytes": 3748,
+        "packedBytes": 3748,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/minipass-collect",
+        "files": 3,
+        "logicalBytes": 3280,
+        "packedBytes": 3280,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "package.json",
+        "files": 1,
+        "logicalBytes": 658,
+        "packedBytes": 658,
+        "unpackedBytes": 0
+      }
+    ],
+    "largestEntries": [
+      {
+        "path": "out/renderer/assets/ts.worker-D1n1aso5.js",
+        "logicalBytes": 13290795,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/index-Cy7Ydnha.js",
+        "logicalBytes": 9864910,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/css.worker-Ddkp-8Lu.js",
+        "logicalBytes": 1909561,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/pdf.worker.min-GB3t0DcA.mjs",
+        "logicalBytes": 1369805,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/html.worker-Bh__g14Z.js",
+        "logicalBytes": 1285125,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/json.worker-B_6GSjhi.js",
+        "logicalBytes": 883243,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/LatexPdfPreview-wgk4HPBg.js",
+        "logicalBytes": 646872,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/editor.worker-BaQuYFPg.js",
+        "logicalBytes": 584645,
+        "unpacked": false
+      },
+      {
+        "path": "out/main/index.js",
+        "logicalBytes": 485157,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/index-DBCxZ9gi.css",
+        "logicalBytes": 436233,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/node-pty/prebuilds/win32-x64/conpty.node",
+        "logicalBytes": 312320,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/node-pty/prebuilds/win32-x64/pty.node",
+        "logicalBytes": 303104,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/node-pty/prebuilds/win32-arm64/conpty.node",
+        "logicalBytes": 302592,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/node-pty/prebuilds/win32-arm64/pty.node",
+        "logicalBytes": 293376,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/node-addon-api/napi-inl.h",
+        "logicalBytes": 243635,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/node-pty/node_modules/node-addon-api/napi-inl.h",
+        "logicalBytes": 219411,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/node-gyp/gyp/pylib/gyp/generator/msvs.py",
+        "logicalBytes": 151277,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/@xterm/headless/lib-headless/xterm-headless.js",
+        "logicalBytes": 141936,
+        "unpacked": false
+      },
+      {
+        "path": "out/renderer/assets/codicon-Brq4_Ui5.ttf",
+        "logicalBytes": 140956,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/node-gyp/gyp/pylib/gyp/xcodeproj_file.py",
+        "logicalBytes": 136274,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/node-pty/prebuilds/win32-x64/conpty_console_list.node",
+        "logicalBytes": 134656,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/node-gyp/gyp/pylib/gyp/input.py",
+        "logicalBytes": 126437,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/node-addon-api/napi.h",
+        "logicalBytes": 125611,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/node-pty/prebuilds/win32-arm64/conpty_console_list.node",
+        "logicalBytes": 122368,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/node-gyp/gyp/pylib/gyp/generator/ninja.py",
+        "logicalBytes": 119463,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/electron-sparkle-updater/native/build/Release/sparkle_bridge.node",
+        "logicalBytes": 119040,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/node-pty/node_modules/node-addon-api/napi.h",
+        "logicalBytes": 115423,
+        "unpacked": true
+      },
+      {
+        "path": "node_modules/node-gyp/gyp/pylib/gyp/generator/make.py",
+        "logicalBytes": 111764,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/tar/dist/commonjs/index.min.js",
+        "logicalBytes": 102753,
+        "unpacked": false
+      },
+      {
+        "path": "node_modules/glob/dist/commonjs/index.min.js",
+        "logicalBytes": 88495,
+        "unpacked": false
+      }
+    ]
+  },
+  "packagingCandidates": {
+    "explanation": "These renderer dependencies already have code/assets in out/renderer. Their extra node_modules copies are exclusion candidates, not measured savings. canvas is a native optional PDF.js dependency; the desktop uses PDF.js in Chromium. Rebuild and smoke-test editor workers, PDF rendering, terminal native helpers, and updates before removing anything.",
+    "modules": [],
+    "logicalBytes": 0,
+    "packedBytes": 0,
+    "unpackedBytes": 0,
+    "mainExternalPackages": [
+      "@xterm/headless",
+      "electron-sparkle-updater",
+      "node-pty"
+    ],
+    "minimumRequiredRuntimeRootModules": [
+      {
+        "path": "node_modules/@xterm/headless",
+        "files": 2,
+        "logicalBytes": 142221,
+        "packedBytes": 142221,
+        "unpackedBytes": 0
+      },
+      {
+        "path": "node_modules/electron-sparkle-updater",
+        "files": 17,
+        "logicalBytes": 230043,
+        "packedBytes": 0,
+        "unpackedBytes": 230043
+      },
+      {
+        "path": "node_modules/node-pty",
+        "files": 170,
+        "logicalBytes": 2809726,
+        "packedBytes": 0,
+        "unpackedBytes": 2809726
+      }
+    ],
+    "requiredRuntimeRootLogicalBytes": 3181990,
+    "minimumCaveat": "Runtime roots are a lower bound, not a dependency closure. Keep their required transitive packages, Electron, native helpers, Sparkle framework, and licenses. Logical ASAR bytes differ from filesystem allocation and compressed download size."
+  },
+  "developmentFiles": {
+    "explanation": "These workspace build/dependency/release directories are not all shipped inside the app. No files were removed.",
+    "outAllocatedBytes": 31981568,
+    "outLogicalBytes": 31760547,
+    "outLargestFiles": [
+      {
+        "path": "renderer/assets/ts.worker-D1n1aso5.js",
+        "bytes": 13290795
+      },
+      {
+        "path": "renderer/assets/index-Cy7Ydnha.js",
+        "bytes": 9864910
+      },
+      {
+        "path": "renderer/assets/css.worker-Ddkp-8Lu.js",
+        "bytes": 1909561
+      },
+      {
+        "path": "renderer/assets/pdf.worker.min-GB3t0DcA.mjs",
+        "bytes": 1369805
+      },
+      {
+        "path": "renderer/assets/html.worker-Bh__g14Z.js",
+        "bytes": 1285125
+      },
+      {
+        "path": "renderer/assets/json.worker-B_6GSjhi.js",
+        "bytes": 883243
+      },
+      {
+        "path": "renderer/assets/LatexPdfPreview-wgk4HPBg.js",
+        "bytes": 646872
+      },
+      {
+        "path": "renderer/assets/editor.worker-BaQuYFPg.js",
+        "bytes": 584645
+      },
+      {
+        "path": "main/index.js",
+        "bytes": 485157
+      },
+      {
+        "path": "renderer/assets/index-DBCxZ9gi.css",
+        "bytes": 436233
+      },
+      {
+        "path": "renderer/assets/codicon-Brq4_Ui5.ttf",
+        "bytes": 140956
+      },
+      {
+        "path": "renderer/assets/lspLanguageFeatures-CJXKOyP-.js",
+        "bytes": 61691
+      },
+      {
+        "path": "renderer/assets/freemarker2-SVjQB3C5.js",
+        "bytes": 42096
+      },
+      {
+        "path": "renderer/assets/tsMode-CgA6pWjm.js",
+        "bytes": 40359
+      },
+      {
+        "path": "renderer/assets/jsonMode-C8gaF6Ub.js",
+        "bytes": 28929
+      },
+      {
+        "path": "renderer/assets/solidity-yHOxYChb.js",
+        "bytes": 26025
+      },
+      {
+        "path": "renderer/assets/abap-D5KwWAsZ.js",
+        "bytes": 22974
+      },
+      {
+        "path": "renderer/assets/powerquery-BQ_t1ZiQ.js",
+        "bytes": 21645
+      },
+      {
+        "path": "main/codex-subagents-CEuYEmZq.js",
+        "bytes": 21361
+      },
+      {
+        "path": "main/conversation-indexer-worker-DISIqctQ.js",
+        "bytes": 20426
+      }
+    ],
+    "nodeModulesAllocatedBytes": 839430144,
+    "releaseAllocatedBytes": 6445416448
+  },
+  "sourceMetrics": [
+    {
+      "path": "src/main/store.ts",
+      "bytes": 105128,
+      "lines": 3247
+    },
+    {
+      "path": "src/main/conversation-indexer.ts",
+      "bytes": 22675,
+      "lines": 596
+    },
+    {
+      "path": "src/main/remote-conversation-indexer.ts",
+      "bytes": 27726,
+      "lines": 730
+    },
+    {
+      "path": "src/main/codex-subagents.ts",
+      "bytes": 18787,
+      "lines": 376
+    },
+    {
+      "path": "src/main/terminal-manager.ts",
+      "bytes": 122991,
+      "lines": 3417
+    },
+    {
+      "path": "src/main/latex-project-service.ts",
+      "bytes": 50208,
+      "lines": 1510
+    },
+    {
+      "path": "src/main/index.ts",
+      "bytes": 39291,
+      "lines": 935
+    },
+    {
+      "path": "src/renderer/src/components/App.tsx",
+      "bytes": 129559,
+      "lines": 3452
+    },
+    {
+      "path": "src/renderer/src/components/FilesPanel.tsx",
+      "bytes": 51793,
+      "lines": 1488
+    },
+    {
+      "path": "src/renderer/src/components/LatexPdfPreview.tsx",
+      "bytes": 25958,
+      "lines": 770
+    },
+    {
+      "path": "src/renderer/src/components/ChatHistoryPanel.tsx",
+      "bytes": 12329,
+      "lines": 283
+    }
+  ]
+}

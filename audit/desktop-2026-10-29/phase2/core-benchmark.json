@@ -1,0 +1,844 @@
+{
+  "generatedAt": "2026-10-29T18:27:51.323Z",
+  "commit": "25ee6863503e0e3cb674b9d1278db40421d4f295",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "osRelease": "24.6.0",
+    "cpu": "Apple M4",
+    "logicalCpus": 10,
+    "memoryBytes": 17179869184,
+    "versions": {
+      "node": "22.22.1",
+      "acorn": "8.15.0",
+      "ada": "2.9.2",
+      "amaro": "1.1.5",
+      "ares": "1.34.6",
+      "brotli": "1.0.9",
+      "cjs_module_lexer": "2.2.0",
+      "cldr": "44.1",
+      "icu": "74.2",
+      "llhttp": "9.3.0",
+      "modules": "140",
+      "napi": "10",
+      "nbytes": "0.1.1",
+      "ncrypto": "0.0.1",
+      "nghttp2": "1.64.0",
+      "openssl": "0.0.0",
+      "simdjson": "4.2.4",
+      "simdutf": "7.3.3",
+      "sqlite": "3.51.2",
+      "tz": "2025b",
+      "undici": "6.23.0",
+      "unicode": "15.1",
+      "uv": "1.51.0",
+      "uvwasi": "0.0.23",
+      "v8": "14.2.231.22-electron.0",
+      "zlib": "1.3.1",
+      "zstd": "1.5.8",
+      "electron": "39.8.10",
+      "chrome": "142.0.7444.265"
+    }
+  },
+  "limitations": [
+    "Synthetic service benchmarks in Electron Node runtime, not end-to-end interactive app.",
+    "CPU time and IO volume are energy proxies. No calibrated watts, battery drain, or kernel wakeups measured.",
+    "Fixture setup excluded. Trials serial; other host applications were not stopped. No live user files, archives, or SSH contacted."
+  ],
+  "storage": {
+    "note": "Saturated 512 KiB shell output; WAL autocheckpoint disabled to measure cumulative logical WAL traffic, not disk residency or physical SSD writes. Different append sizes hold total input at 1 MiB. Current runtime batches for 250 ms; this is a Store-level stress scenario.",
+    "results": [
+      {
+        "appendBytes": 512,
+        "appendCount": 2048,
+        "inputBytes": 1048576,
+        "samples": [
+          {
+            "wallMs": 482.35,
+            "cpuMs": 306.189,
+            "timerDelayMs": 483.395,
+            "walBytes": 23397512,
+            "retainedBytes": 524288,
+            "walToInputRatio": 22.314
+          },
+          {
+            "wallMs": 468.584,
+            "cpuMs": 285.741,
+            "timerDelayMs": 468.623,
+            "walBytes": 23356312,
+            "retainedBytes": 524288,
+            "walToInputRatio": 22.274
+          },
+          {
+            "wallMs": 470.363,
+            "cpuMs": 294.734,
+            "timerDelayMs": 470.405,
+            "walBytes": 23352192,
+            "retainedBytes": 524288,
+            "walToInputRatio": 22.27
+          }
+        ],
+        "medianWallMs": 470.363,
+        "medianCpuMs": 294.734,
+        "medianTimerDelayMs": 470.405
+      },
+      {
+        "appendBytes": 4096,
+        "appendCount": 256,
+        "inputBytes": 1048576,
+        "samples": [
+          {
+            "wallMs": 78.813,
+            "cpuMs": 46.087,
+            "timerDelayMs": 78.863,
+            "walBytes": 9405992,
+            "retainedBytes": 524288,
+            "walToInputRatio": 8.97
+          },
+          {
+            "wallMs": 85.327,
+            "cpuMs": 52.268,
+            "timerDelayMs": 85.376,
+            "walBytes": 9430712,
+            "retainedBytes": 524288,
+            "walToInputRatio": 8.994
+          },
+          {
+            "wallMs": 81.269,
+            "cpuMs": 47.893,
+            "timerDelayMs": 81.323,
+            "walBytes": 9414232,
+            "retainedBytes": 524288,
+            "walToInputRatio": 8.978
+          }
+        ],
+        "medianWallMs": 81.269,
+        "medianCpuMs": 47.893,
+        "medianTimerDelayMs": 81.323
+      },
+      {
+        "appendBytes": 16384,
+        "appendCount": 64,
+        "inputBytes": 1048576,
+        "samples": [
+          {
+            "wallMs": 24.616,
+            "cpuMs": 15.28,
+            "timerDelayMs": 24.644,
+            "walBytes": 3576192,
+            "retainedBytes": 524288,
+            "walToInputRatio": 3.411
+          },
+          {
+            "wallMs": 27.424,
+            "cpuMs": 16.157,
+            "timerDelayMs": 27.466,
+            "walBytes": 3584432,
+            "retainedBytes": 524288,
+            "walToInputRatio": 3.418
+          },
+          {
+            "wallMs": 26.095,
+            "cpuMs": 20.067,
+            "timerDelayMs": 26.129,
+            "walBytes": 3584432,
+            "retainedBytes": 524288,
+            "walToInputRatio": 3.418
+          }
+        ],
+        "medianWallMs": 26.095,
+        "medianCpuMs": 16.157,
+        "medianTimerDelayMs": 26.129
+      }
+    ]
+  },
+  "hydration": {
+    "note": "Actual Store queries. Serialization excluded from timings; payload sizes reported separately. Legacy API is comparison only: current renderer/runtime paths omit replay.",
+    "results": [
+      {
+        "projectCount": 25,
+        "sessionsPerProject": 4,
+        "storedBytesPerSession": 524288,
+        "measurements": [
+          {
+            "name": "renderer",
+            "jsonBytes": 89771,
+            "samples": [
+              {
+                "wallMs": 1.468,
+                "cpuMs": 2.073,
+                "timerDelayMs": 1.49
+              },
+              {
+                "wallMs": 1.246,
+                "cpuMs": 1.25,
+                "timerDelayMs": 1.267
+              },
+              {
+                "wallMs": 1.367,
+                "cpuMs": 1.393,
+                "timerDelayMs": 1.383
+              },
+              {
+                "wallMs": 1.367,
+                "cpuMs": 1.554,
+                "timerDelayMs": 1.383
+              },
+              {
+                "wallMs": 1.296,
+                "cpuMs": 1.391,
+                "timerDelayMs": 1.315
+              }
+            ],
+            "medianWallMs": 1.367,
+            "medianCpuMs": 1.393,
+            "medianTimerDelayMs": 1.383
+          },
+          {
+            "name": "runtime",
+            "jsonBytes": 55381,
+            "samples": [
+              {
+                "wallMs": 0.801,
+                "cpuMs": 0.803,
+                "timerDelayMs": 0.822
+              },
+              {
+                "wallMs": 0.765,
+                "cpuMs": 0.767,
+                "timerDelayMs": 0.783
+              },
+              {
+                "wallMs": 0.753,
+                "cpuMs": 0.754,
+                "timerDelayMs": 0.767
+              },
+              {
+                "wallMs": 0.777,
+                "cpuMs": 0.778,
+                "timerDelayMs": 0.794
+              },
+              {
+                "wallMs": 0.773,
+                "cpuMs": 0.774,
+                "timerDelayMs": 2.044
+              }
+            ],
+            "medianWallMs": 0.773,
+            "medianCpuMs": 0.774,
+            "medianTimerDelayMs": 0.794
+          },
+          {
+            "name": "legacy-output-included",
+            "jsonBytes": 52518571,
+            "samples": [
+              {
+                "wallMs": 176.671,
+                "cpuMs": 115.377,
+                "timerDelayMs": 176.719
+              },
+              {
+                "wallMs": 180.035,
+                "cpuMs": 114.561,
+                "timerDelayMs": 180.072
+              },
+              {
+                "wallMs": 169.104,
+                "cpuMs": 111.07,
+                "timerDelayMs": 169.135
+              },
+              {
+                "wallMs": 169.037,
+                "cpuMs": 106.322,
+                "timerDelayMs": 169.07
+              },
+              {
+                "wallMs": 167.925,
+                "cpuMs": 102.86,
+                "timerDelayMs": 167.956
+              }
+            ],
+            "medianWallMs": 169.104,
+            "medianCpuMs": 111.07,
+            "medianTimerDelayMs": 169.135
+          }
+        ]
+      },
+      {
+        "projectCount": 100,
+        "sessionsPerProject": 4,
+        "storedBytesPerSession": 524288,
+        "measurements": [
+          {
+            "name": "renderer",
+            "jsonBytes": 359371,
+            "samples": [
+              {
+                "wallMs": 4.974,
+                "cpuMs": 4.981,
+                "timerDelayMs": 5.007
+              },
+              {
+                "wallMs": 5.122,
+                "cpuMs": 5.305,
+                "timerDelayMs": 5.144
+              },
+              {
+                "wallMs": 5.023,
+                "cpuMs": 5.025,
+                "timerDelayMs": 5.047
+              },
+              {
+                "wallMs": 5.877,
+                "cpuMs": 6.248,
+                "timerDelayMs": 5.911
+              },
+              {
+                "wallMs": 4.912,
+                "cpuMs": 4.914,
+                "timerDelayMs": 4.932
+              }
+            ],
+            "medianWallMs": 5.023,
+            "medianCpuMs": 5.025,
+            "medianTimerDelayMs": 5.047
+          },
+          {
+            "name": "runtime",
+            "jsonBytes": 221681,
+            "samples": [
+              {
+                "wallMs": 3.072,
+                "cpuMs": 3.076,
+                "timerDelayMs": 3.097
+              },
+              {
+                "wallMs": 3.195,
+                "cpuMs": 3.195,
+                "timerDelayMs": 3.213
+              },
+              {
+                "wallMs": 3.289,
+                "cpuMs": 3.275,
+                "timerDelayMs": 3.313
+              },
+              {
+                "wallMs": 3.143,
+                "cpuMs": 3.144,
+                "timerDelayMs": 3.164
+              },
+              {
+                "wallMs": 3.107,
+                "cpuMs": 3.108,
+                "timerDelayMs": 3.123
+              }
+            ],
+            "medianWallMs": 3.143,
+            "medianCpuMs": 3.144,
+            "medianTimerDelayMs": 3.164
+          },
+          {
+            "name": "legacy-output-included",
+            "jsonBytes": 210074571,
+            "samples": [
+              {
+                "wallMs": 670.72,
+                "cpuMs": 447.687,
+                "timerDelayMs": 670.771
+              },
+              {
+                "wallMs": 643.252,
+                "cpuMs": 433.121,
+                "timerDelayMs": 643.287
+              },
+              {
+                "wallMs": 659.563,
+                "cpuMs": 421.756,
+                "timerDelayMs": 659.594
+              },
+              {
+                "wallMs": 650.969,
+                "cpuMs": 423.264,
+                "timerDelayMs": 651.002
+              },
+              {
+                "wallMs": 678.678,
+                "cpuMs": 432.177,
+                "timerDelayMs": 678.71
+              }
+            ],
+            "medianWallMs": 659.563,
+            "medianCpuMs": 432.177,
+            "medianTimerDelayMs": 659.594
+          }
+        ]
+      }
+    ]
+  },
+  "archives": {
+    "note": "Cold means new indexer; OS filesystem caches are warm from fixture generation. 90% of archives belong to other projects. Heap delta is diagnostic, GC/runtime-sensitive. Timer delay is a scheduled zero-delay callback, not a UI frame or watt measurement.",
+    "results": [
+      {
+        "fileCount": 100,
+        "sourceBytes": 6082690,
+        "messagesPerFile": 100,
+        "matchingProjectFraction": 0.1,
+        "cold": {
+          "samples": [
+            {
+              "wallMs": 11.727,
+              "cpuMs": 15.431,
+              "timerDelayMs": 11.754,
+              "retainedHeapDeltaBytes": 948264,
+              "cachedFileCount": 100
+            },
+            {
+              "wallMs": 10.33,
+              "cpuMs": 16.746,
+              "timerDelayMs": 10.365,
+              "retainedHeapDeltaBytes": 842648,
+              "cachedFileCount": 100
+            },
+            {
+              "wallMs": 10.049,
+              "cpuMs": 11.857,
+              "timerDelayMs": 10.078,
+              "retainedHeapDeltaBytes": 855168,
+              "cachedFileCount": 100
+            }
+          ],
+          "medianWallMs": 10.33,
+          "medianCpuMs": 15.431,
+          "medianTimerDelayMs": 10.365
+        },
+        "warm": {
+          "samples": [
+            {
+              "wallMs": 0.553,
+              "cpuMs": 0.832,
+              "timerDelayMs": 0.575
+            },
+            {
+              "wallMs": 0.495,
+              "cpuMs": 0.673,
+              "timerDelayMs": 0.512
+            },
+            {
+              "wallMs": 0.476,
+              "cpuMs": 0.577,
+              "timerDelayMs": 1.747
+            },
+            {
+              "wallMs": 0.492,
+              "cpuMs": 0.494,
+              "timerDelayMs": 0.512
+            },
+            {
+              "wallMs": 0.453,
+              "cpuMs": 0.455,
+              "timerDelayMs": 0.469
+            },
+            {
+              "wallMs": 0.458,
+              "cpuMs": 0.888,
+              "timerDelayMs": 0.473
+            },
+            {
+              "wallMs": 0.456,
+              "cpuMs": 0.604,
+              "timerDelayMs": 0.47
+            }
+          ],
+          "medianWallMs": 0.476,
+          "medianCpuMs": 0.604,
+          "medianTimerDelayMs": 0.512
+        },
+        "search": {
+          "samples": [
+            {
+              "wallMs": 1.789,
+              "cpuMs": 2.209,
+              "timerDelayMs": 1.811
+            },
+            {
+              "wallMs": 1.569,
+              "cpuMs": 1.722,
+              "timerDelayMs": 1.585
+            },
+            {
+              "wallMs": 1.521,
+              "cpuMs": 1.523,
+              "timerDelayMs": 1.717
+            },
+            {
+              "wallMs": 1.529,
+              "cpuMs": 1.53,
+              "timerDelayMs": 1.551
+            },
+            {
+              "wallMs": 1.477,
+              "cpuMs": 1.479,
+              "timerDelayMs": 1.492
+            },
+            {
+              "wallMs": 1.514,
+              "cpuMs": 2.282,
+              "timerDelayMs": 1.528
+            },
+            {
+              "wallMs": 1.487,
+              "cpuMs": 2.224,
+              "timerDelayMs": 1.502
+            }
+          ],
+          "medianWallMs": 1.521,
+          "medianCpuMs": 1.722,
+          "medianTimerDelayMs": 1.551
+        },
+        "changedFileTiming": {
+          "wallMs": 0.577,
+          "cpuMs": 0.61,
+          "timerDelayMs": 0.592
+        }
+      },
+      {
+        "fileCount": 1000,
+        "sourceBytes": 60927890,
+        "messagesPerFile": 100,
+        "matchingProjectFraction": 0.1,
+        "cold": {
+          "samples": [
+            {
+              "wallMs": 94.908,
+              "cpuMs": 108.864,
+              "timerDelayMs": 94.945,
+              "retainedHeapDeltaBytes": 1017764,
+              "cachedFileCount": 1000
+            },
+            {
+              "wallMs": 95.089,
+              "cpuMs": 105.268,
+              "timerDelayMs": 95.117,
+              "retainedHeapDeltaBytes": 1810076,
+              "cachedFileCount": 1000
+            },
+            {
+              "wallMs": 95.377,
+              "cpuMs": 105.068,
+              "timerDelayMs": 95.406,
+              "retainedHeapDeltaBytes": 1815216,
+              "cachedFileCount": 1000
+            }
+          ],
+          "medianWallMs": 95.089,
+          "medianCpuMs": 105.268,
+          "medianTimerDelayMs": 95.117
+        },
+        "warm": {
+          "samples": [
+            {
+              "wallMs": 5.363,
+              "cpuMs": 6.237,
+              "timerDelayMs": 5.557
+            },
+            {
+              "wallMs": 4.938,
+              "cpuMs": 7.454,
+              "timerDelayMs": 4.958
+            },
+            {
+              "wallMs": 4.498,
+              "cpuMs": 4.504,
+              "timerDelayMs": 4.516
+            },
+            {
+              "wallMs": 4.347,
+              "cpuMs": 5.482,
+              "timerDelayMs": 4.369
+            },
+            {
+              "wallMs": 3.255,
+              "cpuMs": 3.282,
+              "timerDelayMs": 3.275
+            },
+            {
+              "wallMs": 3.419,
+              "cpuMs": 3.631,
+              "timerDelayMs": 3.438
+            },
+            {
+              "wallMs": 3.078,
+              "cpuMs": 3.081,
+              "timerDelayMs": 3.098
+            }
+          ],
+          "medianWallMs": 4.347,
+          "medianCpuMs": 4.504,
+          "medianTimerDelayMs": 4.369
+        },
+        "search": {
+          "samples": [
+            {
+              "wallMs": 14.231,
+              "cpuMs": 15.013,
+              "timerDelayMs": 14.393
+            },
+            {
+              "wallMs": 13.497,
+              "cpuMs": 13.499,
+              "timerDelayMs": 13.728
+            },
+            {
+              "wallMs": 13.536,
+              "cpuMs": 14.453,
+              "timerDelayMs": 13.719
+            },
+            {
+              "wallMs": 13.294,
+              "cpuMs": 16.199,
+              "timerDelayMs": 13.467
+            },
+            {
+              "wallMs": 12.704,
+              "cpuMs": 12.798,
+              "timerDelayMs": 12.872
+            },
+            {
+              "wallMs": 12.455,
+              "cpuMs": 12.675,
+              "timerDelayMs": 12.594
+            },
+            {
+              "wallMs": 12.145,
+              "cpuMs": 12.167,
+              "timerDelayMs": 12.293
+            }
+          ],
+          "medianWallMs": 13.294,
+          "medianCpuMs": 13.499,
+          "medianTimerDelayMs": 13.467
+        },
+        "changedFileTiming": {
+          "wallMs": 3.272,
+          "cpuMs": 3.303,
+          "timerDelayMs": 3.289
+        }
+      }
+    ]
+  },
+  "terminals": {
+    "name": "codex-volatile-terminal-output",
+    "source": "src/main/terminal-manager.ts:2351",
+    "method": "Actual TerminalManager.prototype.retainTerminalOutput; constructor bypassed; synthetic ASCII only.",
+    "limitations": [
+      "Measures replay-buffer work only, excluding PTY, headless xterm, IPC, renderer, SQLite, and provider CPU.",
+      "The empty scenario reaches the 512 KiB cap during its 2,000 appends; saturated starts at that cap.",
+      "Heap/RSS deltas are end-of-sample observations and can include GC; they are not peak allocation or leak measurements.",
+      "Elapsed and CPU measurements are energy proxies, not measured watts or battery drain."
+    ],
+    "samples": [
+      {
+        "scenario": "empty",
+        "repetition": 1,
+        "appendCount": 2000,
+        "appendBytes": 512,
+        "inputBytes": 1024000,
+        "initialBytes": 0,
+        "retainedBytes": 524288,
+        "retainedChunks": 128,
+        "elapsedMs": 2.779332999998587,
+        "cpuUserMs": 5.712,
+        "cpuSystemMs": 0.107,
+        "heapUsedDeltaBytes": 4670144,
+        "rssDeltaBytes": 49152,
+        "externalDeltaBytes": 0,
+        "exactTailVerified": true,
+        "gcBeforeSample": true
+      },
+      {
+        "scenario": "saturated",
+        "repetition": 1,
+        "appendCount": 2000,
+        "appendBytes": 512,
+        "inputBytes": 1024000,
+        "initialBytes": 524288,
+        "retainedBytes": 524288,
+        "retainedChunks": 128,
+        "elapsedMs": 2.9329580000012356,
+        "cpuUserMs": 4.962,
+        "cpuSystemMs": 0.068,
+        "heapUsedDeltaBytes": 4648376,
+        "rssDeltaBytes": 32768,
+        "externalDeltaBytes": 0,
+        "exactTailVerified": true,
+        "gcBeforeSample": true
+      },
+      {
+        "scenario": "saturated",
+        "repetition": 2,
+        "appendCount": 2000,
+        "appendBytes": 512,
+        "inputBytes": 1024000,
+        "initialBytes": 524288,
+        "retainedBytes": 524288,
+        "retainedChunks": 128,
+        "elapsedMs": 2.431790999999066,
+        "cpuUserMs": 3.148,
+        "cpuSystemMs": 0.011,
+        "heapUsedDeltaBytes": 4621376,
+        "rssDeltaBytes": 0,
+        "externalDeltaBytes": 0,
+        "exactTailVerified": true,
+        "gcBeforeSample": true
+      },
+      {
+        "scenario": "empty",
+        "repetition": 2,
+        "appendCount": 2000,
+        "appendBytes": 512,
+        "inputBytes": 1024000,
+        "initialBytes": 0,
+        "retainedBytes": 524288,
+        "retainedChunks": 128,
+        "elapsedMs": 1.570000000001528,
+        "cpuUserMs": 1.96,
+        "cpuSystemMs": 0.006,
+        "heapUsedDeltaBytes": 4609784,
+        "rssDeltaBytes": 0,
+        "externalDeltaBytes": 0,
+        "exactTailVerified": true,
+        "gcBeforeSample": true
+      },
+      {
+        "scenario": "empty",
+        "repetition": 3,
+        "appendCount": 2000,
+        "appendBytes": 512,
+        "inputBytes": 1024000,
+        "initialBytes": 0,
+        "retainedBytes": 524288,
+        "retainedChunks": 128,
+        "elapsedMs": 1.566041000000041,
+        "cpuUserMs": 2.004,
+        "cpuSystemMs": 0.006,
+        "heapUsedDeltaBytes": 4609784,
+        "rssDeltaBytes": 0,
+        "externalDeltaBytes": 0,
+        "exactTailVerified": true,
+        "gcBeforeSample": true
+      },
+      {
+        "scenario": "saturated",
+        "repetition": 3,
+        "appendCount": 2000,
+        "appendBytes": 512,
+        "inputBytes": 1024000,
+        "initialBytes": 524288,
+        "retainedBytes": 524288,
+        "retainedChunks": 128,
+        "elapsedMs": 2.2651670000013837,
+        "cpuUserMs": 2.641,
+        "cpuSystemMs": 0.006,
+        "heapUsedDeltaBytes": 4609768,
+        "rssDeltaBytes": 0,
+        "externalDeltaBytes": 0,
+        "exactTailVerified": true,
+        "gcBeforeSample": true
+      }
+    ]
+  },
+  "ssh": {
+    "name": "ssh-main-loop-responsiveness",
+    "method": "Retained legacy listRemoteFolders versus the production listRemoteFoldersAsync folder browser, using identical requests and a fake SSH executable sleeping 200 ms; isolated worker, alternating order, five trials each.",
+    "limitations": [
+      "The legacy synchronous helper is retained as a comparison; interactive folder browsing uses the asynchronous helper.",
+      "Timer delay is a zero-delay callback in the worker, not a measured app frame or end-to-end user latency.",
+      "Fixed artificial latency excludes SSH connection overhead, actual networks, and remote Python work.",
+      "Worker CPU excludes the fake child process; no watts or battery drain measured."
+    ],
+    "samples": [
+      {
+        "mode": "legacy-sync-folder-browser",
+        "repetition": 1,
+        "wallMs": 320.675,
+        "timerDelayMs": 320.824,
+        "workerCpuMs": 1.726
+      },
+      {
+        "mode": "async-folder-browser",
+        "repetition": 1,
+        "wallMs": 216.856,
+        "timerDelayMs": 1.759,
+        "workerCpuMs": 2.431
+      },
+      {
+        "mode": "async-folder-browser",
+        "repetition": 2,
+        "wallMs": 217.679,
+        "timerDelayMs": 0.429,
+        "workerCpuMs": 0.975
+      },
+      {
+        "mode": "legacy-sync-folder-browser",
+        "repetition": 2,
+        "wallMs": 216.243,
+        "timerDelayMs": 216.27,
+        "workerCpuMs": 0.374
+      },
+      {
+        "mode": "legacy-sync-folder-browser",
+        "repetition": 3,
+        "wallMs": 215.667,
+        "timerDelayMs": 215.71,
+        "workerCpuMs": 0.47
+      },
+      {
+        "mode": "async-folder-browser",
+        "repetition": 3,
+        "wallMs": 213.871,
+        "timerDelayMs": 1.777,
+        "workerCpuMs": 1.139
+      },
+      {
+        "mode": "async-folder-browser",
+        "repetition": 4,
+        "wallMs": 208.64,
+        "timerDelayMs": 1.678,
+        "workerCpuMs": 0.746
+      },
+      {
+        "mode": "legacy-sync-folder-browser",
+        "repetition": 4,
+        "wallMs": 209.624,
+        "timerDelayMs": 209.649,
+        "workerCpuMs": 0.475
+      },
+      {
+        "mode": "legacy-sync-folder-browser",
+        "repetition": 5,
+        "wallMs": 215.902,
+        "timerDelayMs": 215.932,
+        "workerCpuMs": 0.405
+      },
+      {
+        "mode": "async-folder-browser",
+        "repetition": 5,
+        "wallMs": 215.907,
+        "timerDelayMs": 0.425,
+        "workerCpuMs": 0.952
+      }
+    ]
+  },
+  "metadataConcurrency": {
+    "name": "latex-comment-concurrent-create",
+    "method": "Two concurrent calls to actual ProjectMetadataService.createLatexComment, using a temporary local project folder and stubbed project lookup.",
+    "successfulCreateCalls": 2,
+    "persistedComments": 2,
+    "lostSuccessfulCreates": 0,
+    "invariantSatisfied": true,
+    "limitations": [
+      "Service-level concurrency probe; not proof that one particular UI gesture triggers concurrent calls.",
+      "Tests one process and local files. Cross-client and SSH races need their own integration tests."
+    ]
+  }
+}

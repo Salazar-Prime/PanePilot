@@ -1,0 +1,42 @@
+{
+  "version": "0.17.2",
+  "sourceRevision": "25ee6863503e0e3cb674b9d1278db40421d4f295",
+  "applicationBuildRevision": "0cf0704",
+  "candidateDirectoryRelativeToRepository": "../panepilot-release-candidate-0.17.2-20261029T182939Z",
+  "assets": {
+    "PanePilot-0.17.2-macOS-arm64.zip": {
+      "bytes": 119165884,
+      "sha256": "c0573d6d46670a1f42b1abd147beeaa4dca07ec6249c4f4666cd9a35f36fe9f3"
+    },
+    "PanePilot-0.17.2-macOS-arm64.dmg": {
+      "bytes": 118965253,
+      "sha256": "93a7e546b57f0aa1b64672612170d19b4951ca0f289d840f3fcb16a805cadef4"
+    },
+    "appcast.xml": {
+      "bytes": 2318,
+      "sha256": "945042b0212ad1ab82bb91c788a7138a6ece571c8aa428bd761f9f93e27bfaca"
+    },
+    "PanePilot-0.17.2-macOS-arm64.md": {
+      "bytes": 945,
+      "sha256": "e1d75903dfaa0cbba2faf8d3b578245b7d833ddebf03458b48487f4ab352c8b7"
+    }
+  },
+  "bundle": {
+    "identifier": "com.salazarprime.panepilot",
+    "version": "0.17.2",
+    "build": "0.17.2",
+    "minimumSystemVersion": "12.0",
+    "architectures": "arm64",
+    "logicalRegularFileBytes": 310951869,
+    "regularFileCount": 567
+  },
+  "codeSignatureVerified": true,
+  "signing": "ad-hoc",
+  "notarization": "not requested; packaging skipped notarization",
+  "dmgChecksumVerified": true,
+  "signedUpdateArchiveAndFeedVerified": true,
+  "updaterPublicConfigurationMatches": true,
+  "published": false,
+  "installed": false,
+  "originalReleaseAsarSha256": "bd9cfbec7a9733ca93c5bbdba6eee6ffcd2a321965e466d025acc9168532dbf8"
+}

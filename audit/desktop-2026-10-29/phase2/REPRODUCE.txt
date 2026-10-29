@@ -1,0 +1,145 @@
+PanePilot desktop efficiency — second pass, 29 October 2026
+
+Open report.html for the results, tradeoffs, audit coverage and validation limits.
+Original audit and first-pass artifacts remain unchanged.
+
+Application build/source: 0cf0704 (version 0.17.2).
+Documentation-only commit before packaging: 25ee686.
+Paired archive baseline: 8022d4dcbee44b71b1218f8d0775714ed122997a.
+Implementation branch: perf/desktop-efficiency-phase2-2026-10-29.
+Integration target: main.
+
+VALIDATION (repository root; supported Node version, used 22.13.0)
+
+  npm run build
+  ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron node_modules/vitest/vitest.mjs run --maxWorkers=2
+  node scripts/test-desktop-workflows.mjs /tmp/panepilot-workflows.json
+  node scripts/test-app-updates-ui.mjs
+  npm run test:updates
+  npm run docs:typecheck
+  npm run docs:build
+  git diff --check
+
+Final suite: 117 files/677 tests passed; 1 file/2 optional tests skipped.
+The application build includes typecheck. Documentation typecheck/build pass.
+Native tests use Electron's embedded Node to match SQLite/native-module ABI.
+
+Additional focused UI fixtures:
+
+  node scripts/test-editor-model-ownership-ui.mjs
+  node scripts/test-notes-draft-cache-ui.mjs
+  node scripts/test-files-image-cache-ui.mjs
+  node scripts/test-latex-pdf-ui.mjs
+  node scripts/test-terminal-output-ui.mjs
+  node scripts/test-optional-polling-ui.mjs
+  node scripts/test-terminal-surface-cache-ui.mjs
+
+The workflow fixture imports the actual built main, preload and renderer. It uses
+its own SQLite/profile/projects, a private tmux socket with empty tmux config,
+synthetic archive roots and fake SSH/rclone. Test-only OS adapters block access
+to real home data outside the checkout, restrict child processes, isolate the
+clipboard and reject network requests. It does not launch an agent or installed
+PanePilot. Monaco draft text uses the actual editor API through a test-only React
+ref lookup because hidden windows do not provide normal native IME focus. It
+validates model/listener/draft/persistence behavior, not keyboard/IME input.
+
+Existing integration tests create/remove their own exact temporary tmux sessions.
+The native updater test uses an ephemeral key, random application identity,
+temporary application bundles and a loopback feed. It never uses the release
+Keychain key or updates the installed PanePilot app.
+
+BENCHMARKS
+
+Run serially after tests/builds, using NEW output paths to preserve this evidence:
+
+  node scripts/benchmark-conversation-archives.mjs --output /tmp/archive-comparison.json
+  node scripts/benchmark-desktop-renderer.mjs --output /tmp/renderer-comparison.json
+  node scripts/benchmark-pdf-snapshots.mjs /tmp/snapshot-comparison.json
+  node scripts/benchmark-terminal-flow.mjs /tmp/flow-comparison.json
+  node scripts/benchmark-optional-polling.mjs /tmp/polling-comparison.json
+  node scripts/benchmark-desktop.mjs /tmp/core-controls.json
+
+Archive launcher pins baseline 8022d4d, bundles it through git-show without switching
+the checkout, and compares it with the production worker on identical synthetic
+archives. Three cold / seven warm / seven search samples; startup is separate. The worker keeps cache
+memory bounded but full-text searches can reread evicted details and take longer.
+The core launcher's archive section still exercises the synchronous worker engine;
+use archive-comparison.json for production worker/main-loop claims.
+
+Renderer uses actual React/layout and mocked PDF.js/preview IPC. It verifies lazy
+page acquisition and renderer backing-storage retention; timings do not estimate
+real PDF parsing/GPU costs. Snapshot-store benchmark uses actual byte accounting
+and immutable temporary files; active decoders/base64 IPC/OS caches are excluded.
+
+Flow uses the actual helper with an artificial delayed consumer and producer that
+honors pause/resume. Its old callbacks run concurrently, so elapsed time is not a
+real parser throughput comparison. Queue bytes and exact SHA-256 equality matter.
+Polling uses scaled real timers and artificial latency, not real Git/SSH or hidden
+Chromium timer throttling. No watts/battery-life/wakeup measurements are inferred.
+
+RELEASE CANDIDATE
+
+Local sibling directory, relative to repository root:
+  ../panepilot-release-candidate-0.17.2-20261029T182939Z/
+
+Contains ad-hoc-signed PanePilot.app under mac-arm64/, DMG, ZIP, signed appcast,
+signed release notes and SHA256SUMS.txt. release-candidate.json records asset hashes,
+identity, versions, architecture and logical sizes. It is not Apple-notarized.
+No tag, public release, upload, public feed edit or installation was performed.
+Do not edit signed XML or notes; regenerate into a new staging directory if needed.
+
+Build a new candidate into an unused absolute directory:
+
+  npm run build
+  node scripts/prepare-node-pty.mjs
+  node node_modules/electron-builder/cli.js --mac dmg zip --arm64 --publish never -c.directories.output=/path/to/new-candidate
+
+Keep configured ad-hoc signing. Never use the default release/ output here because
+it contains the original release artifact. Validate explicit paths:
+
+  node scripts/benchmark-desktop-package.mjs /path/to/candidate/mac-arm64/PanePilot.app --output /tmp/package-audit.json
+  ELECTRON_RUN_AS_NODE=1 /path/to/candidate/mac-arm64/PanePilot.app/Contents/MacOS/PanePilot scripts/test-packaged-runtime.cjs /path/to/candidate/mac-arm64/PanePilot.app
+  node scripts/test-packaged-renderer.mjs /path/to/candidate/mac-arm64/PanePilot.app/Contents/Resources/app.asar/out/renderer/index.html /tmp/packaged-renderer.json
+
+The native smoke runs packaged PTY/headless/updater dependencies and the archived
+conversation worker with synthetic roots. It does not initialize updater checks.
+The renderer smoke uses actual archived assets and synthetic IPC, exercises all
+six Monaco/PDF worker types, and verifies PDF canvas pixels and terminal output.
+
+Prepare signed update assets in another unused directory:
+
+  npm run updates:release -- /path/to/candidate/PanePilot-0.17.2-macOS-arm64.zip .github/release-notes/v0.17.2.md --output /path/to/new-signed-staging
+
+This verifies archive signatures, bundle identity/version/public updater settings,
+then signs/verifies feed and ZIP using the configured Keychain account. It does
+not publish. Follow docs/content/docs/development/sparkle-updates.mdx before any
+separately authorized publication. Never export or print the private signing key.
+
+CHECKPOINTS
+
+Original source:
+  checkpoint/pre-desktop-audit-20261029T164816Z
+  41aa35dd0774a613dd6aa5c18568e9432843f725
+
+Completed first pass:
+  checkpoint/pre-desktop-phase2-8022d4d
+  8022d4dcbee44b71b1218f8d0775714ed122997a
+
+The original external bundle/tar/checksum backup remains at:
+  ../panepilot-audit-checkpoint-20261029T164816Z/
+
+Both checkpoint refs were verified. The four original untracked files are still
+byte-identical to the tar; validation.json records their hashes. The original
+release/mac-arm64/PanePilot.app ASAR hash remains unchanged. No live workspace DB
+migration or installed app replacement was performed.
+
+To inspect either checkpoint without disturbing this checkout, choose an unused
+sibling destination and run, for example:
+
+  git worktree add ../panepilot-original-review checkpoint/pre-desktop-audit-20261029T164816Z
+  git worktree add ../panepilot-first-pass-review checkpoint/pre-desktop-phase2-8022d4d
+
+Worktrees contain tracked source only. For original source plus original untracked
+files, use the clone-and-tar recovery in the parent REPRODUCE.txt. Preserve later
+work before switching the current checkout. Do not recover with reset --hard or
+clean. Code checkpoints are separate from live application-data rollback.

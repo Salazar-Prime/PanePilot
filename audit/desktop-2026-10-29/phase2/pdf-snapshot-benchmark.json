@@ -1,0 +1,258 @@
+{
+  "capturedAt": "2026-10-29T18:26:18.596Z",
+  "sourceCommit": "0cf07047e56001e59fd54a613cf18407684e500b",
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M4",
+    "node": "22.22.1",
+    "electron": "39.8.10"
+  },
+  "method": "Production PdfSnapshotStore, synthetic valid-signature 2 MiB buffers, isolated permission-restricted temporary directory, 3 samples. Former renderer Map control counts exact retained base64 characters. Each preview is released before the next project; project 0 is revisited after exceeding the hot budget. SHA-256 verifies immutable bytes and a sentinel loader detects accidental rereads of newer project data.",
+  "limitations": [
+    "Hot bytes are actual store Buffer accounting, not full process RSS. Transient IPC/base64/decoder/PDF.js allocations are excluded.",
+    "Temporary snapshot files deliberately trade application-lifetime disk space for bounded retained memory; they are removed on owner disposal.",
+    "Cold refers to the application LRU; filesystem caches are not flushed. Wall/CPU measurements include snapshot writes/readback/base64 conversion, not actual PDF parsing, real project IO or printing.",
+    "No energy, watt or battery measurements are inferred."
+  ],
+  "cases": [
+    {
+      "projects": 8,
+      "samples": [
+        {
+          "projects": 8,
+          "pdfBytesEach": 2097152,
+          "legacy": {
+            "retainedBase64Characters": 22369632
+          },
+          "snapshotStore": {
+            "hotBudgetBytes": 16777216,
+            "load": {
+              "wallMs": 17.90858399999999,
+              "cpuMs": 15.691,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 8
+              }
+            },
+            "immutableTemporaryFileBytes": 16777216,
+            "revisit": {
+              "wallMs": 5.676292000000004,
+              "cpuMs": 5.756,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 8
+              }
+            },
+            "projectRereads": 0,
+            "snapshotHashPreserved": true,
+            "cleanup": {
+              "wallMs": 1.2997080000000096,
+              "cpuMs": 2.049,
+              "value": 0
+            }
+          }
+        },
+        {
+          "projects": 8,
+          "pdfBytesEach": 2097152,
+          "legacy": {
+            "retainedBase64Characters": 22369632
+          },
+          "snapshotStore": {
+            "hotBudgetBytes": 16777216,
+            "load": {
+              "wallMs": 20.200083000000006,
+              "cpuMs": 12.845,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 8
+              }
+            },
+            "immutableTemporaryFileBytes": 16777216,
+            "revisit": {
+              "wallMs": 5.406833000000006,
+              "cpuMs": 5.402,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 8
+              }
+            },
+            "projectRereads": 0,
+            "snapshotHashPreserved": true,
+            "cleanup": {
+              "wallMs": 0.869624999999985,
+              "cpuMs": 1.807,
+              "value": 0
+            }
+          }
+        },
+        {
+          "projects": 8,
+          "pdfBytesEach": 2097152,
+          "legacy": {
+            "retainedBase64Characters": 22369632
+          },
+          "snapshotStore": {
+            "hotBudgetBytes": 16777216,
+            "load": {
+              "wallMs": 16.111959000000013,
+              "cpuMs": 8.17,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 8
+              }
+            },
+            "immutableTemporaryFileBytes": 16777216,
+            "revisit": {
+              "wallMs": 5.325416999999987,
+              "cpuMs": 5.326,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 8
+              }
+            },
+            "projectRereads": 0,
+            "snapshotHashPreserved": true,
+            "cleanup": {
+              "wallMs": 0.6688750000000141,
+              "cpuMs": 1.491,
+              "value": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "projects": 24,
+      "samples": [
+        {
+          "projects": 24,
+          "pdfBytesEach": 2097152,
+          "legacy": {
+            "retainedBase64Characters": 67108896
+          },
+          "snapshotStore": {
+            "hotBudgetBytes": 16777216,
+            "load": {
+              "wallMs": 54.44987499999996,
+              "cpuMs": 28.862,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 24
+              }
+            },
+            "immutableTemporaryFileBytes": 50331648,
+            "revisit": {
+              "wallMs": 5.769792000000052,
+              "cpuMs": 5.776,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 24
+              }
+            },
+            "projectRereads": 0,
+            "snapshotHashPreserved": true,
+            "cleanup": {
+              "wallMs": 1.5350420000000327,
+              "cpuMs": 3.462,
+              "value": 0
+            }
+          }
+        },
+        {
+          "projects": 24,
+          "pdfBytesEach": 2097152,
+          "legacy": {
+            "retainedBase64Characters": 67108896
+          },
+          "snapshotStore": {
+            "hotBudgetBytes": 16777216,
+            "load": {
+              "wallMs": 56.396375000000035,
+              "cpuMs": 27.924,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 24
+              }
+            },
+            "immutableTemporaryFileBytes": 50331648,
+            "revisit": {
+              "wallMs": 6.9877500000000055,
+              "cpuMs": 11.45,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 24
+              }
+            },
+            "projectRereads": 0,
+            "snapshotHashPreserved": true,
+            "cleanup": {
+              "wallMs": 1.7178749999999923,
+              "cpuMs": 3.211,
+              "value": 0
+            }
+          }
+        },
+        {
+          "projects": 24,
+          "pdfBytesEach": 2097152,
+          "legacy": {
+            "retainedBase64Characters": 67108896
+          },
+          "snapshotStore": {
+            "hotBudgetBytes": 16777216,
+            "load": {
+              "wallMs": 62.94279100000006,
+              "cpuMs": 31.999,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 24
+              }
+            },
+            "immutableTemporaryFileBytes": 50331648,
+            "revisit": {
+              "wallMs": 5.618417000000022,
+              "cpuMs": 5.625,
+              "value": {
+                "hotBytes": 16777216,
+                "hotSnapshots": 8,
+                "owners": 1,
+                "snapshots": 24
+              }
+            },
+            "projectRereads": 0,
+            "snapshotHashPreserved": true,
+            "cleanup": {
+              "wallMs": 1.5780829999999924,
+              "cpuMs": 3.593,
+              "value": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

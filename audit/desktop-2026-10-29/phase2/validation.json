@@ -1,0 +1,80 @@
+{
+  "applicationBuildRevision": "0cf0704",
+  "releaseCandidateSourceRevision": "25ee6863503e0e3cb674b9d1278db40421d4f295",
+  "fullSuite": {
+    "passedFiles": 117,
+    "skippedFiles": 1,
+    "passedTests": 677,
+    "skippedTests": 2,
+    "durationSeconds": 22.13,
+    "command": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron node_modules/vitest/vitest.mjs run --maxWorkers=2"
+  },
+  "build": {
+    "node": "22.13.0",
+    "passed": true,
+    "includesTypecheck": true
+  },
+  "docs": {
+    "typecheckPassed": true,
+    "productionBuildPassed": true
+  },
+  "workflow": {
+    "actualMainPreloadRendererPassed": true,
+    "sourceRevision": "0cf07047e56001e59fd54a613cf18407684e500b",
+    "temporaryPrivateTmux": true,
+    "fakeSshAndRclone": true,
+    "providerArchivesSynthetic": true,
+    "monacoInput": "Real editor API through a test-only React ref lookup; native keyboard/IME not tested."
+  },
+  "componentChecks": {
+    "monaco124PathsPassed": true,
+    "cleanModelPressureCount": 33,
+    "notesDraftRestorationPassed": true,
+    "filesImageBudgetPassed": true,
+    "pdfReadingPositionAndExactPrintingPassed": true,
+    "terminalReplayAndSlowParserPassed": true,
+    "optionalPollingAndStaleDiffFencesPassed": true
+  },
+  "updates": {
+    "uiFixturePassed": true,
+    "nativeEphemeralKeyUpdatePassed": true,
+    "releaseArchiveAndSignedFeedVerified": true
+  },
+  "package": {
+    "nativePtyHeadlessAndSparkleBridgePassed": true,
+    "archivedWorkerExecuted": true,
+    "allSixRendererWorkerTypesPassed": true,
+    "actualPdfCanvasRendered": true,
+    "dmgChecksumVerified": true,
+    "codeSignature": "ad-hoc; verified",
+    "notarized": false
+  },
+  "checkpoint": {
+    "originalBranch": "checkpoint/pre-desktop-audit-20261029T164816Z",
+    "originalRevision": "41aa35dd0774a613dd6aa5c18568e9432843f725",
+    "phase1Branch": "checkpoint/pre-desktop-phase2-8022d4d",
+    "phase1Revision": "8022d4dcbee44b71b1218f8d0775714ed122997a",
+    "originalUntrackedSha256": {
+      ".panepilot/notes/TODO.md": "bc611fb92fc2b4f02954b3270c9d81f5b92ac305abd6d79e3b46913f9300e9d6",
+      "docs/pnpm-lock.yaml": "da01ac3d2e5861012b5fa481fb2715a0c0b5242f324ee2a19f59da4a39cc2ec4",
+      "pnpm-lock.yaml": "e70bbd1925e31f6adaa17e50bf3813860c838bd6c353ff7fd495c15228a1b44f",
+      "test-tts.mjs": "44c7ed71df2ba595229d5f9d34948bd9d75410618beb9b82f2691b170136bbd8"
+    },
+    "historicalAuditEvidenceUnchanged": true,
+    "originalReleaseAsarUnchanged": true
+  },
+  "publication": {
+    "published": false,
+    "installed": false,
+    "integrationTarget": "main"
+  },
+  "reportChecks": {
+    "all19LocalLinksResolve": true,
+    "allJsonEvidenceParses": true,
+    "desktopWidth": 1280,
+    "narrowWidth": 390,
+    "noPageHorizontalOverflow": true,
+    "originalFirstPassArtifactsUnchanged": true,
+    "candidateRootChecksumsVerified": true
+  }
+}

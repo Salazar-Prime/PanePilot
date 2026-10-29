@@ -1,0 +1,91 @@
+{
+  "measuredAt": "2026-10-29T18:26:24.360Z",
+  "sourceCommit": "0cf07047e56001e59fd54a613cf18407684e500b",
+  "sourceSha256": "7a46348119adf935e98c9e48fec9d2c590ab5868cd031fae75ed9d47867ed3b1",
+  "protocol": {
+    "deliveries": 8192,
+    "chunkBytes": 1024,
+    "totalBytes": 8388608,
+    "consumerDelayMs": 2,
+    "highWaterMark": 262144,
+    "maxBatchBytes": 65536
+  },
+  "method": "Actual TerminalOutputFlow versus prior unconditional delivery pattern, with an artificial delayed ordered consumer and producer honoring pause/resume. Three paired trials; exact SHA-256 equality.",
+  "limits": [
+    "Queue counts describe this synthetic producer/consumer, not total Electron/PTY/xterm memory.",
+    "The old pattern schedules all fake callbacks concurrently; elapsed times are not an app throughput comparison.",
+    "Real native PTY buffers are outside this helper; production may overshoot the threshold by a delivered chunk.",
+    "No watts, battery, real parser CPU, real SSH or full-application frame time measured."
+  ],
+  "samples": [
+    {
+      "trial": 1,
+      "previous": {
+        "mode": "previous-unconditional-writes",
+        "elapsedMs": 17.697874999999996,
+        "cpuMs": 38.594,
+        "maximumQueuedBytes": 8388608,
+        "consumerWrites": 8192,
+        "pauses": 0,
+        "parsedBytes": 8388608,
+        "sha256": "fe0778402b84de27eb23babb8dfe92447d177425ccb113923474b50a14c9b644"
+      },
+      "current": {
+        "mode": "bounded-settlement-flow",
+        "elapsedMs": 335.96775,
+        "cpuMs": 23.052,
+        "maximumQueuedBytes": 262144,
+        "consumerWrites": 128,
+        "pauses": 42,
+        "parsedBytes": 8388608,
+        "sha256": "fe0778402b84de27eb23babb8dfe92447d177425ccb113923474b50a14c9b644"
+      }
+    },
+    {
+      "trial": 2,
+      "previous": {
+        "mode": "previous-unconditional-writes",
+        "elapsedMs": 13.96875,
+        "cpuMs": 34.116,
+        "maximumQueuedBytes": 8388608,
+        "consumerWrites": 8192,
+        "pauses": 0,
+        "parsedBytes": 8388608,
+        "sha256": "fe0778402b84de27eb23babb8dfe92447d177425ccb113923474b50a14c9b644"
+      },
+      "current": {
+        "mode": "bounded-settlement-flow",
+        "elapsedMs": 336.82754199999994,
+        "cpuMs": 24.16,
+        "maximumQueuedBytes": 262144,
+        "consumerWrites": 128,
+        "pauses": 42,
+        "parsedBytes": 8388608,
+        "sha256": "fe0778402b84de27eb23babb8dfe92447d177425ccb113923474b50a14c9b644"
+      }
+    },
+    {
+      "trial": 3,
+      "previous": {
+        "mode": "previous-unconditional-writes",
+        "elapsedMs": 12.55416600000001,
+        "cpuMs": 11.277,
+        "maximumQueuedBytes": 8388608,
+        "consumerWrites": 8192,
+        "pauses": 0,
+        "parsedBytes": 8388608,
+        "sha256": "fe0778402b84de27eb23babb8dfe92447d177425ccb113923474b50a14c9b644"
+      },
+      "current": {
+        "mode": "bounded-settlement-flow",
+        "elapsedMs": 333.60908299999994,
+        "cpuMs": 20.846,
+        "maximumQueuedBytes": 262144,
+        "consumerWrites": 128,
+        "pauses": 42,
+        "parsedBytes": 8388608,
+        "sha256": "fe0778402b84de27eb23babb8dfe92447d177425ccb113923474b50a14c9b644"
+      }
+    }
+  ]
+}
