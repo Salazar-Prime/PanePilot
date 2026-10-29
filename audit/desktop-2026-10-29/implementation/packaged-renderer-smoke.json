@@ -1,0 +1,53 @@
+{
+  "capturedAt": "2026-10-29T17:15:41.856Z",
+  "rendererIndex": "PanePilot.app/Contents/Resources/app.asar/out/renderer/index.html",
+  "electron": "39.8.10",
+  "method": "Loads actual built renderer assets in sandboxed Electron with a disposable profile and explicit synthetic projectConsole preload. No application main process, actual user data, provider archives, SSH, or network. Checks UI mounting, xterm synthetic ANSI output, Files language workers and PDF.js parsing/rendering; no timing benchmark.",
+  "passed": true,
+  "workers": [
+    {
+      "url": "PanePilot.app/Contents/Resources/app.asar/out/renderer/assets/ts.worker-D1n1aso5.js",
+      "messages": 9,
+      "errors": []
+    },
+    {
+      "url": "PanePilot.app/Contents/Resources/app.asar/out/renderer/assets/editor.worker-BaQuYFPg.js",
+      "messages": 31,
+      "errors": []
+    },
+    {
+      "url": "PanePilot.app/Contents/Resources/app.asar/out/renderer/assets/json.worker-B_6GSjhi.js",
+      "messages": 9,
+      "errors": []
+    },
+    {
+      "url": "PanePilot.app/Contents/Resources/app.asar/out/renderer/assets/css.worker-Ddkp-8Lu.js",
+      "messages": 8,
+      "errors": []
+    },
+    {
+      "url": "PanePilot.app/Contents/Resources/app.asar/out/renderer/assets/html.worker-Bh__g14Z.js",
+      "messages": 5,
+      "errors": []
+    },
+    {
+      "url": "PanePilot.app/Contents/Resources/app.asar/out/renderer/assets/pdf.worker.min-GB3t0DcA.mjs",
+      "messages": 12,
+      "errors": []
+    }
+  ],
+  "pdfCanvas": {
+    "width": 300,
+    "height": 300,
+    "black": 10000,
+    "white": 80000
+  },
+  "logs": [],
+  "failedRequests": [],
+  "blockedRequests": [],
+  "errors": [],
+  "limits": [
+    "Synthetic IPC fixtures do not validate production IPC/main-process behavior.",
+    "Uses installed Electron runtime with packaged renderer assets, not production application launch."
+  ]
+}

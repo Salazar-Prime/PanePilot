@@ -1,0 +1,114 @@
+PanePilot dependency packaging validation — 29 October 2026
+
+RESULT
+
+Same-source whole-app regular-file bytes:
+  Before: 467,658,501 bytes (445.994 MiB)
+  After:  310,263,314 bytes (295.890 MiB)
+  Saved:  157,395,187 bytes (150.104 MiB; 33.656%)
+
+These are uncompressed logical file sizes, not installer/download sizes.
+Both validation builds are unsigned directory artifacts. They were not installed,
+published, notarized, or used to replace the existing release artifact.
+
+Filesystem allocation was 458.172 MiB before and 297.535 MiB after, but this is
+not a clean causal comparison: the identical Electron Framework executable had
+10,948,608 extra allocated bytes in the before artifact. All 338 framework files
+have identical SHA-256 hashes and identical logical sizes between builds.
+Prefer the logical-file-byte result above when describing the optimization.
+
+PROVENANCE
+
+Both variants use exactly the same final production out/ bundle: all 101 files
+were compared byte-for-byte. This bundle corresponds to production source commit
+dfc14ec. It includes the other desktop efficiency fixes in that commit.
+
+The before variant restores package.json, package-lock.json, and
+electron-builder.yml from the pre-implementation audit revision 538f5dc. The
+after variant uses dfc14ec. Both use Electron 39.8.10, electron-builder 26.15.3,
+arm64, npmRebuild=false, mac.identity=null, and publish=never. Both use the same
+real installed node_modules tree and cached native modules/framework.
+
+Only the before variant's dependency classification and renderer-license resource
+configuration differ. No build hook or dependency install ran during the offline
+package-lock update. All 629 resolved dependency versions, integrity hashes, and
+dependency graphs were unchanged; 54 entries changed development classification.
+
+An initial experiment using a symlinked node_modules root in temporary staging
+directories produced dependency-collector warnings. Those artifacts were rejected
+and are not represented in any saved comparison. The validated pair was built
+against the actual checkout dependency tree. Original package files were saved
+and restored in a finally block; restoration and dependency graph equality were
+checked after packaging.
+
+The validated builds report duplicate dependency references, which the builder
+deduplicates, and an existing recommendation about @electron/rebuild. They do not
+report missing dependency paths. The preserved release/mac-arm64/PanePilot.app
+ASAR still has its original SHA-256:
+bd9cfbec7a9733ca93c5bbdba6eee6ffcd2a321965e466d025acc9168532dbf8
+
+CONTENTS AND SMOKE CHECKS
+
+- All 65 installed production dependency-closure entries resolve in the after
+  archive at the same versions (61 unique packaged packages after deduplication).
+  No unexpected package roots remain. Resolution follows each parent's dependency path;
+  it accounts for electron-builder rehoisting node-addon-api versions 7 and 8.
+- The packaged runtime roots remain @xterm/headless, node-pty, and
+  electron-sparkle-updater. Their required transitive modules remain packaged.
+- Renderer-only package code, including optional native canvas, is absent from
+  node_modules in the after archive. The compiled renderer assets are unchanged.
+- All 25 renderer license/notice files under Resources/renderer-licenses match
+  the installed originals byte-for-byte. These include bundled transitive
+  licenses and Monaco's third-party notices.
+- Headless xterm accepts and returns fixture text from the packaged dependency.
+- Packaged node-pty runs one exact /usr/bin/printf fixture in a temporary folder.
+  No shell, tmux session, project backend, or provider process is launched.
+- The packaged native Sparkle bridge loads and exposes the expected API. It is
+  not initialized and makes no update request. This is not an update-install test.
+- A sandboxed hidden Electron window loads actual app.asar renderer assets with
+  a throwaway profile and synthetic IPC. The application main process is never
+  loaded. The real UI renders synthetic xterm output and opens Monaco in Files
+  and LaTeX. Editor, TypeScript, JSON, CSS, HTML, and PDF workers exchange real
+  messages from archived assets. PDF.js parses and renders a synthetic one-page
+  PDF with the expected black rectangle and white page.
+- No renderer/worker errors, failed asset loads, console warnings, or network
+  attempts occurred in the archived renderer smoke.
+
+REPRODUCTION
+
+Use Node >=20.19.0 (validation used Node 22.13.0). The existing benchmark helper
+inspects an explicit app path without modifying or launching the app:
+
+  node scripts/benchmark-desktop-package.mjs /path/to/before/PanePilot.app --output /tmp/package-before.json
+  node scripts/benchmark-desktop-package.mjs /path/to/after/PanePilot.app --output /tmp/package-after.json
+
+Run the native dependency smoke in the packaged executable's Node mode:
+
+  ELECTRON_RUN_AS_NODE=1 /path/to/after/PanePilot.app/Contents/MacOS/PanePilot scripts/test-packaged-runtime.cjs /path/to/after/PanePilot.app
+
+Run the renderer smoke with the required explicit archived index path:
+
+  node scripts/test-packaged-renderer.mjs /path/to/after/PanePilot.app/Contents/Resources/app.asar/out/renderer/index.html /tmp/packaged-renderer-smoke.json
+
+For a fresh same-source pair, use a disposable checkout of dfc14ec, install its
+locked dependencies, and run npm run build once. Save its package and lock files;
+for the before build use the three packaging files from 538f5dc, without rerunning
+the renderer build or installing different dependency versions. For each build,
+load its electron-builder YAML into a temporary config, override only output to
+a distinct temporary directory and mac.identity to null, then run:
+
+  node node_modules/electron-builder/cli.js --mac --dir --arm64 --publish never --config /path/to/temporary-config.yml
+
+Restore the after package and lock in a finally block before the second build.
+Use a real dependency directory; a symlinked node_modules root is not equivalent
+for electron-builder's collector. Keep the normal release/ directory untouched.
+Compare logical regular-file sizes, ASAR contents, runtime dependency resolution,
+worker loading, and licenses. Allocated bytes alone can vary for identical files.
+
+EVIDENCE
+
+package-before.json and package-after.json: full artifact identity and byte groups.
+package-comparison.json: paired result, runtime closure, license inventory, caveats.
+package-logical-inventory.json: logical sizes and complete framework hash manifest.
+packaged-runtime-smoke.json: native dependency results.
+packaged-renderer-smoke.json: worker replies, PDF pixels, errors/network assertions.

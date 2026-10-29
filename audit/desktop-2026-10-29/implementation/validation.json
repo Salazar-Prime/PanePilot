@@ -1,0 +1,51 @@
+{
+  "implementationSourceRevision": "dfc14ec93a8a8f45df84bec6ec247a6ef24510b9",
+  "benchmarkHarnessRevision": "9240cf4",
+  "fullSuite": {
+    "passedFiles": 103,
+    "skippedFiles": 1,
+    "passedTests": 572,
+    "skippedTests": 2,
+    "durationSeconds": 31.29,
+    "command": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron node_modules/vitest/vitest.mjs run --maxWorkers=2",
+    "note": "Full suite ran before final Markdown global admission-gate refinement; final Markdown unit/UI checks and the subsequent full build/typecheck passed after that refinement."
+  },
+  "build": {
+    "command": "npm run build",
+    "node": "22.13.0",
+    "passed": true,
+    "includesTypecheck": true
+  },
+  "focusedChecks": {
+    "markdownUnitTestsPassed": 5,
+    "markdownActualComponentUiPassed": true,
+    "surfaceActualXtermUiPassed": true,
+    "surfaceCounts": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "benchmarkTypecheckPassed": true,
+    "independentProductionReview": "No fix-worthy regressions found"
+  },
+  "packagedSmokeArtifacts": [
+    "packaged-runtime-smoke.json",
+    "packaged-renderer-smoke.json"
+  ],
+  "checkpoint": {
+    "branch": "checkpoint/pre-desktop-audit-20261029T164816Z",
+    "revision": "41aa35dd0774a613dd6aa5c18568e9432843f725",
+    "backupRelativeToRepo": "../panepilot-audit-checkpoint-20261029T164816Z/",
+    "originalUntrackedFilesByteIdentical": true
+  },
+  "runtimeScope": "No running user app restart, real SSH connections, provider archive edits, installation or publication. Isolated Electron fixtures exercise changed renderer/services and packaged native dependencies.",
+  "reportChecks": {
+    "jsonEvidenceParses": true,
+    "all18LocalLinksResolve": true,
+    "desktopPreviewWidth": 1280,
+    "narrowPreviewWidth": 390,
+    "noPageHorizontalOverflow": true,
+    "originalEightAuditArtifactsUnchanged": true
+  }
+}

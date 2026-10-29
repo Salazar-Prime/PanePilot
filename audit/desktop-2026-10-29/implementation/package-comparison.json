@@ -1,0 +1,462 @@
+{
+  "capturedAt": "2026-10-29T17:17:42.626Z",
+  "method": "Two unsigned directory packages built from identical final out/ assets and the same installed dependency tree. Only dependency classification and renderer-license resources differ. Signing disabled with mac.identity=null; no application main process, publishing or installation.",
+  "unchangedBundle": {
+    "fileCount": 101,
+    "verifiedByteIdentical": true
+  },
+  "unchangedDependencyResolution": {
+    "packageCount": 629,
+    "versionsIntegritiesAndDependencyGraphPreserved": true
+  },
+  "before": {
+    "allocatedBytes": 480428032,
+    "asarBytes": 175827981,
+    "unpackedAllocatedBytes": 22880256,
+    "frameworksAllocatedBytes": 281497600,
+    "logicalEntryBytes": 196200130,
+    "asarSha256": "bc4c364d4351881240339fc7066ad508d5344b6e12b3c8ef5c36ca614641e26c",
+    "logicalFileBytes": 467658501
+  },
+  "after": {
+    "allocatedBytes": 311988224,
+    "asarBytes": 37537777,
+    "unpackedAllocatedBytes": 3481600,
+    "frameworksAllocatedBytes": 270548992,
+    "logicalEntryBytes": 40330498,
+    "asarSha256": "99584ba4e23632441dd33d4128e019176814ca400d3e039b5f20a103c93b79d5",
+    "logicalFileBytes": 310263314
+  },
+  "savedAllocatedBytes": 168439808,
+  "savedAllocatedPercent": 35.06036217303823,
+  "requiredRuntimeRoots": [
+    "@xterm/headless",
+    "electron-sparkle-updater",
+    "node-pty"
+  ],
+  "verifiedRuntimeDependencyClosure": [
+    {
+      "path": "node_modules/@gar/promise-retry",
+      "name": "@gar/promise-retry",
+      "version": "1.0.3"
+    },
+    {
+      "path": "node_modules/@isaacs/fs-minipass",
+      "name": "@isaacs/fs-minipass",
+      "version": "4.0.1"
+    },
+    {
+      "path": "node_modules/@npmcli/agent",
+      "name": "@npmcli/agent",
+      "version": "4.0.2"
+    },
+    {
+      "path": "node_modules/@npmcli/fs",
+      "name": "@npmcli/fs",
+      "version": "5.0.0"
+    },
+    {
+      "path": "node_modules/@npmcli/redact",
+      "name": "@npmcli/redact",
+      "version": "4.0.0"
+    },
+    {
+      "path": "node_modules/@xterm/headless",
+      "name": "@xterm/headless",
+      "version": "5.5.0"
+    },
+    {
+      "path": "node_modules/abbrev",
+      "name": "abbrev",
+      "version": "4.0.0"
+    },
+    {
+      "path": "node_modules/agent-base",
+      "name": "agent-base",
+      "version": "7.1.4"
+    },
+    {
+      "path": "node_modules/balanced-match",
+      "name": "balanced-match",
+      "version": "4.0.4"
+    },
+    {
+      "path": "node_modules/brace-expansion",
+      "name": "brace-expansion",
+      "version": "5.0.12"
+    },
+    {
+      "path": "node_modules/cacache",
+      "name": "cacache",
+      "version": "20.0.4"
+    },
+    {
+      "path": "node_modules/chownr",
+      "name": "chownr",
+      "version": "3.0.0"
+    },
+    {
+      "path": "node_modules/content-type",
+      "name": "content-type",
+      "version": "2.1.0"
+    },
+    {
+      "path": "node_modules/debug",
+      "name": "debug",
+      "version": "4.4.3"
+    },
+    {
+      "path": "node_modules/electron-sparkle-updater",
+      "name": "electron-sparkle-updater",
+      "version": "0.5.3"
+    },
+    {
+      "path": "node_modules/env-paths",
+      "name": "env-paths",
+      "version": "2.2.1"
+    },
+    {
+      "path": "node_modules/exponential-backoff",
+      "name": "exponential-backoff",
+      "version": "3.1.3"
+    },
+    {
+      "path": "node_modules/fdir",
+      "name": "fdir",
+      "version": "6.5.0"
+    },
+    {
+      "path": "node_modules/fs-minipass",
+      "name": "fs-minipass",
+      "version": "3.0.3"
+    },
+    {
+      "path": "node_modules/glob",
+      "name": "glob",
+      "version": "13.0.6"
+    },
+    {
+      "path": "node_modules/graceful-fs",
+      "name": "graceful-fs",
+      "version": "4.2.11"
+    },
+    {
+      "path": "node_modules/http-cache-semantics",
+      "name": "http-cache-semantics",
+      "version": "4.2.0"
+    },
+    {
+      "path": "node_modules/http-proxy-agent",
+      "name": "http-proxy-agent",
+      "version": "7.0.2"
+    },
+    {
+      "path": "node_modules/https-proxy-agent",
+      "name": "https-proxy-agent",
+      "version": "7.0.6"
+    },
+    {
+      "path": "node_modules/iconv-lite",
+      "name": "iconv-lite",
+      "version": "0.7.3"
+    },
+    {
+      "path": "node_modules/ip-address",
+      "name": "ip-address",
+      "version": "10.2.0"
+    },
+    {
+      "path": "node_modules/isexe",
+      "name": "isexe",
+      "version": "4.0.0"
+    },
+    {
+      "path": "node_modules/lru-cache",
+      "name": "lru-cache",
+      "version": "11.5.3"
+    },
+    {
+      "path": "node_modules/make-fetch-happen",
+      "name": "make-fetch-happen",
+      "version": "15.0.6"
+    },
+    {
+      "path": "node_modules/minimatch",
+      "name": "minimatch",
+      "version": "10.2.6"
+    },
+    {
+      "path": "node_modules/minipass",
+      "name": "minipass",
+      "version": "7.1.3"
+    },
+    {
+      "path": "node_modules/minipass-collect",
+      "name": "minipass-collect",
+      "version": "2.0.1"
+    },
+    {
+      "path": "node_modules/minipass-fetch",
+      "name": "minipass-fetch",
+      "version": "5.0.2"
+    },
+    {
+      "path": "node_modules/minipass-flush",
+      "name": "minipass-flush",
+      "version": "1.0.7"
+    },
+    {
+      "path": "node_modules/minipass-flush/node_modules/minipass",
+      "name": "minipass",
+      "version": "3.3.6"
+    },
+    {
+      "path": "node_modules/minipass-pipeline",
+      "name": "minipass-pipeline",
+      "version": "1.2.4"
+    },
+    {
+      "path": "node_modules/minipass-pipeline/node_modules/minipass",
+      "name": "minipass",
+      "version": "3.3.6"
+    },
+    {
+      "path": "node_modules/minipass-sized",
+      "name": "minipass-sized",
+      "version": "2.0.0"
+    },
+    {
+      "path": "node_modules/minizlib",
+      "name": "minizlib",
+      "version": "3.1.0"
+    },
+    {
+      "path": "node_modules/ms",
+      "name": "ms",
+      "version": "2.1.3"
+    },
+    {
+      "path": "node_modules/negotiator",
+      "name": "negotiator",
+      "version": "1.1.0"
+    },
+    {
+      "path": "node_modules/node-addon-api",
+      "name": "node-addon-api",
+      "version": "8.9.2"
+    },
+    {
+      "path": "node_modules/node-gyp",
+      "name": "node-gyp",
+      "version": "12.2.0"
+    },
+    {
+      "path": "node_modules/node-pty",
+      "name": "node-pty",
+      "version": "1.1.0"
+    },
+    {
+      "path": "node_modules/node-pty/node_modules/node-addon-api",
+      "name": "node-addon-api",
+      "version": "7.1.1"
+    },
+    {
+      "path": "node_modules/nopt",
+      "name": "nopt",
+      "version": "9.0.0"
+    },
+    {
+      "path": "node_modules/p-map",
+      "name": "p-map",
+      "version": "7.1.1"
+    },
+    {
+      "path": "node_modules/path-scurry",
+      "name": "path-scurry",
+      "version": "2.0.2"
+    },
+    {
+      "path": "node_modules/picomatch",
+      "name": "picomatch",
+      "version": "4.0.5"
+    },
+    {
+      "path": "node_modules/proc-log",
+      "name": "proc-log",
+      "version": "6.1.0"
+    },
+    {
+      "path": "node_modules/safer-buffer",
+      "name": "safer-buffer",
+      "version": "2.1.2"
+    },
+    {
+      "path": "node_modules/semver",
+      "name": "semver",
+      "version": "7.8.5"
+    },
+    {
+      "path": "node_modules/smart-buffer",
+      "name": "smart-buffer",
+      "version": "4.2.0"
+    },
+    {
+      "path": "node_modules/socks",
+      "name": "socks",
+      "version": "2.8.9"
+    },
+    {
+      "path": "node_modules/socks-proxy-agent",
+      "name": "socks-proxy-agent",
+      "version": "8.0.5"
+    },
+    {
+      "path": "node_modules/ssri",
+      "name": "ssri",
+      "version": "13.0.1"
+    },
+    {
+      "path": "node_modules/tar",
+      "name": "tar",
+      "version": "7.5.22"
+    },
+    {
+      "path": "node_modules/tar/node_modules/yallist",
+      "name": "yallist",
+      "version": "5.0.0"
+    },
+    {
+      "path": "node_modules/tinyglobby",
+      "name": "tinyglobby",
+      "version": "0.2.17"
+    },
+    {
+      "path": "node_modules/which",
+      "name": "which",
+      "version": "6.0.1"
+    },
+    {
+      "path": "node_modules/yallist",
+      "name": "yallist",
+      "version": "4.0.0"
+    }
+  ],
+  "removedPackageRoots": [
+    "node_modules/@monaco-editor/loader",
+    "node_modules/@monaco-editor/react",
+    "node_modules/@types/trusted-types",
+    "node_modules/@xterm/addon-fit",
+    "node_modules/@xterm/xterm",
+    "node_modules/base64-js",
+    "node_modules/bl",
+    "node_modules/buffer",
+    "node_modules/canvas",
+    "node_modules/decompress-response",
+    "node_modules/deep-extend",
+    "node_modules/detect-libc",
+    "node_modules/dompurify",
+    "node_modules/electron-sparkle-updater/node_modules/node-addon-api",
+    "node_modules/end-of-stream",
+    "node_modules/expand-template",
+    "node_modules/framer-motion",
+    "node_modules/fs-constants",
+    "node_modules/github-from-package",
+    "node_modules/github-slugger",
+    "node_modules/highlight.js",
+    "node_modules/ieee754",
+    "node_modules/inherits",
+    "node_modules/ini",
+    "node_modules/js-tokens",
+    "node_modules/loose-envify",
+    "node_modules/lucide-react",
+    "node_modules/marked",
+    "node_modules/mimic-response",
+    "node_modules/minimist",
+    "node_modules/mkdirp-classic",
+    "node_modules/monaco-editor",
+    "node_modules/motion",
+    "node_modules/motion-dom",
+    "node_modules/motion-utils",
+    "node_modules/napi-build-utils",
+    "node_modules/node-abi",
+    "node_modules/once",
+    "node_modules/path2d",
+    "node_modules/pdfjs-dist",
+    "node_modules/prebuild-install",
+    "node_modules/pump",
+    "node_modules/rc",
+    "node_modules/react",
+    "node_modules/react-dom",
+    "node_modules/readable-stream",
+    "node_modules/safe-buffer",
+    "node_modules/scheduler",
+    "node_modules/simple-concat",
+    "node_modules/simple-get",
+    "node_modules/state-local",
+    "node_modules/string_decoder",
+    "node_modules/strip-json-comments",
+    "node_modules/tar-fs",
+    "node_modules/tar-fs/node_modules/chownr",
+    "node_modules/tar-stream",
+    "node_modules/tslib",
+    "node_modules/tunnel-agent",
+    "node_modules/util-deprecate",
+    "node_modules/wrappy"
+  ],
+  "rendererLicenseFiles": [
+    "@monaco-editor/loader/LICENSE",
+    "@monaco-editor/react/LICENSE",
+    "@xterm/addon-fit/LICENSE",
+    "@xterm/xterm/LICENSE",
+    "dompurify/LICENSE",
+    "dompurify/LICENSE-MPL",
+    "framer-motion/LICENSE.md",
+    "github-slugger/LICENSE",
+    "highlight.js/LICENSE",
+    "js-tokens/LICENSE",
+    "loose-envify/LICENSE",
+    "lucide-react/LICENSE",
+    "marked/LICENSE.md",
+    "monaco-editor/LICENSE",
+    "monaco-editor/ThirdPartyNotices.txt",
+    "motion-dom/LICENSE.md",
+    "motion-utils/LICENSE.md",
+    "motion/LICENSE.md",
+    "pdfjs-dist/LICENSE",
+    "react-dom/LICENSE",
+    "react/LICENSE",
+    "scheduler/LICENSE",
+    "state-local/LICENSE",
+    "tslib/CopyrightNotice.txt",
+    "tslib/LICENSE.txt"
+  ],
+  "preservedOriginalReleaseAsarSha256": "bd9cfbec7a9733ca93c5bbdba6eee6ffcd2a321965e466d025acc9168532dbf8",
+  "buildWarnings": [
+    "electron-builder recommends removing the existing redundant @electron/rebuild dev dependency; unchanged.",
+    "Duplicate dependency references were reported and deduplicated; no missing dependency-path warnings in the validated pair."
+  ],
+  "limits": [
+    "Do not attribute all allocated-byte savings to dependency changes: identical Electron framework content has 10,948,608 bytes of differing filesystem allocation. Prefer the logical-file-byte comparison.",
+    "Filesystem allocation and logical ASAR bytes are not compressed download sizes.",
+    "Unsigned packages are validation artifacts and were not installed, published, signed, or notarized.",
+    "Native smoke loads the updater bridge without initializing it or making an update request.",
+    "Renderer smoke uses actual archived assets with synthetic IPC in an isolated Electron profile."
+  ],
+  "sourceRevision": "dfc14ec",
+  "sourceProvenance": "Both packaged out/ trees are byte-identical and come from the successful production build committed as dfc14ec. The before variant uses the pre-change dependency classification and packaging config; after uses dfc14ec. Both have mac.identity=null and publish=never for this isolated validation.",
+  "savedLogicalFileBytes": 157395187,
+  "savedLogicalFilePercent": 33.65600896026479,
+  "unchangedFrameworkContent": {
+    "fileCount": 338,
+    "logicalFileBytes": 269353034,
+    "allHashesMatch": true
+  },
+  "allocationCaveat": "Both framework logical manifests and SHA-256 contents match. The before Electron Framework executable occupies 10,948,608 more allocated bytes despite equal size/content. Allocation varies independently of dependency pruning; logical whole-app byte savings are the causal package-size comparison.",
+  "runtimeResolutionChecks": 65,
+  "runtimePackageClosure": {
+    "uniquePackagedPackages": 61,
+    "dependencyResolutionChecks": 65,
+    "missingPackages": [],
+    "unexpectedPackageRoots": []
+  }
+}

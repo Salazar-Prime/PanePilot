@@ -1,0 +1,106 @@
+PanePilot desktop optimization pass — 29 October 2026
+
+Read report.html for the measured result and all 21 finding statuses.
+Original source: 41aa35dd0774a613dd6aa5c18568e9432843f725
+Production implementation: dfc14ec93a8a8f45df84bec6ec247a6ef24510b9
+Benchmark-only settle correction: 9240cf4
+Branch: perf/desktop-efficiency-2026-10-29
+
+BUILD AND CHECK (from repository root)
+
+Use a Node version supported by package.json (this pass used Node 22.13.0).
+Dependencies were already installed; no versions were upgraded.
+
+  npm run typecheck
+  npm run build
+  ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron node_modules/vitest/vitest.mjs run --maxWorkers=2
+  node scripts/test-markdown-preview-ui.mjs
+  node scripts/test-terminal-surface-cache-ui.mjs
+  git diff --check
+
+Build includes typecheck. Full-suite result: 103 files/572 tests passed,
+1 file/2 tests skipped. The full suite preceded the final shared Markdown
+admission-gate refinement; its focused unit/UI checks and the subsequent full
+build passed after that refinement. The new UI fixtures use actual components
+and xterm with synthetic IPC and isolated Electron profiles.
+
+Native SQLite tests use Electron's embedded Node so the native/runtime version
+matches the desktop app. Existing integration tests may create and remove their
+own exact temporary tmux fixtures. Do not run this against a live app profile.
+The implementation did not restart the owner's running app or install a build.
+
+BENCHMARKS
+
+Use a fresh output directory so the committed evidence is not overwritten:
+
+  node scripts/benchmark-desktop.mjs /tmp/panepilot-core-comparison.json
+  node scripts/benchmark-desktop-renderer.mjs --output /tmp/panepilot-renderer-comparison.json
+
+Run serially, with builds/tests complete. The core benchmark records its source
+revision and environment. Renderer evidence here uses production source dfc14ec
+and harness 9240cf4. Keep workload, runtime/hardware and host load comparable.
+Every replay sample verifies the exact retained suffix. Heap/RSS changes are
+end-of-sample observations, not peak memory or leak measurements.
+
+Core uses temporary SQLite databases, synthetic provider archives, actual
+services and a fake SSH executable that sleeps 200 ms. No real SSH/provider
+archives are accessed. The same-request SSH comparison now calls the retained
+legacy folder-browser helper and the new production async helper in alternating
+order, five times each. The original audit's async-file-browser sample is not
+used as the after measurement.
+
+Renderer runs actual React/layout with mock PDF.js and preview IPC. Mock PDF
+counts and retention are evidence; mock timings do not measure real decoding.
+Markdown fixture now waits for every image's final resource status, since React
+can commit elements before effects run. A superseded early-settlement trial was
+replaced by the corrected run. 500 refs settle to 16 reads, three peak concurrent,
+and 484 limit explanations. The unchanged PDF workload still records the known
+snapshot retention/page-acquisition issues.
+
+No watts, battery life, real SSH bandwidth, kernel wakeups or full-app speedup
+was measured. CPU/IO are operation-level resource proxies only.
+
+PACKAGED VALIDATION
+
+See PACKAGING.txt for the paired-build method and exact unsigned build/smoke
+commands. The pair uses identical compiled application content with old/new
+dependency classification. Both are temporary, unsigned directory packages.
+Production signing/update configuration, installed app and release artifacts
+were not changed. No release was published.
+
+Prefer logical whole-app file size: 467,658,501 -> 310,263,314 bytes.
+Savings: 157,395,187 bytes (150.104 MiB, 33.656%). Identical Electron framework
+content has differing physical allocation, so the larger du reduction is not
+attributed entirely to dependency pruning. No compressed download size claim.
+
+CHECKPOINT AND RECOVERY
+
+Original local branch: checkpoint/pre-desktop-audit-20261029T164816Z
+Original release branch: release/v0.17.1
+Audit branch: audit/desktop-efficiency-2026-10-29
+Implementation branch: perf/desktop-efficiency-2026-10-29
+Backup, relative to repository root:
+  ../panepilot-audit-checkpoint-20261029T164816Z/
+
+The verified bundle/tar/checksums preserve the original tracked source and four
+nonignored untracked files. Those four files remain byte-identical to the
+checkpoint. Ignored build/dependency files and live application databases are
+not part of the backup. This pass did not migrate live user data.
+
+For the original source in a separate working directory (destination must not
+exist), from the current repository root:
+
+  git worktree add ../panepilot-original-review checkpoint/pre-desktop-audit-20261029T164816Z
+
+That worktree contains tracked source only. For complete recovery including the
+four original untracked files, use the clone-and-tar instructions in the parent
+REPRODUCE.txt. Preserve later work before switching the current checkout. Do not
+use reset --hard or git clean for checkpoint recovery.
+
+REMAINING WORK
+
+This is an implemented optimization pass, not closure of every audit finding.
+Priority follow-ups: model/draft/PDF ownership, shared asynchronous archive
+catalog, asynchronous tmux lifecycle and connection-level scheduling, output
+backpressure, cross-client metadata coordination, and verified storage/history
+migrations. comparison.json records precise implemented/partial/deferred scope.

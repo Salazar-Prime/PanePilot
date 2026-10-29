@@ -1,0 +1,195 @@
+{
+  "generatedAt": "2026-10-29T17:21:46.392878+00:00",
+  "baselineSourceRevision": "41aa35dd0774a613dd6aa5c18568e9432843f725",
+  "implementationSourceRevision": "dfc14ec93a8a8f45df84bec6ec247a6ef24510b9",
+  "rendererBenchmarkRevision": "9240cf4",
+  "method": "Same hardware/runtime; serial synthetic benchmarks after builds/tests. Replay workload unchanged; SSH comparison now uses identical folder-browser requests. Renderer benchmark waits for the image resource effect to settle. Original baseline artifacts are unchanged.",
+  "replay": {
+    "appendCount": 2000,
+    "appendBytes": 512,
+    "retentionBytes": 524288,
+    "samplesPerVersion": 3,
+    "beforeMedianMs": 801.3704589999998,
+    "afterMedianMs": 2.444499999999607,
+    "beforeMedianCpuMs": 855.542,
+    "afterMedianCpuMs": 3.193,
+    "exactTailVerified": true
+  },
+  "sshTimerDelay": {
+    "legacy-sync-folder-browser": 210.557,
+    "async-folder-browser": 1.393
+  },
+  "markdown500": {
+    "beforePeakReads": 500,
+    "after": {
+      "kind": "markdown",
+      "pages": 0,
+      "getPageCalls": 0,
+      "renderCalls": 0,
+      "documentsCreated": 0,
+      "documentsDestroyed": 0,
+      "imageRequests": 16,
+      "imageInFlight": 0,
+      "imagePeak": 3,
+      "imageCompleted": 16,
+      "uniquePageCount": 0,
+      "pageShells": 0,
+      "elapsedMs": 178.60000014305115,
+      "documentHidden": false,
+      "inputImages": 500,
+      "imageLimited": 484
+    }
+  },
+  "comments": {
+    "before": {
+      "name": "latex-comment-concurrent-create",
+      "method": "Two concurrent calls to actual ProjectMetadataService.createLatexComment, using a temporary local project folder and stubbed project lookup.",
+      "successfulCreateCalls": 2,
+      "persistedComments": 1,
+      "lostSuccessfulCreates": 1,
+      "invariantSatisfied": false,
+      "limitations": [
+        "Service-level concurrency probe; not proof that one particular UI gesture triggers concurrent calls.",
+        "Tests one process and local files. Cross-client and SSH races need their own integration tests."
+      ]
+    },
+    "after": {
+      "name": "latex-comment-concurrent-create",
+      "method": "Two concurrent calls to actual ProjectMetadataService.createLatexComment, using a temporary local project folder and stubbed project lookup.",
+      "successfulCreateCalls": 2,
+      "persistedComments": 2,
+      "lostSuccessfulCreates": 0,
+      "invariantSatisfied": true,
+      "limitations": [
+        "Service-level concurrency probe; not proof that one particular UI gesture triggers concurrent calls.",
+        "Tests one process and local files. Cross-client and SSH races need their own integration tests."
+      ]
+    }
+  },
+  "package": {
+    "beforeLogicalFileBytes": 467658501,
+    "afterLogicalFileBytes": 310263314,
+    "savedLogicalFileBytes": 157395187,
+    "savedPercent": 33.65600896026479,
+    "allocationCaveat": "Both framework logical manifests and SHA-256 contents match. The before Electron Framework executable occupies 10,948,608 more allocated bytes despite equal size/content. Allocation varies independently of dependency pruning; logical whole-app byte savings are the causal package-size comparison."
+  },
+  "unchangedPdfControl": {
+    "allPagesRequested": 500,
+    "getPageCalls": 503,
+    "retainedBackingBytes": 22369632
+  },
+  "findingStatus": [
+    {
+      "id": "F01",
+      "status": "Implemented core fix",
+      "details": "Running Actions read status only. Final history is bounded to 1 MiB on the project host; capture failure cannot hide a known exit. Poll cadence and connection-wide Action batching remain unchanged."
+    },
+    {
+      "id": "F02",
+      "status": "Implemented",
+      "details": "Extracted byte-counted segmented replay; exact UTF-8 suffix and control bytes preserved within the existing 512 KiB bound."
+    },
+    {
+      "id": "F03",
+      "status": "Partial",
+      "details": "Folder browsing, canonical directory verification, SSH project creation/LaTeX validation and connection tests are asynchronous. Notes/Actions metadata and several tmux lifecycle paths remain synchronous."
+    },
+    {
+      "id": "F04",
+      "status": "Deferred",
+      "details": "Worker-owned archive catalog, incremental parsing, and bounded transcript cache remain next-stage work."
+    },
+    {
+      "id": "F05",
+      "status": "Partial",
+      "details": "Canonical-location queue protects comment migration/create/delete across service instances in one process. Separate clients/processes and alternate SSH aliases still need host-side conflict handling."
+    },
+    {
+      "id": "F06",
+      "status": "Implemented admission bounds",
+      "details": "Shared three-read gate across previews/generations; 16 unique project-image paths and 16 MiB accepted data-URL text per document. Duplicate DOM copies also count. Queued reads cancel; already issued IPC retains its slot until settlement. Viewport admission and external HTTPS image budgeting remain outside this change."
+    },
+    {
+      "id": "F07",
+      "status": "Deferred",
+      "details": "Immutable PDF snapshot ownership and bounded hot storage require preserving exact displayed/printed snapshots."
+    },
+    {
+      "id": "F08",
+      "status": "Deferred",
+      "details": "Monaco model ownership and dirty-draft protection need a shared registry with split-pane ownership before cache eviction changes."
+    },
+    {
+      "id": "F09",
+      "status": "Implemented",
+      "details": "Moved 13 renderer-only libraries to build dependencies without version changes. Preserved runtime dependencies, native helpers and renderer license/notice files."
+    },
+    {
+      "id": "F10",
+      "status": "Implemented",
+      "details": "Inactive terminal workspaces no longer append an uncached fallback tab. Actual xterm surface count stays within the physical pane four-entry LRU."
+    },
+    {
+      "id": "F11",
+      "status": "Deferred",
+      "details": "Visibility-aware Git/document scheduling and explicit background auto-compile policy remain separate work."
+    },
+    {
+      "id": "F12",
+      "status": "Partial",
+      "details": "Concurrent reconnect/discovery reads share one in-flight scan per connection. Per-session backoff remains; staggered requests can still create separate scans."
+    },
+    {
+      "id": "F13",
+      "status": "Deferred",
+      "details": "Demand-driven headless parsing and parser/IPC backpressure need dedicated high-output stress tests."
+    },
+    {
+      "id": "F14",
+      "status": "Deferred",
+      "details": "Archive catalog reuse, remote history pagination and cache ownership remain separate work."
+    },
+    {
+      "id": "F15",
+      "status": "Deferred",
+      "details": "PDF page acquisition remains eager; all 500 pages are still requested in the control workload."
+    },
+    {
+      "id": "F16",
+      "status": "Deferred",
+      "details": "Clean document asset budgets and revision-cached annotation anchoring remain separate work."
+    },
+    {
+      "id": "F17",
+      "status": "Implemented",
+      "details": "Hidden LaTeX chats explicitly suppress terminal input/resize and composer sends while preserving chat, draft and backend."
+    },
+    {
+      "id": "F18",
+      "status": "Deferred",
+      "details": "Legacy duplicate-output migration requires exact-byte migration/reopen tests; no database migration was added here."
+    },
+    {
+      "id": "F19",
+      "status": "Deferred",
+      "details": "Ordered startup migrations and newer-schema refusal remain separate work."
+    },
+    {
+      "id": "F20",
+      "status": "Partial",
+      "details": "All five Drive existence/context lookups use runtime project snapshots without replay hydration. Activity/editorial history pagination and Git count caching remain unchanged."
+    },
+    {
+      "id": "F21",
+      "status": "Deferred",
+      "details": "Durable-output batching is unchanged; WAL benchmark remains a control, not a claimed improvement."
+    }
+  ],
+  "limitations": [
+    "No calibrated watts, battery life, wakeup, real network throughput or full-application speedup measured.",
+    "Replay timing covers retention only, excluding PTY, parsers, IPC and renderer. Other host applications were not stopped.",
+    "Markdown byte budget describes accepted data-URL text; concurrent response payloads and browser decoding can require extra transient memory. HTTPS images retain existing browser loading.",
+    "Synthetic IPC tests do not establish behavior of every real server or provider.",
+    "Packages are unsigned isolated validation artifacts. No installed app or release was updated."
+  ]
+}

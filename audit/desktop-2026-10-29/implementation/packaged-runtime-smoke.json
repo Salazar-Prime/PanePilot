@@ -1,0 +1,1 @@
+{"headlessTerminal":true,"exactFixturePty":true,"sparkleBridgeLoadedWithoutInitialization":true,"runtimeRoots":["@xterm/headless","node-pty","electron-sparkle-updater"],"electron":"39.8.10"}
