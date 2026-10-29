@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.17.2 — Unreleased
+
+This candidate reduces desktop resource use and keeps larger workspaces responsive.
+
+- Terminal replay and output delivery use bounded buffers and parser feedback;
+  remote browsing, terminal lifecycle checks, and shared Notes/Actions I/O yield
+  the interface instead of waiting synchronously.
+- Conversation archive parsing runs in a worker with bounded transcript retention.
+  Editor models preserve unsaved drafts across project switches, while inactive
+  clean models and image previews can be released. PDF previews retain their exact
+  displayed snapshot in temporary storage and acquire pages near the viewport.
+- The desktop package includes compiled renderer assets without duplicate library
+  copies, preserving language/PDF workers, native terminal components, and licenses.
+
+Version 0.17.2 is prepared for validation and has not been published. It targets
+Apple silicon Macs on macOS 12 or newer. Publication and signed update-feed changes
+remain separate release actions.
+
 ## 0.17.1 — 2026-10-28
 
 This patch keeps selected project terminal and Files tab titles readable when a tab
