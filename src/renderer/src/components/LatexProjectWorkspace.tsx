@@ -21,8 +21,7 @@ import {
   FileText,
   LoaderCircle,
   MessageSquareText,
-  PanelRightOpen,
-  Play
+  PanelRightOpen
 } from 'lucide-react'
 import type {
   LatexChangeSet,
@@ -53,6 +52,7 @@ import {
   type WorkspaceTabId
 } from '../lib/workspaceHistory'
 import { ActionsPanel } from './ActionsPanel'
+import { LastActionTool } from './LastActionTool'
 import { InFlightReads, startSettledPolling } from '../lib/settledPolling'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
 import { FilesPanel } from './FilesPanel'
@@ -696,10 +696,8 @@ export function LatexProjectWorkspace({
           <FileType2 size={15} /> PDF Preview
           <ShortcutKeytip value="P" open={projectShortcuts.open} />
         </button>
-        <button className={tab === 'actions' ? 'active' : ''} onClick={() => selectWorkspaceTab('actions')}>
-          <Play size={15} /> Actions
-          <ShortcutKeytip value="A" open={projectShortcuts.open} />
-        </button>
+        <LastActionTool project={project} active={tab === 'actions'} onOpen={() => selectWorkspaceTab('actions')}
+          onChanged={onChanged} keytip={<ShortcutKeytip value="A" open={projectShortcuts.open} />} />
         <button className={tab === 'notes' ? 'active' : ''} onClick={() => selectWorkspaceTab('notes')}>
           <FileText size={15} /> Notes
           <ShortcutKeytip value="N" open={projectShortcuts.open} />

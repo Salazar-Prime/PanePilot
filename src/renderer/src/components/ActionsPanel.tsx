@@ -15,6 +15,7 @@ import { SortableActionsList } from './SortableActionsList'
 import type { TerminalFileTarget } from '../lib/terminalFileLinks'
 import { useModalEscape } from '../lib/modalEscape'
 import { loadActionSelection, resolveActionSelection, saveActionSelection } from '../lib/actionSelection'
+import { runProjectAction } from '../lib/actionRuns'
 
 interface Props {
   project: Project
@@ -109,7 +110,7 @@ function ActionsPanelInstance({ project, sessionRequest, onSessionRequestHandled
 
   async function runAction() {
     if (!selected) return
-    await perform(() => window.projectConsole.actions.run(selected.id))
+    await perform(() => runProjectAction(selected.id))
   }
 
   async function stopAction() {

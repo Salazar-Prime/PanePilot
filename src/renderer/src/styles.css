@@ -590,8 +590,11 @@ select:focus-visible {
 
 .session-row.selected {
   color: #dce0e9;
-  background: #171a22;
+  background: #2c2f36;
+  box-shadow: inset 0 0 0 1px #44474f;
 }
+
+.session-row.selected:hover { background: #35383f; }
 
 .session-row > span:nth-child(2) {
   min-width: 0;
@@ -806,6 +809,20 @@ select:focus-visible {
 .status-session-list p { margin: 12px; color: #8991a3; font-size: 11px; }
 @keyframes status-session-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .status-session-menu { animation: none; } }
+
+/* Portal escapes the footer's clipped nav while retaining the shared popup skin. */
+.last-action-popover-anchor { position: fixed; z-index: 160; padding-bottom: 10px; }
+.last-action-popover.status-session-menu { position: static; width: 100%; max-height: inherit; overflow-y: auto; }
+.last-action-popover header small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.last-action-list > button:disabled { cursor: default; opacity: 1; }
+.last-action-list > button:disabled:hover { background: transparent; }
+.last-action-list .status-session-copy small { font-family: "SFMono-Regular", "Cascadia Code", monospace; }
+.last-action-run-label { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; color: #a9b4f2; font-size: 10px; }
+.last-action-status { display: flex; justify-content: space-between; gap: 10px; padding: 3px 13px 10px; color: #8991a3; font-size: 10px; }
+.last-action-status strong { color: #c1c8da; font-weight: 500; }
+.last-action-error { margin: 0; padding: 8px 12px; color: #ff9daa; font-size: 11px; }
+.last-action-open { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border: 0; border-top: 1px solid #30394e; background: transparent; color: #a9b4f2; font-size: 10px; }
+.last-action-open:hover, .last-action-open:focus-visible { background: #252e46; }
 
 .status-brand,
 .status-summary,
