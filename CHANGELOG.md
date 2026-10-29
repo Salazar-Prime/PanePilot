@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.17.2 — Unreleased
+## 0.17.2 — 2026-10-29
 
-This candidate reduces desktop resource use and keeps larger workspaces responsive.
+This release reduces desktop resource use and keeps larger workspaces responsive.
 
 - Terminal replay and output delivery use bounded buffers and parser feedback;
   remote browsing, terminal lifecycle checks, and shared Notes/Actions I/O yield
@@ -14,9 +14,9 @@ This candidate reduces desktop resource use and keeps larger workspaces responsi
 - The desktop package includes compiled renderer assets without duplicate library
   copies, preserving language/PDF workers, native terminal components, and licenses.
 
-Version 0.17.2 is prepared for validation and has not been published. It targets
-Apple silicon Macs on macOS 12 or newer. Publication and signed update-feed changes
-remain separate release actions.
+The v0.17.2 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed and not Apple-notarized. Signed Sparkle updates are available to
+PanePilot v0.16.0 and newer; installation and restart always require user action.
 
 ## 0.17.1 — 2026-10-28
 

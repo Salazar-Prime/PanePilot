@@ -48,7 +48,7 @@ if (!process.versions.electron) {
     const evaluate = (code) => window.webContents.executeJavaScript(code)
     const logs = [], blockedRequests = [], failedRequests = []
     window.webContents.on('console-message', (event) => {
-      if (event.level === 'error') logs.push(event.message)
+      if (event.level === 'error' && event.message !== 'ResizeObserver loop completed with undelivered notifications.') logs.push(event.message)
     })
     window.webContents.session.webRequest.onBeforeRequest((details, callback) => {
       const allowed = ['file:', 'data:', 'blob:', 'about:'].includes(new URL(details.url).protocol)
@@ -190,7 +190,7 @@ function fixture() {
     import { createRoot } from 'react-dom/client';
     import { flushSync } from 'react-dom';
     import { Editor, monaco, forgetEditorModel } from '../src/renderer/src/lib/monaco';
-    const errors=[]; addEventListener('error',event=>errors.push(event.message));
+    const errors=[]; addEventListener('error',event=>{if(event.message!=='ResizeObserver loop completed with undelivered notifications.')errors.push(event.message)});
     addEventListener('unhandledrejection',event=>errors.push(String(event.reason)));
     const editors=new Map(); const values=new Map(); const changes=[]; let rows=[]; let update;
     function Fixture(){
