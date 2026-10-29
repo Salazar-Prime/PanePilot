@@ -23,7 +23,7 @@ The BrowserWindow loads the Vite development URL in development and the built re
 HTML in packaged or preview mode.
 
 On quit, PanePilot shuts down attached terminal runtimes, stops all live port-forward
-processes, and closes SQLite. Killing a local PTY attachment does not kill a tmux server
+processes, disposes the archive worker, removes renderer-owned temporary PDF snapshots, and closes SQLite. Killing a local PTY attachment does not kill a tmux server
 session; this is what permits tmux-backed terminals to survive app closure.
 
 ## BrowserWindow boundary

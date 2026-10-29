@@ -32,6 +32,7 @@ access remains in Electron's main process; the renderer consumes a typed, narrow
 | Boundary | Owns |
 | --- | --- |
 | Main | SQLite, process launch, tmux, SSH, filesystem, Git, native dialogs, clipboard, and external URLs |
+| Archive worker | Local provider-file catalog, parsing, full-text search, exact provider-ID lookup, and a bounded transcript cache |
 | Preload | The allowlisted `window.projectConsole` contract and renderer event subscriptions |
 | Renderer | Navigation, state presentation, xterm and Monaco views, confirmation UI, and user interaction |
 | Shared | TypeScript contracts used by main, preload, and renderer |
@@ -74,8 +75,9 @@ the base persistence model still assume that every project has a connection and 
 ```text
 PTY output
   ├─► bounded replay (SQLite where durable; memory-only for Codex)
-  ├─► renderer IPC event ─► xterm
-  └─► headless xterm ─► screen activity detector ─► state update
+  ├─► ordered queue ─► subscribed renderer xterms ─► parser acknowledgements
+  └─► required headless screen ─► activity detector ─► state update
+       Queue pressure pauses/resumes PTY reads; each pane owns its output credit.
 ```
 
 ### Files
@@ -90,10 +92,23 @@ Renderer request
 ### Conversations
 
 ```text
-Local JSONL ─► mtime-and-size cache ─┐
-                                    ├─► normalized conversations
-Remote JSONL ─► SSH Python scan ─────┘     └─► project match ─► search / transcript
+Local JSONL ─► archive worker catalog + bounded details ─┐
+                                                        ├─► project match
+Remote JSONL ─► shared SSH scan + expiring bounded cache ─┘   └─► search / transcript
 ```
+
+### Editor and PDF ownership
+
+Managed Monaco models count live editors across split panes and retain dirty drafts
+independently of clean-model eviction. Clean inactive models and Files image payloads
+have separate count/byte budgets; these do not bound total renderer or undo memory.
+
+PDF.js accepts a snapshot before it becomes the cached latest version. The main
+process retains a bounded hot Buffer cache and immutable, permission-restricted
+temporary files for cold snapshots. Each renderer document owns its files; split
+panes lease exact versions independently. Normal disposal removes them. Cold disk
+usage grows with accepted project snapshots, and abrupt termination may leave
+restricted temporary files for operating-system cleanup.
 
 ## Extension direction
 

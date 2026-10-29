@@ -156,6 +156,16 @@ then falls back to GitHub's public repository API. If neither can see the reposi
 the label is **Unknown** instead of assuming that a missing repository is private.
 The check is read-only and cached briefly.
 
+## PDF preview storage
+
+Opening PDF Preview copies the displayed PDF into a permission-restricted local
+`panepilot-pdf-snapshots-*` directory under the operating system's temporary folder,
+including PDFs read over SSH. PanePilot restores and prints that exact snapshot
+until you recompile; cold snapshots can leave memory while the preview remains
+recoverable. Normal window reload/close and app shutdown remove the snapshots.
+Abrupt termination can leave temporary files for operating-system cleanup. The
+snapshot cache itself does not upload PDFs or change the project files.
+
 ## Markdown and HTML previews
 
 Markdown files open in a rendered **Preview** in both the Files workspace and project
