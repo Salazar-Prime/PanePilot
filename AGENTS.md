@@ -528,6 +528,17 @@ Do not implement the writing type until these decisions are answered.
 - Improve remote repository discovery.
 - Decide and implement the writing project model.
 
+## Desktop resource bounds
+
+- Codex replay uses a byte-counted segmented buffer. Appending small chunks must not repeatedly encode or copy the whole retained replay. Preserve UTF-8 boundaries, terminal control sequences, and the existing 512 KiB bound; other profiles keep durable output.
+- Action completion polls read lifecycle metadata only while the command runs. Final capture is bounded on the project host, including over SSH, and capture failure must not hide an observed exit status. Keep the already streamed output when final capture is unavailable.
+- Reconnecting terminals and discovery share an in-flight tmux scan per connection. A later attempt reads fresh state; a failed host read must never complete its terminals.
+- Inactive terminal workspaces render only their retained surfaces. A fallback first tab must not create an extra surface outside the physical pane's four-entry cache. A hidden LaTeX writing margin keeps its chat/draft but sends no terminal input, resize, or composer submission.
+- Markdown project images have bounded admission: at most 16 unique paths and 16 MiB of data-URL text per document, with three actual reads in flight across previews. Repeated DOM images also count toward displayed bytes. Cancel queued work on document changes/unmount and keep accessible limit explanations; HTTPS external images retain their existing browser-loading behavior.
+- Comment migration, creation, and deletion serialize by canonical project location across service instances in one main process. This does not coordinate separate PanePilot processes or different SSH aliases for the same host; cross-client conflict handling remains separate work.
+- SSH folder browsing, canonical project-folder verification, and connection checks use asynchronous child processes. Canonical verification must not enumerate an entire directory just to establish its path.
+- Renderer-only libraries are build dependencies. The package ships their compiled renderer assets and license/notice files; main-process native/runtime dependencies and their required transitive dependencies remain production dependencies.
+
 ## Development and validation
 
 Install and run:
@@ -554,6 +565,10 @@ Run `node scripts/test-file-tabs-ui.mjs` for a hidden local/SSH Files fixture. I
 Run `node scripts/test-tab-title-layout-ui.mjs` for isolated Electron layout checks of project terminal and Files tab strips using their real styles and active-tab reveal hook. It verifies full natural titles before crowding, selected-title priority, inactive ellipsis, long-title wrapping, overflow and resize recovery, compact ordinary height, and unchanged workspace scroll without any real sessions or files.
 
 Run `node scripts/test-subagent-order-ui.mjs` for a hidden sub-agent fixture with actual read-only xterm surfaces. It verifies status-priority ordering, full-list pagination, stable output refreshes, retained terminal nodes during status moves, and polling cleanup without reading real archives or opening the user's workspace.
+
+Run `node scripts/test-terminal-surface-cache-ui.mjs` for actual xterm surface counts across cached projects and hidden LaTeX writing-chat input/resize checks. Run `node scripts/test-markdown-preview-ui.mjs` for bounded image reads, repeated images, canceled/stale reads, and sanitized-link behavior. Both use synthetic IPC and temporary Electron profiles.
+
+The reproducible desktop audit workloads are `node scripts/benchmark-desktop.mjs <output.json>`, `node scripts/benchmark-desktop-renderer.mjs --output <output.json>`, and `node scripts/benchmark-desktop-package.mjs [app-path] --output <output.json>`. Keep the original evidence under `audit/desktop-2026-10-29/` unchanged; write comparison results separately. Run timed workloads serially after builds and tests finish. CPU/IO measurements are not calibrated power or battery-life measurements.
 
 `node-pty` requires its native macOS `spawn-helper` to be executable. npm can reinstall the prebuilt helper without its executable bit, which surfaces as the otherwise opaque `posix_spawnp failed` error before any shell starts. The pinned `node-pty` 1.1.0 release also leaks macOS kqueue, slave PTY, and low-numbered file descriptors as sessions exit; a long-running PanePilot process can therefore exhaust its descriptor limit and surface the same error. `scripts/prepare-node-pty.mjs` applies the idempotent source backport before rebuilding and fixes helper permissions. `postinstall`, `predev`, and `prestart` must keep running that preparation guard.
 

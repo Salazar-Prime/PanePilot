@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ChevronDown,
   MoreHorizontal,
@@ -23,6 +23,7 @@ import { TerminalProfileIcon } from './TerminalProfileIcon'
 import type { TerminalFileTarget } from '../lib/terminalFileLinks'
 
 interface Props {
+  active: boolean
   sessions: TerminalSession[]
   sections: LatexSection[]
   projectFolder: string
@@ -36,6 +37,7 @@ interface Props {
 }
 
 export function LatexAgentPane({
+  active,
   sessions,
   sections,
   projectFolder,
@@ -62,6 +64,10 @@ export function LatexAgentPane({
     [sections]
   )
 
+  useEffect(() => {
+    if (!active) setMenu(null)
+  }, [active])
+
   function scopeLabel(session: TerminalSession): string {
     const chat = session.latexChat
     if (!chat || chat.scope === 'project') return 'Whole project'
@@ -80,7 +86,7 @@ export function LatexAgentPane({
   }
 
   async function send() {
-    if (!activeSession || !message.trim()) return
+    if (!active || !activeSession || !message.trim()) return
     setSending(true)
     setError('')
     try {
@@ -142,7 +148,7 @@ export function LatexAgentPane({
 
   return (
     <>
-      <aside className="latex-agent-pane">
+      <aside className="latex-agent-pane" aria-hidden={!active}>
         <header className="latex-agent-heading">
           <div className="latex-agent-title">
             <strong>Writing chats</strong>
@@ -255,6 +261,7 @@ export function LatexAgentPane({
             <div className="latex-agent-terminal">
               <ManagedTerminal
                 session={activeSession}
+                active={active}
                 projectFolder={projectFolder}
                 onOpenFile={onOpenFile}
               />
@@ -278,6 +285,7 @@ export function LatexAgentPane({
               <div className="latex-composer">
                 <textarea
                   value={message}
+                  disabled={!active}
                   onChange={(event) => setMessage(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -304,7 +312,7 @@ export function LatexAgentPane({
                   <button
                     className="primary-button"
                     onClick={() => void send()}
-                    disabled={sending || !message.trim()}
+                    disabled={!active || sending || !message.trim()}
                   >
                     <Send size={13} /> {sending ? 'Sending…' : 'Send'}
                   </button>

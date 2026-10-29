@@ -787,6 +787,10 @@ export function LatexProjectWorkspace({
         />
         <LatexAgentPane
           key={project.id}
+          active={
+            workspaceActive && !chatLayout.hidden &&
+            (tab === 'manuscript' || tab === 'pdf')
+          }
           sessions={sessions}
           sections={workspace.sections}
           projectFolder={project.folder}

@@ -54,7 +54,7 @@ import {
   createRemoteFile,
   downloadRemoteFile,
   listRemoteFilesAsync,
-  listRemoteFolders,
+  listRemoteFoldersAsync,
   openRemotePath,
   previewRemoteFileAsync,
   renameRemoteEntry,
@@ -702,7 +702,7 @@ function registerIpc(): void {
       if (!connection || connection.kind !== 'ssh' || !connection.sshAlias) {
         throw new Error('Choose a valid SSH connection.')
       }
-      return listRemoteFolders(connection.sshAlias, path)
+      return listRemoteFoldersAsync(connection.sshAlias, path)
     }
   )
 

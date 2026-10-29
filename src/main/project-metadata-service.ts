@@ -12,6 +12,7 @@ import {
   unlinkSync,
   writeFileSync
 } from 'node:fs'
+import { realpath } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { TextDecoder } from 'node:util'
 import type {
@@ -39,6 +40,29 @@ const LEGACY_NOTES_FILE = '.notes-panepilot'
 const MAX_METADATA_BYTES = 1024 * 1024
 const MAX_SHARED_ACTIONS = 100
 const MAX_SHARED_LATEX_COMMENTS = 1_000
+
+// Shared by service instances because two client-local project IDs can refer to
+// the same folder. Atomic replacement alone does not protect read/modify/write.
+// This queue coordinates this process only; other PanePilot processes or SSH
+// aliases for the same host still need host-side transaction coordination.
+const latexCommentTransactions = new Map<string, Promise<void>>()
+
+async function serializeLatexCommentTransaction<T>(
+  key: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  const result = (latexCommentTransactions.get(key) ?? Promise.resolve()).then(operation)
+  // A failed transaction must not poison the next operation on this folder.
+  const settled = result.then(() => {}, () => {})
+  latexCommentTransactions.set(key, settled)
+  try {
+    return await result
+  } finally {
+    if (latexCommentTransactions.get(key) === settled) {
+      latexCommentTransactions.delete(key)
+    }
+  }
+}
 
 interface SharedActionDefinition {
   id: string
@@ -930,12 +954,32 @@ export class ProjectMetadataService {
     )
   }
 
-  async listLatexComments(
+  private async withLatexCommentTransaction<T>(
     projectId: string,
-    legacyComments: LatexComment[] = []
-  ): Promise<LatexComment[]> {
-    const { project, connection } = this.target(projectId)
+    operation: (project: Project, connection: Connection) => Promise<T>
+  ): Promise<T> {
+    let { project, connection } = this.target(projectId)
     if (project.type !== 'latex') throw new Error('LaTeX project not found.')
+    // Capture the canonical folder for both the lock and every IO in this
+    // transaction, including project records opened through a directory symlink.
+    if (connection.kind === 'local') {
+      project = { ...project, folder: await realpath(project.folder) }
+    }
+    const key = JSON.stringify([
+      connection.kind,
+      connection.kind === 'local' ? '' : connection.sshAlias,
+      project.folder
+    ])
+    return serializeLatexCommentTransaction(key, () => operation(project, connection))
+  }
+
+  // Call only inside withLatexCommentTransaction: the initial legacy migration
+  // writes the authoritative file, so even a list is part of the transaction.
+  private async loadLatexComments(
+    project: Project,
+    connection: Connection,
+    legacyComments: LatexComment[]
+  ): Promise<LatexComment[]> {
     const raw = await this.readLatexComments(project, connection)
     if (raw == null) {
       const migrated = parseSharedLatexComments(
@@ -955,26 +999,36 @@ export class ProjectMetadataService {
     )
   }
 
+  async listLatexComments(
+    projectId: string,
+    legacyComments: LatexComment[] = []
+  ): Promise<LatexComment[]> {
+    return this.withLatexCommentTransaction(projectId, (project, connection) =>
+      this.loadLatexComments(project, connection, legacyComments)
+    )
+  }
+
   async createLatexComment(
     projectId: string,
     input: Omit<LatexComment, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>,
     legacyComments: LatexComment[] = []
   ): Promise<LatexComment> {
-    const current = await this.listLatexComments(projectId, legacyComments)
-    if (current.length >= MAX_SHARED_LATEX_COMMENTS) {
-      throw new Error('This project already has the maximum of 1,000 LaTeX comments.')
-    }
-    const timestamp = new Date().toISOString()
-    const comment: LatexComment = {
-      ...input,
-      id: randomUUID(),
-      projectId,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    }
-    const { project, connection } = this.target(projectId)
-    await this.writeLatexComments(project, connection, [...current, comment])
-    return comment
+    return this.withLatexCommentTransaction(projectId, async (project, connection) => {
+      const current = await this.loadLatexComments(project, connection, legacyComments)
+      if (current.length >= MAX_SHARED_LATEX_COMMENTS) {
+        throw new Error('This project already has the maximum of 1,000 LaTeX comments.')
+      }
+      const timestamp = new Date().toISOString()
+      const comment: LatexComment = {
+        ...input,
+        id: randomUUID(),
+        projectId,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }
+      await this.writeLatexComments(project, connection, [...current, comment])
+      return comment
+    })
   }
 
   async deleteLatexComment(
@@ -982,14 +1036,15 @@ export class ProjectMetadataService {
     commentId: string,
     legacyComments: LatexComment[] = []
   ): Promise<void> {
-    const current = await this.listLatexComments(projectId, legacyComments)
-    if (!current.some((comment) => comment.id === commentId)) return
-    const { project, connection } = this.target(projectId)
-    await this.writeLatexComments(
-      project,
-      connection,
-      current.filter((comment) => comment.id !== commentId)
-    )
+    await this.withLatexCommentTransaction(projectId, async (project, connection) => {
+      const current = await this.loadLatexComments(project, connection, legacyComments)
+      if (!current.some((comment) => comment.id === commentId)) return
+      await this.writeLatexComments(
+        project,
+        connection,
+        current.filter((comment) => comment.id !== commentId)
+      )
+    })
   }
 
   private readActions(project: Project, connection: Connection): SharedActionsFile | null {

@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it } from 'vitest'
 import { projectTypeServices } from '../src/main/project-type-services'
-import { listRemoteFolders } from '../src/main/remote-file-service'
+import { listRemoteFoldersAsync } from '../src/main/remote-file-service'
 import { Store } from '../src/main/store'
 import {
   fuzzyFilterFolderEntries,
@@ -194,7 +194,7 @@ exec /bin/sh -c "$panepilot_command"
       expect(project.folder).toBe(realpathSync(join(parent, 'remote-project')))
       expect(existsSync(project.folder)).toBe(true)
       expect(
-        listRemoteFolders('test-remote', parent).entries.map((entry) => ({
+        (await listRemoteFoldersAsync('test-remote', parent)).entries.map((entry) => ({
           name: entry.name,
           kind: entry.kind
         }))

@@ -29,6 +29,21 @@ extraResources:
     to: panepilot-updates.json
   - from: node_modules/electron-sparkle-updater/native/vendor/LICENSE
     to: Sparkle-LICENSE.txt
+  # Renderer libraries are bundled into out/renderer and belong in devDependencies.
+  # Keep their licenses (including bundled transitives) without shipping duplicate code.
+  - from: node_modules
+    to: renderer-licenses
+    filter:
+      - "@monaco-editor/{loader,react}/LICENSE"
+      - "@xterm/{addon-fit,xterm}/LICENSE"
+      - "dompurify/LICENSE*"
+      - "{github-slugger,highlight.js,lucide-react}/LICENSE"
+      - "marked/LICENSE.md"
+      - "monaco-editor/{LICENSE,ThirdPartyNotices.txt}"
+      - "{motion,framer-motion,motion-dom,motion-utils}/LICENSE.md"
+      - "pdfjs-dist/LICENSE"
+      - "{react,react-dom,scheduler,loose-envify,js-tokens,state-local}/LICENSE"
+      - "tslib/{LICENSE,CopyrightNotice}.txt"
 
 mac:
   category: public.app-category.developer-tools

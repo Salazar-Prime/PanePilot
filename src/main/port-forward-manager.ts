@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import type {
   ConnectionTestResult,
   CreatePortForwardInput,
@@ -31,36 +31,40 @@ function validateInput(input: CreatePortForwardInput): void {
   if (input.remoteHost.trim().length > 255) throw new Error('Remote host is too long.')
 }
 
-export function testSshConnection(sshAlias: string): ConnectionTestResult {
+export function testSshConnection(sshAlias: string): Promise<ConnectionTestResult> {
   const started = Date.now()
-  const result = spawnSync(
-    'ssh',
-    [
-      '-T',
-      '-o',
-      'BatchMode=yes',
-      '-o',
-      'ConnectTimeout=6',
-      '-o',
-      'ClearAllForwardings=yes',
-      sshAlias,
-      'printf panepilot-ok'
-    ],
-    { encoding: 'utf8', timeout: 8_000 }
-  )
-  const latencyMs = Date.now() - started
-  if (result.error) {
-    return { ok: false, message: result.error.message, latencyMs }
-  }
-  if (result.status !== 0 || result.stdout !== 'panepilot-ok') {
-    const detail = (result.stderr ?? '').trim().split(/\r?\n/).at(-1)
-    return {
-      ok: false,
-      message: detail || `SSH exited with status ${result.status ?? 'unknown'}.`,
-      latencyMs
-    }
-  }
-  return { ok: true, message: `Connected to ${sshAlias}.`, latencyMs }
+  return new Promise((resolve) => {
+    execFile(
+      'ssh',
+      [
+        '-T',
+        '-o',
+        'BatchMode=yes',
+        '-o',
+        'ConnectTimeout=6',
+        '-o',
+        'ClearAllForwardings=yes',
+        sshAlias,
+        'printf panepilot-ok'
+      ],
+      { encoding: 'utf8', timeout: 8_000, maxBuffer: 64 * 1024 },
+      (error, stdout, stderr) => {
+        const latencyMs = Date.now() - started
+        if (error && typeof error.code !== 'number') {
+          resolve({ ok: false, message: error.message, latencyMs })
+        } else if (error || stdout !== 'panepilot-ok') {
+          const detail = stderr.trim().split(/\r?\n/).at(-1)
+          resolve({
+            ok: false,
+            message: detail || `SSH exited with status ${error?.code ?? 0}.`,
+            latencyMs
+          })
+        } else {
+          resolve({ ok: true, message: `Connected to ${sshAlias}.`, latencyMs })
+        }
+      }
+    )
+  })
 }
 
 export class PortForwardManager {

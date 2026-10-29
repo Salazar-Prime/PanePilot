@@ -103,7 +103,7 @@ export class GoogleDriveService {
   ) {}
 
   status(projectId: string): GoogleDriveStatus {
-    if (!this.store.getProject(projectId)) throw new Error('Project not found.')
+    if (!this.store.getProjectForRuntime(projectId)) throw new Error('Project not found.')
     const executable = this.findExecutable()
     const connection = this.store.getGoogleDriveConnection(projectId)
     if (!connection) {
@@ -155,7 +155,7 @@ export class GoogleDriveService {
     remoteName: string,
     folderPath: string
   ): Promise<GoogleDriveStatus> {
-    if (!this.store.getProject(projectId)) throw new Error('Project not found.')
+    if (!this.store.getProjectForRuntime(projectId)) throw new Error('Project not found.')
     const executable = this.requireExecutable()
     const remote = normalizeRcloneRemoteName(remoteName)
     const folder = normalizeDriveFolderPath(folderPath)
@@ -186,7 +186,7 @@ export class GoogleDriveService {
   }
 
   disconnect(projectId: string): void {
-    if (!this.store.getProject(projectId)) throw new Error('Project not found.')
+    if (!this.store.getProjectForRuntime(projectId)) throw new Error('Project not found.')
     this.store.deleteGoogleDriveConnection(projectId)
   }
 
@@ -202,7 +202,7 @@ export class GoogleDriveService {
     projectId: string,
     relativePath: string
   ): Promise<GoogleDriveUploadResult> {
-    const project = this.store.getProject(projectId)
+    const project = this.store.getProjectForRuntime(projectId)
     if (!project) throw new Error('Project not found.')
     const driveConnection = this.store.getGoogleDriveConnection(projectId)
     if (!driveConnection) {
@@ -307,7 +307,7 @@ export class GoogleDriveService {
   }
 
   private uploadedFileDestination(projectId: string, relativePath: string): string {
-    if (!this.store.getProject(projectId)) throw new Error('Project not found.')
+    if (!this.store.getProjectForRuntime(projectId)) throw new Error('Project not found.')
     const driveConnection = this.store.getGoogleDriveConnection(projectId)
     if (!driveConnection) {
       throw new Error('Connect an rclone Google Drive folder to this project first.')

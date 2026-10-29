@@ -221,7 +221,9 @@ export function TerminalProjectWorkspace({
         ? [{ ...view, projectFolder: project.folder, session: current }]
         : []
     })
-    if (!activeSession || retained.some((view) => view.session.id === activeSession.id)) {
+    // Inactive workspaces receive no selection and fall back to their first tab.
+    // Only the visible workspace may add a surface before the cache is updated.
+    if (!workspaceActive || !activeSession || retained.some((view) => view.session.id === activeSession.id)) {
       return retained
     }
     return [
@@ -237,7 +239,8 @@ export function TerminalProjectWorkspace({
     project.folder,
     project.id,
     project.sessions,
-    terminalSurfaceCache?.views
+    terminalSurfaceCache?.views,
+    workspaceActive
   ])
 
   useEffect(() => {

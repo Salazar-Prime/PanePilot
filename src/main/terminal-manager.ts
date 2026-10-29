@@ -40,6 +40,7 @@ import { RemoteConversationIndexer } from './remote-conversation-indexer'
 import { acknowledgedAgentState, ScreenActivityDetector } from './screen-activity-detector'
 import { Store } from './store'
 import { captureTmuxPreview, TerminalPreviewReads } from './terminal-preview'
+import { TerminalOutputBuffer } from './terminal-output-buffer'
 import type { TerminalPreviewSnapshot } from '../shared/types'
 import {
   panePilotTmuxMetadata,
@@ -115,11 +116,6 @@ interface PendingOutput {
   length: number
   timer: NodeJS.Timeout | null
   warned: boolean
-}
-
-interface VolatileOutput {
-  chunks: string[]
-  byteLength: number
 }
 
 interface ActionPaneSnapshot {
@@ -446,10 +442,11 @@ export class TerminalManager {
   private readonly runtimes = new Map<string, Runtime>()
   private readonly reconnects = new Map<string, ReconnectRuntime>()
   private readonly tmuxReconciliations = new Map<string, Promise<number>>()
+  private readonly remoteTmuxReads = new Map<string, Promise<ListedTmuxSession[] | null>>()
   private readonly remoteTmuxPaths = new Map<string, string>()
   private readonly codexQuestionScanCursors = new Map<string, number>()
   private readonly pendingOutput = new Map<string, PendingOutput>()
-  private readonly volatileOutput = new Map<string, VolatileOutput>()
+  private readonly volatileOutput = new Map<string, TerminalOutputBuffer>()
   private readonly latexInlineExecWaiters = new Map<
     string,
     LatexInlineExecWaiter
@@ -1293,7 +1290,7 @@ export class TerminalManager {
     return {
       output:
         session.profile === 'codex'
-          ? this.volatileOutput.get(sessionId)?.chunks.join('') ?? ''
+          ? this.volatileOutput.get(sessionId)?.read() ?? ''
           : this.store.getSession(sessionId)?.output ?? ''
     }
   }
@@ -1913,6 +1910,7 @@ export class TerminalManager {
     }
     this.reconnects.clear()
     this.tmuxReconciliations.clear()
+    this.remoteTmuxReads.clear()
     this.remoteTmuxPaths.clear()
     this.volatileOutput.clear()
     for (const runtime of this.runtimes.values()) {
@@ -2354,37 +2352,9 @@ export class TerminalManager {
       this.queueOutput(session.id, data)
       return
     }
-    const dataBytes = Buffer.byteLength(data, 'utf8')
-    if (dataBytes >= OUTPUT_BUFFER_LIMIT) {
-      const retained = retainedVolatileTerminalOutput(data)
-      this.volatileOutput.set(session.id, {
-        chunks: [retained],
-        byteLength: Buffer.byteLength(retained, 'utf8')
-      })
-      return
-    }
-
-    const output = this.volatileOutput.get(session.id) ?? {
-      chunks: [],
-      byteLength: 0
-    }
-    output.chunks.push(data)
-    output.byteLength += dataBytes
-    while (output.byteLength > OUTPUT_BUFFER_LIMIT && output.chunks.length > 0) {
-      const first = output.chunks[0]
-      const firstBytes = Buffer.byteLength(first, 'utf8')
-      const excess = output.byteLength - OUTPUT_BUFFER_LIMIT
-      if (firstBytes <= excess) {
-        output.chunks.shift()
-        output.byteLength -= firstBytes
-      } else {
-        const retained = retainedVolatileTerminalOutput(first, firstBytes - excess)
-        output.chunks[0] = retained
-        output.byteLength =
-          output.byteLength - firstBytes + Buffer.byteLength(retained, 'utf8')
-      }
-    }
-    if (output.chunks.length > 256) output.chunks = [output.chunks.join('')]
+    const output = this.volatileOutput.get(session.id) ??
+      new TerminalOutputBuffer(OUTPUT_BUFFER_LIMIT)
+    output.append(data)
     this.volatileOutput.set(session.id, output)
   }
 
@@ -2507,14 +2477,13 @@ export class TerminalManager {
     if (isLatexInlineEditSession(runtime.session)) {
       runtime.outputClosed = true
       const streamedOutput =
-        this.volatileOutput.get(runtime.session.id)?.chunks.join('') ?? ''
+        this.volatileOutput.get(runtime.session.id)?.read() ?? ''
       const output = retainedVolatileTerminalOutput(
         snapshot.output || streamedOutput
       )
-      this.volatileOutput.set(runtime.session.id, {
-        chunks: output ? [output] : [],
-        byteLength: Buffer.byteLength(output, 'utf8')
-      })
+      const retained = new TerminalOutputBuffer(OUTPUT_BUFFER_LIMIT)
+      retained.append(output)
+      this.volatileOutput.set(runtime.session.id, retained)
       const latest = this.store.getSessionWithoutOutput(runtime.session.id)
       if (!latest) {
         this.rejectLatexInlineExec(
@@ -2575,75 +2544,69 @@ export class TerminalManager {
   ): Promise<ActionPaneSnapshot | null> {
     const name = runtime.session.tmuxName
     if (!name) return null
+    const tmuxPath = this.tmuxPathForConnection(runtime.connection)
+    if (!tmuxPath) return null
     const target = `=${name}:`
     const stateFormat =
       `#{${ACTION_EXIT_STATUS_OPTION}}:#{pane_dead}:#{pane_dead_status}`
-
-    if (runtime.connection.kind === 'local') {
-      if (!this.tmuxPath) return null
-      try {
-        const state = await execFileAsync(
-          this.tmuxPath,
-          ['display-message', '-p', '-t', target, stateFormat],
-          { encoding: 'utf8', timeout: 2_000 }
-        )
-        const exitCode = actionExitStatus(state.stdout)
-        if (exitCode == null) return null
-        const capture = await execFileAsync(
-          this.tmuxPath,
-          ['capture-pane', '-p', '-e', '-S', '-', '-t', target],
-          {
-            encoding: 'utf8',
-            timeout: 2_000,
-            maxBuffer: MAX_ACTION_CAPTURE_OUTPUT
-          }
-        )
-        return {
-          exitCode,
-          output: capture.stdout.replace(/\r?\n/g, '\r\n')
-        }
-      } catch {
-        return null
-      }
-    }
-
-    const tmuxPath = this.tmuxPathForConnection(runtime.connection)
-    if (!tmuxPath) return null
-    const remoteCommand =
-      `panepilot_state=$(${quote(tmuxPath)} display-message -p -t ${quote(target)} ${quote(stateFormat)}) || exit $?; ` +
-      `printf '%s\\n' "$panepilot_state"; ` +
-      `${quote(tmuxPath)} capture-pane -p -e -S - -t ${quote(target)}`
+    let exitCode: number | null
     try {
-      const result = await execFileAsync(
-        'ssh',
-        [
-          '-T',
-          '-o',
-          'BatchMode=yes',
-          '-o',
-          'ConnectTimeout=5',
-          runtime.connection.sshAlias ?? runtime.connection.name,
-          remoteCommand
-        ],
-        {
-          encoding: 'utf8',
-          timeout: 8_000,
-          maxBuffer: MAX_ACTION_CAPTURE_OUTPUT
-        }
+      const state = await this.readActionTmuxOutput(
+        runtime.connection,
+        tmuxPath,
+        ['display-message', '-p', '-t', target, stateFormat],
+        false
       )
-      const firstNewline = result.stdout.indexOf('\n')
-      if (firstNewline < 0) return null
-      const exitCode = actionExitStatus(
-        result.stdout.slice(0, firstNewline)
-      )
-      if (exitCode == null) return null
-      return {
-        exitCode,
-        output: result.stdout.slice(firstNewline + 1).replace(/\r?\n/g, '\r\n')
-      }
+      exitCode = actionExitStatus(state)
     } catch {
       return null
     }
+    if (exitCode == null) return null
+
+    // Running Actions already stream through their PTY. Only capture once the
+    // exit marker is known, and never let a failed capture hide that marker.
+    let output = ''
+    try {
+      output = await this.readActionTmuxOutput(
+        runtime.connection,
+        tmuxPath,
+        ['capture-pane', '-p', '-e', '-S', '-', '-t', target],
+        true
+      )
+    } catch {
+      // Completion falls back to the output already received from the PTY.
+    }
+    return { exitCode, output: output.replace(/\r?\n/g, '\r\n') }
+  }
+
+  private async readActionTmuxOutput(
+    connection: Connection,
+    tmuxPath: string,
+    args: string[],
+    capture: boolean
+  ): Promise<string> {
+    const command = [tmuxPath, ...args].map(quote).join(' ') +
+      (capture ? ` | tail -c ${MAX_ACTION_CAPTURE_OUTPUT}` : '')
+    const local = connection.kind === 'local'
+    const executable = local ? (capture ? '/bin/sh' : tmuxPath) : 'ssh'
+    const processArgs = local
+      ? (capture ? ['-c', command] : args)
+      : [
+          '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5',
+          connection.sshAlias ?? connection.name, command
+        ]
+    const { stdout } = await execFileAsync(executable, processArgs, {
+      encoding: 'buffer',
+      timeout: local ? 2_000 : 8_000,
+      maxBuffer: capture ? MAX_ACTION_CAPTURE_OUTPUT : 4_096
+    })
+    // tail bounds transfer at the source, including over SSH. Its first byte
+    // can land inside a UTF-8 character, so discard only that partial prefix.
+    let start = 0
+    if (capture) {
+      while (start < stdout.length && (stdout[start] & 0xc0) === 0x80) start += 1
+    }
+    return stdout.subarray(start).toString('utf8')
   }
 
   private metadataForSession(
@@ -2662,7 +2625,25 @@ export class TerminalManager {
     })
   }
 
-  private async listRemoteTmuxSessions(
+  private listRemoteTmuxSessions(
+    connection: Connection
+  ): Promise<ListedTmuxSession[] | null> {
+    const existing = this.remoteTmuxReads.get(connection.id)
+    if (existing) return existing
+    // Reconnecting tabs and ordinary discovery need the same host snapshot.
+    // Share only an in-flight read; the next attempt must verify live state.
+    const pending = this.readRemoteTmuxSessions(connection)
+    this.remoteTmuxReads.set(connection.id, pending)
+    const clearPending = (): void => {
+      if (this.remoteTmuxReads.get(connection.id) === pending) {
+        this.remoteTmuxReads.delete(connection.id)
+      }
+    }
+    void pending.then(clearPending, clearPending)
+    return pending
+  }
+
+  private async readRemoteTmuxSessions(
     connection: Connection
   ): Promise<ListedTmuxSession[] | null> {
     const remoteCommand =

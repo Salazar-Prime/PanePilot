@@ -4,6 +4,7 @@ import {
   renderMarkdownDocument,
   resolveMarkdownTarget
 } from '../lib/markdown'
+import { loadMarkdownImages } from '../lib/markdownImages'
 
 export interface MarkdownPreviewAnchor {
   fragment: string
@@ -69,54 +70,12 @@ export function MarkdownPreview({
   useEffect(() => {
     const root = rootRef.current
     if (!root) return
-    let active = true
-    const imageLoads = new Map<string, Promise<string | null>>()
-
     for (const input of root.querySelectorAll('input')) {
       input.disabled = true
     }
-
-    const loadImage = async (image: HTMLImageElement): Promise<void> => {
-      const source =
-        image.dataset.markdownSrc ?? image.getAttribute('src') ?? ''
-      image.referrerPolicy = 'no-referrer'
-      image.removeAttribute('srcset')
-      if (!source) return
-      if (source.startsWith('data:image/')) {
-        image.src = source
-        return
-      }
-      const target = resolveMarkdownTarget(path, source)
-      if (target.kind === 'external') {
-        if (target.url.startsWith('https:')) image.src = target.url
-        else markImageUnavailable(image)
-        return
-      }
-      if (target.kind !== 'project') {
-        markImageUnavailable(image)
-        return
-      }
-
-      const cacheKey = `${projectId}:${target.path}`
-      if (!imageLoads.has(cacheKey)) {
-        imageLoads.set(
-          cacheKey,
-          window.projectConsole.files
-            .preview(projectId, target.path)
-            .then((preview) => preview.imageDataUrl)
-            .catch(() => null)
-        )
-      }
-      const dataUrl = await imageLoads.get(cacheKey)!
-      if (!active || !root.contains(image)) return
-      if (dataUrl) image.src = dataUrl
-      else markImageUnavailable(image)
-    }
-
-    void Promise.all([...root.querySelectorAll('img')].map(loadImage))
-    return () => {
-      active = false
-    }
+    return loadMarkdownImages(root, path, (imagePath) =>
+      window.projectConsole.files.preview(projectId, imagePath)
+    )
   }, [html, path, projectId])
 
   useEffect(() => {
@@ -167,9 +126,4 @@ export function MarkdownPreview({
       />
     </div>
   )
-}
-
-function markImageUnavailable(image: HTMLImageElement): void {
-  image.removeAttribute('src')
-  image.classList.add('markdown-image-unavailable')
 }

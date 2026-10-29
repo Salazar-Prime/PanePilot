@@ -108,8 +108,12 @@ if (!process.versions.electron) {
       const markdownCases = []
       for (const images of [10, 100, 500]) {
         await evaluate(`window.renderMarkdown(${images})`)
-        await waitFor(`window.fixtureStats.imageCompleted===${images}`)
-        markdownCases.push(await evaluate('window.readFixtureStats()'))
+        await waitFor(`document.querySelectorAll('.markdown-body img').length===${images} && document.querySelectorAll('img[data-markdown-image-status="queued"]').length===0 && window.fixtureStats.imageInFlight===0`)
+        markdownCases.push({
+          ...await evaluate('window.readFixtureStats()'),
+          inputImages: images,
+          imageLimited: await evaluate('document.querySelectorAll(\'img[data-markdown-image-status="limited"]\').length')
+        })
         await evaluate('window.unmountFixture()')
         await delay(30)
       }

@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks'
 import { TerminalManager } from '../../src/main/terminal-manager'
+import type { TerminalOutputBuffer } from '../../src/main/terminal-output-buffer'
 import type { TerminalSession } from '../../src/shared/types'
 
 const BUFFER_LIMIT = 512 * 1024
@@ -9,7 +10,7 @@ const REPETITIONS = 3
 
 interface OutputHarness {
   shuttingDown: boolean
-  volatileOutput: Map<string, { chunks: string[]; byteLength: number }>
+  volatileOutput: Map<string, TerminalOutputBuffer>
   retainTerminalOutput(session: TerminalSession, data: string): void
 }
 
@@ -56,7 +57,7 @@ export async function runTerminalBenchmarks() {
       const cpu = process.cpuUsage(cpuBefore)
       const memoryAfter = process.memoryUsage()
       const output = harness.volatileOutput.get(session.id)!
-      const retained = output.chunks.join('')
+      const retained = output.read()
       const expected = (prefix + appended).slice(-BUFFER_LIMIT)
       if (retained !== expected || output.byteLength !== Buffer.byteLength(retained)) {
         throw new Error(`Volatile terminal replay invariant failed: ${scenario}, repetition ${repetition}`)
@@ -69,7 +70,7 @@ export async function runTerminalBenchmarks() {
         inputBytes: APPEND_COUNT * APPEND_BYTES,
         initialBytes: prefix.length,
         retainedBytes: Buffer.byteLength(retained),
-        retainedChunks: output.chunks.length,
+        retainedChunks: output.chunkCount,
         elapsedMs,
         cpuUserMs: cpu.user / 1_000,
         cpuSystemMs: cpu.system / 1_000,

@@ -20,8 +20,8 @@ import {
 import {
   createRemoteDirectory,
   createRemoteFile,
-  listRemoteFolders,
-  previewRemoteFile,
+  previewRemoteFileAsync,
+  verifyRemoteDirectory,
   writeRemoteFileAsync
 } from './remote-file-service'
 import type { Store } from './store'
@@ -77,7 +77,7 @@ async function resolveProjectFolder(
     }
   }
   if (!connection.sshAlias) throw new Error('The SSH connection has no alias.')
-  const parent = listRemoteFolders(connection.sshAlias, folder).currentPath
+  const parent = await verifyRemoteDirectory(connection.sshAlias, folder)
   if (!newFolderName) return { folder: parent, created: false }
   const createdPath = await createRemoteDirectory(
     connection.sshAlias,
@@ -86,10 +86,10 @@ async function resolveProjectFolder(
     newFolderName
   )
   return {
-    folder: listRemoteFolders(
+    folder: await verifyRemoteDirectory(
       connection.sshAlias,
       posix.join(parent, createdPath)
-    ).currentPath,
+    ),
     created: true
   }
 }
@@ -188,7 +188,7 @@ const latexProjectService: ProjectTypeService = {
       preview =
         connection.kind === 'local'
           ? previewLocalFile(folder, mainFile)
-          : previewRemoteFile(
+          : await previewRemoteFileAsync(
               connection.sshAlias ?? connection.name,
               folder,
               mainFile

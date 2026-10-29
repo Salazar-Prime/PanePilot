@@ -20,6 +20,16 @@ export interface RemoteBinaryFile {
   modifiedAt: string
 }
 
+const VERIFY_DIRECTORY_SCRIPT = String.raw`
+import json, os, sys
+payload = json.load(sys.stdin)
+requested = payload.get("path") or os.path.expanduser("~")
+current = os.path.realpath(os.path.expanduser(requested))
+if not os.path.isdir(current):
+    raise RuntimeError("The remote folder does not exist.")
+print(json.dumps({"currentPath": current}))
+`
+
 const LIST_FOLDERS_SCRIPT = String.raw`
 import json, os, sys
 payload = json.load(sys.stdin)
@@ -583,6 +593,25 @@ export function listRemoteFolders(
   path?: string
 ): RemoteFolderListing {
   return runRemotePython<RemoteFolderListing>(sshAlias, LIST_FOLDERS_SCRIPT, { path })
+}
+
+export function listRemoteFoldersAsync(
+  sshAlias: string,
+  path?: string
+): Promise<RemoteFolderListing> {
+  return runRemotePythonAsync<RemoteFolderListing>(sshAlias, LIST_FOLDERS_SCRIPT, { path })
+}
+
+export async function verifyRemoteDirectory(
+  sshAlias: string,
+  path: string
+): Promise<string> {
+  const result = await runRemotePythonAsync<{ currentPath: string }>(
+    sshAlias,
+    VERIFY_DIRECTORY_SCRIPT,
+    { path }
+  )
+  return result.currentPath
 }
 
 export function listRemoteFiles(
