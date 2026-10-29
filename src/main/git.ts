@@ -24,6 +24,8 @@ const LOG_RECORD = '\x1e'
 const LOG_FIELD = '\x1f'
 const GITHUB_VISIBILITY_CACHE_MS = 5 * 60 * 1_000
 const GITHUB_API_TIMEOUT_MS = 8_000
+const REPOSITORY_METADATA_CACHE_MS = 30_000
+const MAX_CACHED_REPOSITORIES = 64
 
 export interface GitHubVisibilityResolver {
   resolve(reference: GitHubRepositoryReference): Promise<{
@@ -123,7 +125,8 @@ interface GitRunner {
 class GitCommandError extends Error {
   constructor(
     message: string,
-    readonly stderr: string
+    readonly stderr: string,
+    readonly code?: number | string
   ) {
     super(message)
   }
@@ -164,7 +167,7 @@ function execute(
           'killed' in error && error.killed
             ? 'Git took too long to respond.'
             : detail.split(/\r?\n/).at(-1) || error.message
-        reject(new GitCommandError(message, detail))
+        reject(new GitCommandError(message, detail, error.code ?? undefined))
       }
     )
   })
@@ -403,11 +406,55 @@ function unavailableStatus(message: string): GitRepositoryStatus {
   }
 }
 
+interface RepositoryMetadata {
+  root: string
+  originUrl: string | null
+}
+
+function repositoryLocationKey(project: Project, connection: Connection): string {
+  return JSON.stringify([
+    connection.kind,
+    connection.kind === 'ssh' ? connection.sshAlias ?? connection.name : '',
+    project.folder
+  ])
+}
+
+function sharePendingRead<T>(
+  pending: Map<string, Promise<T>>,
+  key: string,
+  read: () => Promise<T>
+): Promise<T> {
+  const existing = pending.get(key)
+  if (existing) return existing
+  const result = read()
+  pending.set(key, result)
+  const clear = (): void => {
+    if (pending.get(key) === result) pending.delete(key)
+  }
+  void result.then(clear, clear)
+  return result
+}
+
+function retainCachedRead<T>(cache: Map<string, T>, key: string, value: T): void {
+  cache.delete(key)
+  cache.set(key, value)
+  while (cache.size > MAX_CACHED_REPOSITORIES) {
+    cache.delete(cache.keys().next().value!)
+  }
+}
+
 export class GitService {
   private readonly visibilityCache = new Map<
     string,
     { expiresAt: number; status: GitHubRepositoryVisibilityStatus }
   >()
+  private readonly pendingVisibility = new Map<string, Promise<GitHubRepositoryVisibilityStatus>>()
+  private readonly metadataCache = new Map<
+    string,
+    { expiresAt: number; metadata: RepositoryMetadata }
+  >()
+  private readonly pendingMetadata = new Map<string, Promise<RepositoryMetadata>>()
+  private readonly pendingStatus = new Map<string, Promise<GitRepositoryStatus>>()
 
   constructor(
     private readonly store: Store,
@@ -434,29 +481,74 @@ export class GitService {
       }
     }
     const cached = this.visibilityCache.get(reference.nameWithOwner)
-    if (cached && cached.expiresAt > Date.now()) return cached.status
-    const resolved = await this.githubVisibility.resolve(reference)
-    const status: GitHubRepositoryVisibilityStatus = {
-      repository: reference.nameWithOwner,
-      visibility: resolved?.visibility ?? null,
-      source: resolved?.source ?? null,
-      message: resolved
-        ? null
-        : 'Visibility unavailable. Sign in with GitHub CLI to identify private repositories.',
-      checkedAt
+    if (cached && cached.expiresAt > Date.now()) {
+      retainCachedRead(this.visibilityCache, reference.nameWithOwner, cached)
+      return cached.status
     }
-    this.visibilityCache.set(reference.nameWithOwner, {
-      expiresAt: Date.now() + GITHUB_VISIBILITY_CACHE_MS,
-      status
+    this.visibilityCache.delete(reference.nameWithOwner)
+    return sharePendingRead(this.pendingVisibility, reference.nameWithOwner, async () => {
+      const resolved = await this.githubVisibility.resolve(reference)
+      const status: GitHubRepositoryVisibilityStatus = {
+        repository: reference.nameWithOwner,
+        visibility: resolved?.visibility ?? null,
+        source: resolved?.source ?? null,
+        message: resolved
+          ? null
+          : 'Visibility unavailable. Sign in with GitHub CLI to identify private repositories.',
+        checkedAt
+      }
+      retainCachedRead(this.visibilityCache, reference.nameWithOwner, {
+        expiresAt: Date.now() + GITHUB_VISIBILITY_CACHE_MS,
+        status
+      })
+      return status
     })
-    return status
   }
 
   async status(projectId: string): Promise<GitRepositoryStatus> {
-    const { runner } = this.projectRunner(projectId)
-    try {
-      const [root, raw, originUrl] = await Promise.all([
+    const { project, connection, runner } = this.projectRunner(projectId)
+    const key = repositoryLocationKey(project, connection)
+    // Share only a live read. The next settled call must see working-tree changes.
+    return sharePendingRead(this.pendingStatus, key, () => this.readStatus(key, runner))
+  }
+
+  private async repositoryMetadata(key: string, runner: GitRunner): Promise<RepositoryMetadata> {
+    const cached = this.metadataCache.get(key)
+    if (cached && cached.expiresAt > Date.now()) {
+      retainCachedRead(this.metadataCache, key, cached)
+      return cached.metadata
+    }
+    this.metadataCache.delete(key)
+    return sharePendingRead(this.pendingMetadata, key, async () => {
+      let cacheable = true
+      const [root, originUrl] = await Promise.all([
         runner.run(['rev-parse', '--show-toplevel']),
+        runner.run(['config', '--get', 'remote.origin.url'])
+          .then((value) => value.trim() || null)
+          .catch((error: unknown) => {
+            // Missing origin is normal. A transport/command failure must retry on
+            // the next read instead of caching a false "Local" result for 30 s.
+            cacheable = error instanceof GitCommandError && error.code === 1 && !error.stderr
+            return null
+          })
+      ])
+      const metadata = { root: root.trim(), originUrl }
+      if (cacheable) {
+        retainCachedRead(this.metadataCache, key, {
+          expiresAt: Date.now() + REPOSITORY_METADATA_CACHE_MS,
+          metadata
+        })
+      }
+      return metadata
+    })
+  }
+
+  private async readStatus(key: string, runner: GitRunner): Promise<GitRepositoryStatus> {
+    try {
+      // Let both bounded reads settle before invalidating failed metadata, so a
+      // slower metadata request cannot repopulate the cache after that failure.
+      const [metadataResult, statusResult] = await Promise.allSettled([
+        this.repositoryMetadata(key, runner),
         runner.run([
           'status',
           '--porcelain=v2',
@@ -464,23 +556,21 @@ export class GitService {
           '--show-stash',
           '-z',
           '--untracked-files=all'
-        ]),
-        runner
-          .run(['config', '--get', 'remote.origin.url'])
-          .then((value) => value.trim() || null)
-          .catch(() => null)
+        ])
       ])
-      const parsed = parseGitPorcelainV2(raw)
+      if (metadataResult.status === 'rejected') throw metadataResult.reason
+      if (statusResult.status === 'rejected') throw statusResult.reason
+      const parsed = parseGitPorcelainV2(statusResult.value)
       return {
         isRepository: true,
-        root: root.trim(),
-        originUrl,
+        ...metadataResult.value,
         ...parsed,
         clean: parsed.changes.length === 0,
         message: null,
         refreshedAt: new Date().toISOString()
       }
     } catch (error) {
+      this.metadataCache.delete(key)
       if (isNotRepository(error)) {
         return unavailableStatus('This project folder is not a Git repository.')
       }

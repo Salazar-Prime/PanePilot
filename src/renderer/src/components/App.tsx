@@ -71,6 +71,7 @@ import type {
   TerminalTransportState
 } from '@shared/types'
 import { isAttentionState } from '../lib/status'
+import { InFlightReads, startSettledPolling } from '../lib/settledPolling'
 import { useAppearanceScale } from '../lib/appearanceScale'
 import { useAppUpdates } from '../lib/useAppUpdates'
 import { forgetProjectUpdateRestartGuards } from '../lib/updateRestartGuards'
@@ -219,6 +220,8 @@ const RENDERER_STATE_PRIORITY: AgentState[] = [
   'completed'
 ]
 const gitStatusCache = new Map<string, GitRepositoryStatus>()
+const gitStatusReads = new InFlightReads<string, GitRepositoryStatus>()
+const discoveryReads = new InFlightReads<string, number>()
 const repositoryVisibilityCache =
   new Map<string, GitHubRepositoryVisibilityStatus>()
 const PROJECT_READ_CACHE_LIMIT = 64
@@ -1230,9 +1233,15 @@ export function App() {
     setSubagentSessionId(null)
   }, [subagentSession?.id, focusedPane])
 
+  const gitStatusIdentity = project && projectSupportsGit && !showArchivedProjects
+    ? JSON.stringify([project.id, project.folder, connection?.kind, connection?.sshAlias, connection?.name])
+    : null
+  const gitStatusIdentityRef = useRef(gitStatusIdentity)
+  gitStatusIdentityRef.current = gitStatusIdentity
+
   const refreshGitStatus = useCallback(async () => {
     const projectId = project?.id
-    if (!projectId || showArchivedProjects || !projectSupportsGit) {
+    if (!projectId || !gitStatusIdentity) {
       gitStatusRequest.current += 1
       setGitStatus(null)
       setGitStatusError('')
@@ -1242,31 +1251,36 @@ export function App() {
     const request = ++gitStatusRequest.current
     setGitStatusLoading(true)
     try {
-      const nextStatus = await window.projectConsole.git.status(projectId)
-      if (request !== gitStatusRequest.current) return
+      const nextStatus = await gitStatusReads.run(gitStatusIdentity, () =>
+        window.projectConsole.git.status(projectId)
+      )
+      if (request !== gitStatusRequest.current || gitStatusIdentityRef.current !== gitStatusIdentity) return
       cacheProjectRead(gitStatusCache, projectId, nextStatus)
       setGitStatus(nextStatus)
       setGitStatusError('')
     } catch (caught) {
-      if (request !== gitStatusRequest.current) return
+      if (request !== gitStatusRequest.current || gitStatusIdentityRef.current !== gitStatusIdentity) return
       setGitStatusError(messageFor(caught))
     } finally {
-      if (request === gitStatusRequest.current) setGitStatusLoading(false)
+      if (request === gitStatusRequest.current && gitStatusIdentityRef.current === gitStatusIdentity) setGitStatusLoading(false)
     }
-  }, [project?.id, projectSupportsGit, showArchivedProjects])
+  }, [project?.id, gitStatusIdentity])
 
   useEffect(() => {
     gitStatusRequest.current += 1
     setGitStatus(project ? gitStatusCache.get(project.id) ?? null : null)
     setGitStatusError('')
+    setGitStatusLoading(false)
     if (!project || showArchivedProjects || !projectSupportsGit) return
-    void refreshGitStatus()
-    const refreshOnFocus = () => void refreshGitStatus()
-    const timer = window.setInterval(() => void refreshGitStatus(), 12_000)
-    window.addEventListener('focus', refreshOnFocus)
+    const stopPolling = startSettledPolling({
+      run: refreshGitStatus,
+      intervalMs: 12_000,
+      visibility: document,
+      focus: window
+    })
     return () => {
-      window.clearInterval(timer)
-      window.removeEventListener('focus', refreshOnFocus)
+      gitStatusRequest.current += 1
+      stopPolling()
     }
   }, [project?.id, projectSupportsGit, refreshGitStatus, showArchivedProjects])
 
@@ -1283,9 +1297,9 @@ export function App() {
     )
     if (!projectId || !repositoryUrl || showArchivedProjects) return
     const request = githubVisibilityRequest.current
-    const refreshVisibility = () => {
+    const refreshVisibility = async () => {
       setGithubVisibilityLoading(true)
-      void window.projectConsole.git
+      await window.projectConsole.git
         .repositoryVisibility(projectId)
         .then((status) => {
           if (request === githubVisibilityRequest.current) {
@@ -1306,9 +1320,16 @@ export function App() {
           }
         })
     }
-    refreshVisibility()
-    window.addEventListener('focus', refreshVisibility)
-    return () => window.removeEventListener('focus', refreshVisibility)
+    const stopPolling = startSettledPolling({
+      run: refreshVisibility,
+      intervalMs: null,
+      visibility: document,
+      focus: window
+    })
+    return () => {
+      githubVisibilityRequest.current += 1
+      stopPolling()
+    }
   }, [project?.id, project?.repositoryUrl, showArchivedProjects])
 
   useEffect(
@@ -1334,11 +1355,12 @@ export function App() {
   useEffect(() => {
     if (!visibleConnectionIds.length) return
     let active = true
-    const timers: number[] = []
     const discover = async (connectionId: string) => {
       const startedAt = performance.now()
       try {
-        const changes = await window.projectConsole.terminals.discover(connectionId)
+        const changes = await discoveryReads.run(connectionId, () =>
+          window.projectConsole.terminals.discover(connectionId)
+        )
         if (!active) return
         if (import.meta.env.DEV) {
           console.debug('[PanePilot performance] tmux discovery', {
@@ -1354,15 +1376,14 @@ export function App() {
         // must not block the locally cached project and terminal workspace.
       }
     }
-    for (const connectionId of visibleConnectionIds) {
-      void discover(connectionId)
-      timers.push(
-        window.setInterval(() => void discover(connectionId), 15_000)
-      )
-    }
+    // Connection lifecycle monitoring remains active while the window is hidden;
+    // only the next read is delayed until the previous one has settled.
+    const stopPolling = visibleConnectionIds.map((connectionId) =>
+      startSettledPolling({ run: () => discover(connectionId), intervalMs: 15_000 })
+    )
     return () => {
       active = false
-      for (const timer of timers) window.clearInterval(timer)
+      for (const stop of stopPolling) stop()
     }
     // The stable key prevents a second scan when both panes share one machine.
   }, [visibleConnectionKey])

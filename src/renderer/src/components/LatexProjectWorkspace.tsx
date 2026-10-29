@@ -53,6 +53,7 @@ import {
   type WorkspaceTabId
 } from '../lib/workspaceHistory'
 import { ActionsPanel } from './ActionsPanel'
+import { InFlightReads, startSettledPolling } from '../lib/settledPolling'
 import { ChatHistoryPanel } from './ChatHistoryPanel'
 import { FilesPanel } from './FilesPanel'
 import { HistoryPanel } from './HistoryPanel'
@@ -97,6 +98,7 @@ function isLatexWorkspaceTab(tab: WorkspaceTabId): tab is WorkspaceTab {
 const latexWorkspaceTabs = new Map<string, WorkspaceTab>()
 const openedPdfProjects = new Set<string>()
 const latexWorkspaceCache = new Map<string, LatexWorkspace>()
+const changeReads = new InFlightReads<string, LatexChangeSet>()
 
 export function LatexProjectWorkspace({
   project,
@@ -173,6 +175,21 @@ export function LatexProjectWorkspace({
   const changeSession =
     inlineSession ??
     (activeSession?.latexChat?.mode === 'edit' ? activeSession : null)
+  const changeIdentity = `${project.id}\u0000${changeSession?.id ?? ''}`
+  const changeIdentityRef = useRef(changeIdentity)
+  changeIdentityRef.current = changeIdentity
+  const changeVisibleRef = useRef(false)
+  changeVisibleRef.current = workspaceActive && tab === 'manuscript'
+  const changeRequestRef = useRef(0)
+  const changesClearingRef = useRef(new Set<string>())
+  const changesMountedRef = useRef(true)
+  useEffect(() => {
+    changesMountedRef.current = true
+    return () => {
+      changesMountedRef.current = false
+      changeRequestRef.current += 1
+    }
+  }, [])
 
   const refreshInlineEdits = useCallback(async () => {
     if (typeof window.projectConsole.latex.listInlineEdits !== 'function') {
@@ -423,28 +440,61 @@ export function LatexProjectWorkspace({
   ])
 
   const refreshChanges = useCallback(async () => {
+    if (
+      !changesMountedRef.current ||
+      !changeVisibleRef.current || document.hidden ||
+      changeIdentityRef.current !== changeIdentity ||
+      changesClearingRef.current.has(changeIdentity)
+    ) return
     if (!changeSession) {
       setChanges(null)
       return
     }
+    const request = ++changeRequestRef.current
     try {
-      setChanges(await window.projectConsole.latex.changes(changeSession.id))
+      const next = await changeReads.run(changeSession.id, () =>
+        window.projectConsole.latex.changes(changeSession.id)
+      )
+      if (
+        changesMountedRef.current &&
+        request === changeRequestRef.current &&
+        changeIdentityRef.current === changeIdentity
+      ) {
+        setChanges(next)
+      }
     } catch {
       // Change tracking is supplemental; the editor and terminal should remain usable.
     }
-  }, [changeSession?.id])
+  }, [changeIdentity, changeSession?.id])
 
   useEffect(() => {
-    void refreshChanges()
-    if (
-      changeSession?.state !== 'running' ||
-      changeSession.latexChat?.purpose === 'inline-edit'
-    ) {
-      return
+    setChanges(null)
+    return () => {
+      changeRequestRef.current += 1
     }
-    const timer = window.setInterval(() => void refreshChanges(), 1_800)
-    return () => window.clearInterval(timer)
-  }, [refreshChanges, changeSession?.state])
+  }, [changeIdentity])
+
+  useEffect(() => {
+    if (!workspaceActive || tab !== 'manuscript') return
+    const stopPolling = startSettledPolling({
+      run: refreshChanges,
+      intervalMs:
+        changeSession?.state === 'running' &&
+        changeSession.latexChat?.purpose !== 'inline-edit' ? 1_800 : null,
+      visibility: document,
+      focus: window
+    })
+    return () => {
+      changeRequestRef.current += 1
+      stopPolling()
+    }
+  }, [
+    refreshChanges,
+    changeSession?.state,
+    changeSession?.latexChat?.purpose,
+    workspaceActive,
+    tab
+  ])
 
   async function startChat(input: StartLatexChatInput) {
     const session = await window.projectConsole.latex.startChat(input)
@@ -473,13 +523,7 @@ export function LatexProjectWorkspace({
         instruction
       })
       void Promise.all([onChanged(), refreshInlineEdits(), loadWorkspace()])
-        .then(async () => {
-          if (changeSession) {
-            setChanges(
-              await window.projectConsole.latex.changes(changeSession.id)
-            )
-          }
-        })
+        .then(refreshChanges)
         .catch(() => {
           // Source application already succeeded. Supplemental project state
           // can catch up on its normal refresh without delaying the editor.
@@ -494,9 +538,7 @@ export function LatexProjectWorkspace({
   async function rollbackInlineEdit(editId: string) {
     const edit = await window.projectConsole.latex.rollbackInlineEdit(editId)
     await Promise.all([refreshInlineEdits(), loadWorkspace()])
-    if (changeSession) {
-      setChanges(await window.projectConsole.latex.changes(changeSession.id))
-    }
+    await refreshChanges()
     return edit
   }
 
@@ -532,9 +574,21 @@ export function LatexProjectWorkspace({
   }
 
   async function clearChanges() {
-    if (!changeSession) return
-    await window.projectConsole.latex.clearChanges(changeSession.id)
-    setChanges({ sessionId: changeSession.id, capturedAt: null, files: [] })
+    if (!changeSession || changesClearingRef.current.has(changeIdentity)) return
+    changesClearingRef.current.add(changeIdentity)
+    changeRequestRef.current += 1
+    try {
+      // Let an already-running snapshot settle before clearing its backend
+      // baseline, so a later read cannot rejoin the obsolete snapshot.
+      await changeReads.wait(changeSession.id)
+      await window.projectConsole.latex.clearChanges(changeSession.id)
+      if (changesMountedRef.current && changeIdentityRef.current === changeIdentity) {
+        setChanges({ sessionId: changeSession.id, capturedAt: null, files: [] })
+      }
+    } finally {
+      if (changeIdentityRef.current === changeIdentity) changeRequestRef.current += 1
+      changesClearingRef.current.delete(changeIdentity)
+    }
   }
 
   function openContext() {
