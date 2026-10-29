@@ -103,7 +103,7 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
     setCopiedSessionId(null)
     setDetailError('')
     void window.projectConsole.conversations
-      .get(project.id, selectedId, query)
+      .get(project.id, selectedId)
       .then((conversation) => {
         if (active) setDetail(conversation)
       })
@@ -113,7 +113,7 @@ export function ChatHistoryPanel({ project }: { project: Project }) {
     return () => {
       active = false
     }
-  }, [project.id, query, selectedId, refresh])
+  }, [project.id, selectedId, refresh])
 
   const parent = useMemo(() => detail?.parentProviderSessionId
     ? conversations.find((item) => item.provider === detail.provider && item.providerSessionId === detail.parentProviderSessionId)

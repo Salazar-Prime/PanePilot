@@ -13,6 +13,8 @@ import type {
 const execFileAsync = promisify(execFile)
 const CACHE_MS = 5_000
 const MAX_REMOTE_OUTPUT = 20 * 1024 * 1024
+const MAX_CACHE_BYTES = 32 * 1024 * 1024
+const MAX_CACHE_ENTRIES = 8
 
 type RemoteMessage = Omit<ConversationMessage, 'id'>
 
@@ -41,14 +43,33 @@ interface RemoteScanResult {
   codexSessions: RemoteCodexSession[]
 }
 
-interface CachedScan {
+interface CachedRemoteResult {
   expiresAt: number
-  result: RemoteScanResult
+  retainedBytes: number
+  value: RemoteScanResult | RemoteCodexSession[]
 }
 
-interface CachedCodexSessions {
-  expiresAt: number
-  sessions: RemoteCodexSession[]
+interface RemoteConversationIndexerOptions {
+  executeRemoteScript?: typeof executeRemoteScript
+  cacheMaxBytes?: number
+  cacheMaxEntries?: number
+}
+
+// Account for UTF-16 strings and object/array slots, not just compressed SSH
+// output bytes. This is a conservative cache budget, not a V8 heap measurement.
+function retainedSize(value: unknown): number {
+  if (typeof value === 'string') return 48 + value.length * 2
+  if (Array.isArray(value)) {
+    return value.reduce<number>((total, item) => total + 8 + retainedSize(item), 64)
+  }
+  if (value && typeof value === 'object') {
+    let bytes = 64
+    for (const [key, item] of Object.entries(value)) {
+      bytes += 16 + key.length * 2 + retainedSize(item)
+    }
+    return bytes
+  }
+  return 8
 }
 
 export const REMOTE_SCAN_SCRIPT = String.raw`
@@ -464,8 +485,78 @@ async function executeRemoteScript(
 }
 
 export class RemoteConversationIndexer {
-  private readonly cache = new Map<string, CachedScan>()
-  private readonly codexSessionCache = new Map<string, CachedCodexSessions>()
+  // One shared allowance across every remote project and both request kinds.
+  // The application owns one indexer; idle projects do not retain transcripts
+  // forever merely because nobody requests their expired entries again.
+  private readonly cache = new Map<string, CachedRemoteResult>()
+  private retainedCacheBytes = 0
+  private expiryTimer: ReturnType<typeof setTimeout> | null = null
+  private readonly pendingScans = new Map<string, Promise<RemoteScanResult>>()
+  private readonly pendingCodexSessions = new Map<string, Promise<RemoteCodexSession[]>>()
+  private readonly execute: typeof executeRemoteScript
+  private readonly cacheMaxBytes: number
+  private readonly cacheMaxEntries: number
+
+  constructor(options: RemoteConversationIndexerOptions = {}) {
+    this.execute = options.executeRemoteScript ?? executeRemoteScript
+    this.cacheMaxBytes = options.cacheMaxBytes ?? MAX_CACHE_BYTES
+    this.cacheMaxEntries = options.cacheMaxEntries ?? MAX_CACHE_ENTRIES
+  }
+
+  private deleteCached(key: string): void {
+    const existing = this.cache.get(key)
+    if (!existing) return
+    this.retainedCacheBytes -= existing.retainedBytes
+    this.cache.delete(key)
+  }
+
+  private evictExpired(): void {
+    const now = Date.now()
+    for (const [key, entry] of this.cache) {
+      if (entry.expiresAt <= now) this.deleteCached(key)
+    }
+  }
+
+  private scheduleExpiry(): void {
+    if (this.expiryTimer) clearTimeout(this.expiryTimer)
+    this.expiryTimer = null
+    if (!this.cache.size) return
+    let nextExpiry = Infinity
+    for (const entry of this.cache.values()) nextExpiry = Math.min(nextExpiry, entry.expiresAt)
+    this.expiryTimer = setTimeout(() => {
+      this.expiryTimer = null
+      this.evictExpired()
+      this.scheduleExpiry()
+    }, Math.max(1, nextExpiry - Date.now()))
+    this.expiryTimer.unref()
+  }
+
+  private cached<T extends RemoteScanResult | RemoteCodexSession[]>(key: string): T | undefined {
+    this.evictExpired()
+    const entry = this.cache.get(key)
+    if (!entry) return undefined
+    this.cache.delete(key)
+    this.cache.set(key, entry)
+    return entry.value as T
+  }
+
+  private retain(key: string, value: RemoteScanResult | RemoteCodexSession[], ttl: number): void {
+    this.evictExpired()
+    this.deleteCached(key)
+    const retainedBytes = retainedSize(value) + key.length * 2 + 128
+    // Oversized results still reach the caller in full. Only retention is
+    // bounded, so search, ancestry, and exact provider IDs never get truncated.
+    if (this.cacheMaxEntries > 0 && retainedBytes <= this.cacheMaxBytes) {
+      while (this.cache.size >= this.cacheMaxEntries || this.retainedCacheBytes + retainedBytes > this.cacheMaxBytes) {
+        const oldest = this.cache.keys().next().value
+        if (oldest === undefined) break
+        this.deleteCached(oldest)
+      }
+      this.cache.set(key, { expiresAt: Date.now() + ttl, retainedBytes, value })
+      this.retainedCacheBytes += retainedBytes
+    }
+    this.scheduleExpiry()
+  }
 
   async list(alias: string, projectFolder: string, query = '', hiddenCount = 0): Promise<ConversationSummary[]> {
     const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -574,27 +665,34 @@ export class RemoteConversationIndexer {
     alias: string,
     projectFolder: string
   ): Promise<RemoteCodexSession[]> {
-    const key = `${alias}\u0000${projectFolder}`
-    const cached = this.codexSessionCache.get(key)
-    if (cached && cached.expiresAt > Date.now()) return cached.sessions
-    const encoded = await executeRemoteScript(
-      alias,
-      REMOTE_CODEX_SESSION_SCRIPT,
-      projectFolder,
-      2 * 1024 * 1024,
-      10_000
-    )
-    const sessions = JSON.parse(
-      Buffer.from(encoded, 'base64').toString('utf8')
-    ) as RemoteCodexSession[]
-    if (!Array.isArray(sessions)) {
-      throw new Error('The remote Codex session response was malformed.')
+    const key = `sessions\u0000${alias}\u0000${projectFolder}`
+    const pending = this.pendingCodexSessions.get(key)
+    if (pending) return pending
+    const cached = this.cached<RemoteCodexSession[]>(key)
+    if (cached) return cached
+    const request = (async () => {
+      const encoded = await this.execute(
+        alias,
+        REMOTE_CODEX_SESSION_SCRIPT,
+        projectFolder,
+        2 * 1024 * 1024,
+        10_000
+      )
+      const sessions = JSON.parse(
+        Buffer.from(encoded, 'base64').toString('utf8')
+      ) as RemoteCodexSession[]
+      if (!Array.isArray(sessions)) {
+        throw new Error('The remote Codex session response was malformed.')
+      }
+      this.retain(key, sessions, 2_000)
+      return sessions
+    })()
+    this.pendingCodexSessions.set(key, request)
+    try {
+      return await request
+    } finally {
+      this.pendingCodexSessions.delete(key)
     }
-    this.codexSessionCache.set(key, {
-      expiresAt: Date.now() + 2_000,
-      sessions
-    })
-    return sessions
   }
 
   private async scan(
@@ -602,19 +700,31 @@ export class RemoteConversationIndexer {
     projectFolder: string,
     force = false
   ): Promise<RemoteScanResult> {
-    const key = `${alias}\u0000${projectFolder}`
-    const cached = this.cache.get(key)
-    if (!force && cached && cached.expiresAt > Date.now()) return cached.result
+    const key = `scan\u0000${alias}\u0000${projectFolder}`
+    // Force bypasses a completed cached scan, but never starts a second copy
+    // of an already running scan or lets an older result overwrite a new one.
+    const pending = this.pendingScans.get(key)
+    if (pending) return pending
+    const cached = this.cached<RemoteScanResult>(key)
+    if (!force && cached) return cached
 
-    const encoded = await executeRemoteScript(
-      alias,
-      REMOTE_SCAN_SCRIPT,
-      projectFolder,
-      MAX_REMOTE_OUTPUT,
-      20_000
-    )
-    const result = decodeRemoteScan(encoded)
-    this.cache.set(key, { expiresAt: Date.now() + CACHE_MS, result })
-    return result
+    const request = (async () => {
+      const encoded = await this.execute(
+        alias,
+        REMOTE_SCAN_SCRIPT,
+        projectFolder,
+        MAX_REMOTE_OUTPUT,
+        20_000
+      )
+      const result = decodeRemoteScan(encoded)
+      this.retain(key, result, CACHE_MS)
+      return result
+    })()
+    this.pendingScans.set(key, request)
+    try {
+      return await request
+    } finally {
+      this.pendingScans.delete(key)
+    }
   }
 }

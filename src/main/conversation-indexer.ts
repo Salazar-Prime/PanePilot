@@ -33,11 +33,17 @@ interface ParsedConversation {
   messages: ConversationMessage[]
 }
 
+export interface ConversationRoot { provider: ConversationProvider; path: string }
+export interface ConversationCacheOptions { maxDetailBytes?: number; maxDetailEntries?: number }
 interface CacheEntry {
-  size: number
-  mtimeMs: number
-  conversation: ParsedConversation | null
+  fingerprint: string
+  provider: ConversationProvider
+  summary: ConversationSummary | null
 }
+interface DetailEntry { conversation: ParsedConversation; bytes: number }
+
+export const MAX_CONVERSATION_DETAIL_BYTES = 16 * 1024 * 1024
+export const MAX_CONVERSATION_DETAIL_ENTRIES = 8
 
 type JsonRecord = Record<string, unknown>
 
@@ -291,7 +297,7 @@ function countMatches(text: string, query: string): number {
   return count
 }
 
-function snippetFor(conversation: ParsedConversation, query: string): string {
+function snippetFor(conversation: { messages: readonly Pick<ConversationMessage, 'content'>[] }, query: string): string {
   const fallback = conversation.messages[0]?.content ?? ''
   if (!query) return fallback.replace(/\s+/g, ' ').slice(0, 180)
   const matching = conversation.messages.find((message) =>
@@ -306,49 +312,43 @@ function snippetFor(conversation: ParsedConversation, query: string): string {
 }
 
 export class ConversationIndexer {
+  // The catalog retains compact summaries, never full transcripts. This
+  // synchronous engine runs in the archive worker in the desktop application.
   private readonly cache = new Map<string, CacheEntry>()
-  constructor(private readonly roots: Array<{ provider: ConversationProvider; path: string }> = [
+  private readonly details = new Map<string, DetailEntry>()
+  private detailBytes = 0
+  private readonly maxDetailBytes: number
+  private readonly maxDetailEntries: number
+  constructor(private readonly roots: ConversationRoot[] = [
     { provider: 'codex', path: join(homedir(), '.codex', 'sessions') },
     { provider: 'claude', path: join(homedir(), '.claude', 'projects') }
-  ]) {}
+  ], options: ConversationCacheOptions = {}) {
+    this.maxDetailBytes = Math.max(0, options.maxDetailBytes ?? MAX_CONVERSATION_DETAIL_BYTES)
+    this.maxDetailEntries = Math.max(0, options.maxDetailEntries ?? MAX_CONVERSATION_DETAIL_ENTRIES)
+  }
+
+  diagnostics() {
+    return { catalogFiles: this.cache.size, detailEntries: this.details.size,
+      detailBytes: this.detailBytes, maxDetailBytes: this.maxDetailBytes,
+      maxDetailEntries: this.maxDetailEntries, heapUsed: process.memoryUsage().heapUsed }
+  }
 
   list(projectFolder: string, query = '', hiddenCount = 0): ConversationSummary[] {
     const normalizedFolder = resolve(projectFolder)
     const normalizedQuery = query.trim().toLocaleLowerCase()
-    const summaries = this.projectConversations(normalizedFolder)
-      .map((conversation) => {
-        const display = conversationDisplayWindow(conversation, hiddenCount)
-        const searchable = [
-          conversation.title,
-          conversation.agentName ?? '',
-          conversation.agentPath ?? '',
-          conversation.workingDirectory,
-          ...conversation.messages.map((message) => message.content)
-        ]
-        const matchCount = normalizedQuery
-          ? searchable.reduce((total, value) => total + countMatches(value, normalizedQuery), 0)
-          : 0
-        return {
-          id: conversation.id,
-          provider: conversation.provider,
-          providerSessionId: conversation.providerSessionId,
-          parentProviderSessionId: conversation.parentProviderSessionId,
-          agentName: conversation.agentName,
-          agentPath: conversation.agentPath,
-          title: display.title,
-          workingDirectory: conversation.workingDirectory,
-          updatedAt: conversation.updatedAt,
-          messageCount: conversation.messages.length,
-          snippet: snippetFor({ ...conversation, messages: conversation.messages.slice(display.hiddenCount) }, normalizedQuery),
-          matchCount
-        }
+    const summaries = this.projectEntries(normalizedFolder)
+      .flatMap(({ path, summary }): ConversationSummary[] => {
+        if (!normalizedQuery && !hiddenCount) return [summary]
+        const conversation = this.readConversation(path)
+        return conversation ? [this.summaryFor(conversation, normalizedQuery, hiddenCount)] : []
       })
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
     return normalizedQuery ? matchingConversations(summaries) : summaries
   }
 
   get(projectFolder: string, id: string, query = ''): ConversationDetail {
-    const conversation = this.projectConversations(projectFolder).find((candidate) => candidate.id === id)
+    const entry = this.projectEntries(projectFolder).find((candidate) => candidate.summary.id === id)
+    const conversation = entry ? this.readConversation(entry.path) : null
     if (!conversation) {
       throw new Error('Conversation not found for this project.')
     }
@@ -393,7 +393,7 @@ export class ConversationIndexer {
     const earliest = Number.isFinite(terminalTime) ? terminalTime - 10_000 : 0
     const candidates: Array<{ id: string; timestamp: number }> = []
 
-    for (const path of collectJsonlFiles(join(homedir(), '.codex', 'sessions'))) {
+    for (const path of this.roots.filter((root) => root.provider === 'codex').flatMap((root) => collectJsonlFiles(root.path))) {
       let stat
       try {
         stat = statSync(path)
@@ -428,26 +428,28 @@ export class ConversationIndexer {
       )
       if (exact) return exact.id
 
-      try {
-        const indexPath = join(homedir(), '.codex', 'session_index.jsonl')
-        const indexedId = readFileSync(indexPath, 'utf8')
-          .split(/\r?\n/)
-          .flatMap((line): string[] => {
-            if (!line.includes(providerSessionHint)) return []
-            try {
-              const record = object(JSON.parse(line))
-              return string(record?.thread_name) === providerSessionHint
-                ? [string(record?.id)].filter((id): id is string => Boolean(id))
-                : []
-            } catch {
-              return []
-            }
-          })
-          .at(-1)
-        const exact = candidates.find((candidate) => candidate.id === indexedId)
-        if (exact) return exact.id
-      } catch {
-        // Older Codex versions may not have a session index.
+      for (const root of this.roots.filter((root) => root.provider === 'codex')) {
+        try {
+          const indexPath = join(dirname(root.path), 'session_index.jsonl')
+          const indexedId = readFileSync(indexPath, 'utf8')
+            .split(/\r?\n/)
+            .flatMap((line): string[] => {
+              if (!line.includes(providerSessionHint)) return []
+              try {
+                const record = object(JSON.parse(line))
+                return string(record?.thread_name) === providerSessionHint
+                  ? [string(record?.id)].filter((id): id is string => Boolean(id))
+                  : []
+              } catch {
+                return []
+              }
+            })
+            .at(-1)
+          const exact = candidates.find((candidate) => candidate.id === indexedId)
+          if (exact) return exact.id
+        } catch {
+          // Older Codex versions may not have a session index.
+        }
       }
     }
     return null
@@ -492,42 +494,103 @@ export class ConversationIndexer {
     )
   }
 
-  private indexAll(): ParsedConversation[] {
-    const found: ParsedConversation[] = []
+  private summaryFor(conversation: ParsedConversation, query = '', hiddenCount = 0): ConversationSummary {
+    const display = conversationDisplayWindow(conversation, hiddenCount)
+    const searchable = [conversation.title, conversation.agentName ?? '', conversation.agentPath ?? '',
+      conversation.workingDirectory, ...conversation.messages.map((message) => message.content)]
+    return {
+      id: conversation.id, provider: conversation.provider,
+      providerSessionId: conversation.providerSessionId,
+      parentProviderSessionId: conversation.parentProviderSessionId,
+      agentName: conversation.agentName, agentPath: conversation.agentPath,
+      // Copy truncated strings so a short V8 slice cannot pin a multi-megabyte
+      // first message after its parsed detail is evicted.
+      title: Buffer.from(display.title).toString(), workingDirectory: conversation.workingDirectory,
+      updatedAt: conversation.updatedAt, messageCount: conversation.messages.length,
+      snippet: Buffer.from(snippetFor({ messages: display.messages }, query)).toString(),
+      matchCount: query ? searchable.reduce((total, value) => total + countMatches(value, query), 0) : 0
+    }
+  }
+
+  private dropDetail(path: string): void {
+    const entry = this.details.get(path)
+    if (entry) this.detailBytes -= entry.bytes
+    this.details.delete(path)
+  }
+
+  private rememberDetail(path: string, conversation: ParsedConversation): void {
+    this.dropDetail(path)
+    // Charge UTF-16 storage plus message/metadata overhead conservatively. A
+    // single oversized archive can be opened/searched but is never retained.
+    const bytes = 1024 + Object.values(conversation).reduce<number>((sum, value) =>
+      sum + (typeof value === 'string' ? value.length * 2 : 0), 0) +
+      conversation.messages.reduce((sum, message) => sum + 256 +
+        2 * (message.id.length + message.content.length + (message.timestamp?.length ?? 0)), 0)
+    if (!this.maxDetailEntries || bytes > this.maxDetailBytes) return
+    while (this.details.size >= this.maxDetailEntries || this.detailBytes + bytes > this.maxDetailBytes) {
+      const oldest = this.details.keys().next().value
+      if (oldest === undefined) break
+      this.dropDetail(oldest)
+    }
+    this.details.set(path, { conversation, bytes })
+    this.detailBytes += bytes
+  }
+
+  private readConversation(path: string): ParsedConversation | null {
+    const entry = this.cache.get(path)
+    if (!entry) return null
+    const cached = this.details.get(path)
+    if (cached) {
+      this.details.delete(path)
+      this.details.set(path, cached)
+      return cached.conversation
+    }
+    try {
+      const source = readFileSync(path, 'utf8')
+      const updatedAt = statSync(path).mtime.toISOString()
+      const conversation = entry.provider === 'codex'
+        ? parseCodexConversation(path, source, updatedAt)
+        : parseClaudeConversation(path, source, updatedAt)
+      if (conversation) this.rememberDetail(path, conversation)
+      return conversation
+    } catch { return null }
+  }
+
+  private indexAll(): ConversationSummary[] {
+    const found: ConversationSummary[] = []
     const livePaths = new Set<string>()
     for (const root of this.roots) {
       for (const path of collectJsonlFiles(root.path)) {
+        let stat
+        try { stat = statSync(path) } catch { continue }
         livePaths.add(path)
-        const stat = statSync(path)
+        // ctime + inode also catch equal-size rewrites with restored mtime and
+        // atomic replacement. Truncation/append invalidate the same entry.
+        const fingerprint = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
         const cached = this.cache.get(path)
-        if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
-          if (cached.conversation) found.push(cached.conversation)
+        if (cached?.fingerprint === fingerprint) {
+          if (cached.summary) found.push(cached.summary)
           continue
         }
-        let conversation: ParsedConversation | null = null
-        try {
-          const source = readFileSync(path, 'utf8')
-          const updatedAt = stat.mtime.toISOString()
-          conversation =
-            root.provider === 'codex'
-              ? parseCodexConversation(path, source, updatedAt)
-              : parseClaudeConversation(path, source, updatedAt)
-        } catch {
-          conversation = null
-        }
-        this.cache.set(path, { size: stat.size, mtimeMs: stat.mtimeMs, conversation })
-        if (conversation) found.push(conversation)
+        this.dropDetail(path)
+        this.cache.set(path, { fingerprint, provider: root.provider, summary: null })
+        const conversation = this.readConversation(path)
+        const summary = conversation ? this.summaryFor(conversation) : null
+        this.cache.set(path, { fingerprint, provider: root.provider, summary })
+        if (summary) found.push(summary)
       }
     }
     for (const path of this.cache.keys()) {
-      if (!livePaths.has(path)) this.cache.delete(path)
+      if (!livePaths.has(path)) { this.cache.delete(path); this.dropDetail(path) }
     }
     return found
   }
 
-  private projectConversations(projectFolder: string): ParsedConversation[] {
+  private projectEntries(projectFolder: string): Array<{ path: string; summary: ConversationSummary }> {
     const normalizedFolder = resolve(projectFolder)
-    return conversationsWithDescendants(this.indexAll(), (conversation) =>
-      resolve(conversation.workingDirectory) === normalizedFolder)
+    const selected = new Set(conversationsWithDescendants(this.indexAll(), (conversation) =>
+      resolve(conversation.workingDirectory) === normalizedFolder))
+    return [...this.cache].flatMap(([path, entry]) =>
+      entry.summary && selected.has(entry.summary) ? [{ path, summary: entry.summary }] : [])
   }
 }
