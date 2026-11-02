@@ -33,26 +33,32 @@ describe('LaTeX manuscript layout', () => {
     const storage = new MemoryStorage()
     expect(loadLatexManuscriptLayout('paper-a', storage)).toEqual({
       mapHidden: false,
-      commentsHidden: true,
-      autoSave: true
+      commentsHidden: true
     })
 
     saveLatexManuscriptLayout(
       'paper-a',
-      { mapHidden: true, commentsHidden: false, autoSave: false },
+      { mapHidden: true, commentsHidden: false },
       storage
     )
 
     expect(loadLatexManuscriptLayout('paper-a', storage)).toEqual({
       mapHidden: true,
-      commentsHidden: false,
-      autoSave: false
+      commentsHidden: false
     })
     expect(loadLatexManuscriptLayout('paper-b', storage)).toEqual({
       mapHidden: false,
-      commentsHidden: true,
-      autoSave: true
+      commentsHidden: true
     })
+  })
+  it('ignores the retired autosave-off flag while preserving layout preferences', () => {
+    const storage = new MemoryStorage()
+    storage.setItem('panepilot.latex-manuscript-layout-by-project', JSON.stringify({
+      paper: { autoSave: false, mapHidden: true, commentsHidden: false }
+    }))
+    expect(loadLatexManuscriptLayout('paper', storage)).toEqual({ mapHidden: true, commentsHidden: false })
+    saveLatexManuscriptLayout('paper', loadLatexManuscriptLayout('paper', storage), storage)
+    expect(storage.getItem('panepilot.latex-manuscript-layout-by-project')).not.toContain('autoSave')
   })
 })
 

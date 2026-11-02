@@ -405,6 +405,15 @@ function registerIpc(): void {
   ipcMain.handle('latex:get-workspace', (_event, projectId: string) =>
     latex.getWorkspace(projectId)
   )
+  const sourceSender = (event: Electron.IpcMainInvokeEvent) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid LaTeX source sender.')
+  }
+  ipcMain.handle('latex:read-source', (event, projectId: string, path: string, knownRevision?: string) => {
+    sourceSender(event); return latex.readSource(projectId, path, knownRevision)
+  })
+  ipcMain.handle('latex:save-source', (event, projectId: string, path: string, content: string, expectedContent: string) => {
+    sourceSender(event); return appUpdates.protectRestartWhile(() => latex.saveSource(projectId, path, content, expectedContent))
+  })
   ipcMain.handle('latex:source-revision', (_event, projectId: string) =>
     latex.sourceRevision(projectId)
   )

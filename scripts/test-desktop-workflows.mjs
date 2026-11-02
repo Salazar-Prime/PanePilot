@@ -104,12 +104,11 @@ async function runFixture() {
     await evaluate(`${expression}.click()`)
   }
   const api = (expression) => evaluate(`window.projectConsole.${expression}`)
-  const typeEditor = async (selector, text) => {
+  const withEditor = async (selector, code) => {
     // A hidden native window has no platform IME focus. Locate the live editor
     // ref through the React tree and use Monaco's ordinary edit API; production
     // model listeners, draft state, guards and persistence remain unchanged.
-    await delay(150)
-    await evaluate(`(() => {
+    return evaluate(`(() => {
       const container=document.querySelector(${JSON.stringify(selector)});
       let host=container;let fiber;
       while(host&&!fiber){const key=Object.keys(host).find(key=>key.startsWith('__reactFiber'));if(key)fiber=host[key];else host=host.parentElement;}
@@ -123,10 +122,23 @@ async function runFixture() {
         if(current.child)pending.push(current.child);if(current.sibling)pending.push(current.sibling);if(current.return)pending.push(current.return);
       }
       if(!editor)throw new Error('The mounted Monaco editor ref is unavailable.');
+      ${code}
+    })()`)
+  }
+  const typeEditor = async (selector, text) => {
+    await delay(150)
+    let writable = false
+    for (let attempt = 0; attempt < 100; attempt++) {
+      writable = await withEditor(selector, 'return !editor.getRawOptions().readOnly')
+      if (writable) break
+      await delay(20)
+    }
+    assert.ok(writable, 'The mounted workflow editor becomes writable.')
+    await withEditor(selector, `
       if(editor.getRawOptions().readOnly)throw new Error('The workflow editor is readonly.');
       editor.executeEdits('desktop-workflow-fixture',[{range:editor.getSelection(),text:${JSON.stringify(text)},forceMoveMarkers:true}]);
       editor.pushUndoStop();
-    })()`)
+    `)
   }
 
   try {
@@ -148,6 +160,9 @@ async function runFixture() {
     await evaluate(`localStorage.setItem('panepilot.latex-manuscript-layout-by-project',${JSON.stringify(JSON.stringify({ [latex.id]: { autoSave: false, mapHidden: false, commentsHidden: true } }))})`)
     await window.webContents.reload()
     await waitFor('document.querySelectorAll(".project-row").length===2', 'actual SQLite projects hydrated')
+    // This window stays hidden to avoid touching the owner's running app. Make
+    // only its test document visible to optional-read scheduling.
+    await evaluate(`Object.defineProperty(document,'hidden',{configurable:true,get:()=>false});document.dispatchEvent(new Event('visibilitychange'))`)
     await clickText('.session-row .sidebar-row-main', 'Workflow shell')
     await waitFor('!!document.querySelector(".xterm-rows")', 'actual xterm surface')
     await api(`terminals.write(${JSON.stringify(session.id)},${JSON.stringify("printf 'WORKFLOW_%s_OK\\n' TERMINAL\r")})`)
@@ -201,14 +216,53 @@ async function runFixture() {
     await waitFor('document.querySelector(".file-editor-shell .view-lines")?.textContent.includes("UNSAVED_FILES_DRAFT")', 'Files draft typed')
     await clickText('.project-row .sidebar-row-main', 'Workflow manuscript')
     await waitFor('!!document.querySelector(".latex-project-workspace .monaco-editor textarea")', 'real LaTeX source from main-process scan')
+    assert.equal(await evaluate('!!document.querySelector(".latex-autosave-toggle")'), false, 'Autosave is unconditional; no option is exposed.')
+    const manuscriptPath = join(temp, 'projects/manuscript/main.tex')
+    const originalSource = await readFile(manuscriptPath, 'utf8')
+    await withEditor('.latex-project-workspace .monaco-editor', 'editor.setPosition({lineNumber:4,column:3});window.fixtureSourceNode=editor.getDomNode();')
+    await writeFile(manuscriptPath, '% BACKEND_SOURCE_UPDATED\n' + originalSource)
+    await waitFor('document.querySelector(".latex-project-workspace .view-lines")?.textContent.includes("BACKEND_SOURCE_UPDATED")', 'external source refreshes the real Monaco model without a manual reload')
+    assert.deepEqual(await withEditor('.latex-project-workspace .monaco-editor', 'return editor.getPosition()'), { lineNumber: 4, column: 3 }, 'Background refresh preserves the cursor.')
+    assert.ok(await withEditor('.latex-project-workspace .monaco-editor', 'return editor.getDomNode()===window.fixtureSourceNode'), 'Background refresh retains the same editor instance.')
+    await withEditor('.latex-project-workspace .monaco-editor', 'editor.setPosition({lineNumber:1,column:1});')
+    steps.push('External source changes appear automatically in the actual LaTeX editor through the guarded source IPC.')
     await typeEditor('.latex-project-workspace .monaco-editor', '% UNSAVED_LATEX_DRAFT\n')
     await waitFor('document.querySelector(".latex-project-workspace .view-lines")?.textContent.includes("UNSAVED_LATEX_DRAFT")', 'LaTeX draft typed')
+    for (let attempt = 0; attempt < 200 && !(await readFile(manuscriptPath, 'utf8')).includes('UNSAVED_LATEX_DRAFT'); attempt++) await delay(40)
+    assert.ok((await readFile(manuscriptPath, 'utf8')).includes('UNSAVED_LATEX_DRAFT'), 'Legacy autosave:false does not disable source persistence.')
+    const savedSource = await readFile(manuscriptPath, 'utf8')
+    await typeEditor('.latex-project-workspace .monaco-editor', '% LOCAL_CONFLICT_DRAFT\n')
+    await writeFile(manuscriptPath, '% EXTERNAL_CONFLICT_VERSION\n' + savedSource)
+    await waitFor('!!document.querySelector(".latex-source-conflict")', 'overlapping backend edit stops autosave with a conflict')
+    assert.ok(await evaluate('document.querySelector(".latex-project-workspace .view-lines")?.textContent.includes("LOCAL_CONFLICT_DRAFT")'), 'Conflict preserves the live editor draft.')
+    assert.ok((await readFile(manuscriptPath, 'utf8')).includes('EXTERNAL_CONFLICT_VERSION'), 'Conflict preserves the external disk version.')
+    assert.equal((await readFile(manuscriptPath, 'utf8')).includes('LOCAL_CONFLICT_DRAFT'), false)
+    await evaluate('void(window.confirm=()=>true)')
+    await clickText('.latex-source-conflict button', 'Keep my version')
+    await waitFor('!document.querySelector(".latex-source-conflict")', 'explicit conflict resolution settles')
+    assert.ok((await readFile(manuscriptPath, 'utf8')).includes('LOCAL_CONFLICT_DRAFT'))
+    const resolvedSource = await readFile(manuscriptPath, 'utf8')
+    await typeEditor('.latex-project-workspace .monaco-editor', '% DISCARD_LOCAL_VERSION\n')
+    await writeFile(manuscriptPath, '% LOAD_DISK_VERSION\n' + resolvedSource)
+    await waitFor('!!document.querySelector(".latex-source-conflict")', 'second overlapping change is detected independently')
+    await clickText('.latex-source-conflict button', 'Load disk version')
+    await waitFor('!document.querySelector(".latex-source-conflict") && document.querySelector(".latex-project-workspace .view-lines")?.textContent.includes("LOAD_DISK_VERSION")', 'explicit disk version loads into the editor')
+    assert.equal(await evaluate('document.querySelector(".latex-project-workspace .view-lines")?.textContent.includes("DISCARD_LOCAL_VERSION")'), false)
+    steps.push('Always-on autosave ignores a legacy off preference; overlapping external edits preserve both versions until explicit guarded resolution.')
     await clickText('.workspace-tabs button', 'PDF Preview')
     await waitFor('Array.from(document.querySelectorAll("[data-pdf-page] canvas")).some(c=>c.width>100&&c.height>100)', 'real PDF source read and PDF.js worker render')
     await waitFor('document.querySelector("[data-pdf-page]")?.getAttribute("aria-busy")==="false"', 'PDF rendered')
     const pixelCounts = await evaluate(`(() => { const c=document.querySelector('[data-pdf-page] canvas');const p=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let dark=0,light=0;for(let i=0;i<p.length;i+=4){if(p[i]<8&&p[i+1]<8&&p[i+2]<8)dark++;if(p[i]>247&&p[i+1]>247&&p[i+2]>247)light++;}return{dark,light};})()`)
     assert.ok(pixelCounts.dark > 1000 && pixelCounts.light > 1000)
+    await delay(100)
+    const hiddenSourceReads = ipcCounts['latex:read-source']
+    const pdfReads = ipcCounts['latex:get-pdf-snapshot']
+    await writeFile(manuscriptPath, '% WHILE_MANUSCRIPT_HIDDEN\n' + await readFile(manuscriptPath, 'utf8'))
+    await delay(2300)
+    assert.equal(ipcCounts['latex:read-source'], hiddenSourceReads, 'The hidden Manuscript does not poll while PDF Preview is active.')
+    assert.equal(ipcCounts['latex:get-pdf-snapshot'], pdfReads, 'Source sync does not replace or recompile the PDF.')
     await clickText('.workspace-tabs button', 'Manuscript')
+    await waitFor('document.querySelector(".latex-project-workspace .view-lines")?.textContent.includes("WHILE_MANUSCRIPT_HIDDEN")', 'returning to Manuscript promptly refreshes the external source')
     await waitFor('document.querySelector(".latex-project-workspace .view-lines")?.textContent.includes("UNSAVED_LATEX_DRAFT")', 'LaTeX draft survives PDF capability switch')
     await clickText('.project-row .sidebar-row-main', 'Workflow terminal')
     await clickText('.workspace-tabs button', 'Files')
@@ -216,14 +270,21 @@ async function runFixture() {
     await clickText('.project-row .sidebar-row-main', 'Workflow manuscript')
     await waitFor('document.querySelector(".latex-project-workspace .view-lines")?.textContent.includes("UNSAVED_LATEX_DRAFT")', 'LaTeX draft survives project switch')
     assert.equal((await readFile(join(temp, 'projects/terminal/draft.txt'), 'utf8')).includes('UNSAVED_FILES_DRAFT'), false)
-    assert.equal((await readFile(join(temp, 'projects/manuscript/main.tex'), 'utf8')).includes('UNSAVED_LATEX_DRAFT'), false)
-    steps.push('Real Monaco Files and LaTeX drafts survive capability/project switches without writing the unsaved text to disk.')
+    assert.equal((await readFile(manuscriptPath, 'utf8')).includes('UNSAVED_LATEX_DRAFT'), true)
+    steps.push('Real Monaco drafts survive capability/project switches; Files remains unsaved while LaTeX is automatically persisted.')
+    await withEditor('.latex-project-workspace .monaco-editor', 'editor.setPosition({lineNumber:1,column:1});')
+    await typeEditor('.latex-project-workspace .monaco-editor', '% FLUSH_ON_PROJECT_SWITCH\n')
+    await clickText('.project-row .sidebar-row-main', 'Workflow terminal')
+    for (let attempt = 0; attempt < 200 && !(await readFile(manuscriptPath, 'utf8')).includes('FLUSH_ON_PROJECT_SWITCH'); attempt++) await delay(40)
+    assert.ok((await readFile(manuscriptPath, 'utf8')).includes('FLUSH_ON_PROJECT_SWITCH'), 'Leaving before the debounce still flushes the pending source draft.')
+    steps.push('Hidden Manuscript source polling sleeps, return refreshes immediately, and pending drafts persist when switching projects.')
     steps.push('Actual PDF IPC, PDF.js worker, and canvas render complete for a synthetic PDF.')
     await api(`terminals.stop(${JSON.stringify(session.id)})`)
     isolation.assertClean()
     assert.deepEqual(blockedRequests, [], 'No renderer network attempts.')
     assert.deepEqual(failedRequests, [], 'No failed asset loads.')
     assert.deepEqual(errors, [], 'No renderer errors.')
+    await evaluate(`Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'))`)
     await writeFile(join(temp, 'result.json'), JSON.stringify({ capturedAt: new Date().toISOString(), passed: true, electron: process.versions.electron,
       method: 'Actual out/main/index.js, production preload and built renderer in installed Electron. Temporary SQLite/profile/projects, patched test-only OS adapters, private tmux socket with empty config, fake SSH executable. No synthetic projectConsole bridge or replaced application modules.',
       steps, realIpcInvocations: ipcCalls, ipcCounts, childProcesses: isolation.calls, pdfPixels: pixelCounts, warnings, errors, blockedRequests, failedRequests,

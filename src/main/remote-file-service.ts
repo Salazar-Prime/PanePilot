@@ -514,7 +514,7 @@ function runRemotePython<T>(
   }
 }
 
-function runRemotePythonAsync<T>(
+export function runRemotePythonAsync<T>(
   sshAlias: string,
   script: string,
   payload: Record<string, unknown>,

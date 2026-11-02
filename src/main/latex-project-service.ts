@@ -54,6 +54,7 @@ import {
 } from './remote-file-service'
 import type { ParsedLatexSection, Store } from './store'
 import type { TerminalManager } from './terminal-manager'
+import { readLatexSource, saveLatexSource } from './latex-source-files'
 
 const MAX_LATEX_FILES = 256
 const MAX_LATEX_SCAN_ENTRIES = 20_000
@@ -946,6 +947,16 @@ export class LatexProjectService {
       MAX_LATEX_FILES,
       MAX_LATEX_SCAN_ENTRIES
     )
+  }
+
+  async readSource(projectId: string, path: string, knownRevision?: string) {
+    const { project, connection } = this.requireProject(projectId)
+    return readLatexSource(project.folder, connection, path, knownRevision)
+  }
+
+  async saveSource(projectId: string, path: string, content: string, expectedContent: string) {
+    const { project, connection } = this.requireProject(projectId)
+    return saveLatexSource(project.folder, connection, path, content, expectedContent)
   }
 
   async getPdf(projectId: string): Promise<LatexPdfDocument> {

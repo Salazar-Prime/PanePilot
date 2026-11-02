@@ -9,6 +9,9 @@ export function discardEditorDraft(path: string, savedValue: string): void {
   models.discard(path, savedValue)
 }
 
+/** Update the saved baseline without replacing another pane's live text. */
+export function recordEditorSave(path: string, savedValue: string): void { models.saved(path, savedValue) }
+
 export function forgetEditorModel(path: string, owner?: editor.IStandaloneCodeEditor | null): void { models.forget(path, owner ?? undefined) }
 
 type Props = EditorProps & { path: string; savedValue: string }
@@ -22,8 +25,8 @@ function EditorInstance({ savedValue, onMount, ...props }: Props) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const cancelRestoreRef = useRef<() => void>(() => {})
   const previousSaved = useRef(savedValue)
-  const current = useRef({ savedValue, onMount, onChange: props.onChange })
-  current.current = { savedValue, onMount, onChange: props.onChange }
+  const current = useRef({ savedValue, onMount, onChange: props.onChange, options: props.options })
+  current.current = { savedValue, onMount, onChange: props.onChange, options: props.options }
   const key = props.path
 
   useEffect(() => {
@@ -42,6 +45,9 @@ function EditorInstance({ savedValue, onMount, ...props }: Props) {
 
   return <RawEditor {...props} keepCurrentModel saveViewState={false} onMount={(instance, monaco) => {
     editorRef.current = instance
+    // Loading/editing can change before RawEditor's asynchronous ready event.
+    // Its initial onMount closure may otherwise retain the old readOnly option.
+    instance.updateOptions(current.current.options ?? {})
     const model = instance.getModel()!
     const view = models.acquire(key, model, current.current.savedValue, props.value ?? '', instance)
     if (view) instance.restoreViewState(view)

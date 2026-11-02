@@ -1,7 +1,6 @@
 export interface LatexManuscriptLayout {
   mapHidden: boolean
   commentsHidden: boolean
-  autoSave: boolean
 }
 
 const STORAGE_KEY = 'panepilot.latex-manuscript-layout-by-project'
@@ -20,8 +19,7 @@ function parseLayouts(raw: string | null): Record<string, LatexManuscriptLayout>
         isRecord(value)
           ? [[projectId, {
               mapHidden: value.mapHidden === true,
-              commentsHidden: value.commentsHidden !== false,
-              autoSave: value.autoSave !== false
+              commentsHidden: value.commentsHidden !== false
             }] as const]
           : []
       )
@@ -38,11 +36,10 @@ export function loadLatexManuscriptLayout(
   try {
     return parseLayouts(storage.getItem(STORAGE_KEY))[projectId] ?? {
       mapHidden: false,
-      commentsHidden: true,
-      autoSave: true
+      commentsHidden: true
     }
   } catch {
-    return { mapHidden: false, commentsHidden: true, autoSave: true }
+    return { mapHidden: false, commentsHidden: true }
   }
 }
 

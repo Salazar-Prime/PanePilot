@@ -1,5 +1,5 @@
 import type { OnMount } from '@monaco-editor/react'
-import { Editor, monaco, discardEditorDraft } from '../lib/monaco'
+import { Editor, monaco, recordEditorSave } from '../lib/monaco'
 import { LatexSourceCache, type LatexSourceSnapshot } from '../lib/latexSourceCache'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { cachedUpdateRestartGuard, useUpdateRestartGuard } from '../lib/updateRestartGuards'
@@ -19,7 +19,6 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
-  SaveAll,
   Send,
   Sparkles,
   Trash2,
@@ -32,6 +31,7 @@ import type {
   LatexInlineEditHistory,
   LatexSection,
   LatexSourceSelection,
+  LatexSourceFile,
   LatexWorkspace,
   Project
 } from '@shared/types'
@@ -47,6 +47,7 @@ import {
 } from '../lib/latexViewMemory'
 import { addShowInFinderAction } from '../lib/monacoFinderAction'
 import type { TerminalFileTarget } from '../lib/terminalFileLinks'
+import { startSettledPolling } from '../lib/settledPolling'
 
 if (!monaco.languages.getLanguages().some((language) => language.id === 'latex')) {
   monaco.languages.register({ id: 'latex', extensions: ['.tex'] })
@@ -91,6 +92,23 @@ function rememberSourceSnapshot(
   cachedUpdateRestartGuard(`latex:${key}`, snapshot.draft !== snapshot.savedContent ? 'Save your LaTeX source before updating PanePilot.' : null)
 }
 
+/** Finish a pending debounce when its project unmounts; never retry a failure. */
+async function flushDetachedSource(projectId: string, path: string): Promise<void> {
+  const key = sourceSnapshotKey(projectId, path)
+  for (let turn = 0; turn < 2; turn++) {
+    const snapshot = latexSourceSnapshots.get(key)
+    if (!snapshot || snapshot.draft === snapshot.savedContent) return
+    try {
+      const result = await window.projectConsole.latex.saveSource(projectId, path, snapshot.draft, snapshot.savedContent)
+      if (!result.saved) return
+      const current = latexSourceSnapshots.get(key)
+      if (!current || current.savedContent !== snapshot.savedContent) return
+      rememberSourceSnapshot(projectId, path, { ...current, savedContent: snapshot.draft })
+      recordEditorSave(`panepilot-latex/${projectId}/${path}`, snapshot.draft)
+    } catch { return /* The cached draft and updater guard remain until revisited. */ }
+  }
+}
+
 function mergeInlineEditIntoCachedDraft(
   snapshot: LatexSourceSnapshot,
   edit: LatexInlineEditHistory
@@ -115,6 +133,7 @@ function mergeInlineEditIntoCachedDraft(
 }
 
 interface Props {
+  visible?: boolean
   project: Project
   workspace: LatexWorkspace
   inlineEdits: LatexInlineEditHistory[]
@@ -224,6 +243,7 @@ function latexOutlineSignature(source: string): string {
 }
 
 export function LatexManuscript({
+  visible = true,
   project,
   workspace,
   inlineEdits,
@@ -284,6 +304,14 @@ export function LatexManuscript({
   const [inlineHistoryError, setInlineHistoryError] = useState('')
   const [error, setError] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [syncError, setSyncError] = useState('')
+  const [diskConflict, setDiskConflict] = useState<LatexSourceFile | null>(null)
+  const mountedRef = useRef(true)
+  const loadRequestRef = useRef(0)
+  const editVersionRef = useRef(0)
+  const saveInFlightRef = useRef(false)
+  const sourceReadInFlightRef = useRef(false)
+  const sourceRevisionRef = useRef({ path: '', revision: '' })
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
   const finderActionRef = useRef<{ dispose(): void } | null>(null)
   const graphicHoverRef = useRef<{ dispose(): void } | null>(null)
@@ -305,10 +333,11 @@ export function LatexManuscript({
   const commentFrameRef = useRef(0)
   const failedAutoSaveRef = useRef('')
   const inlineEditReloadGuardRef = useRef(false)
-  const inlineEditAppliedPathRef = useRef<string | null>(null)
   const viewMemoryFrameRef = useRef(0)
   const dirty = draft !== savedContent
   const inlineBusy = sendingInlineEdit || inlineRunning
+  const currentSourceRef = useRef({ path, draft, savedContent, loading, saving, inlineBusy, diskConflict })
+  currentSourceRef.current = { path, draft, savedContent, loading, saving, inlineBusy, diskConflict }
   useUpdateRestartGuard(dirty || inlineBusy || saving || savingComment || !!commentComposer?.body.trim() ? 'Save LaTeX changes and wait for editor operations to finish before updating PanePilot.' : null)
   activeFinderPathRef.current = path
   const selectedSection =
@@ -321,18 +350,6 @@ export function LatexManuscript({
       (total, file) => total + file.additions + file.modifications + file.deletions,
       0
     ) ?? 0
-  const changeSignature =
-    changes?.files
-      .map((file) =>
-        [
-          file.path,
-          ...file.highlights.map(
-            (change) =>
-              `${change.kind}:${change.startLine}:${change.startColumn}:${change.originalText}:${change.currentText}`
-          )
-        ].join('\u0000')
-      )
-      .join('\u0001') ?? ''
   const commentsForPath = useMemo(
     () => comments.filter((comment) => comment.path === path),
     [comments, path]
@@ -429,6 +446,7 @@ export function LatexManuscript({
   }
 
   async function load(nextPath: string, revealSection?: LatexSection | null) {
+    const request = ++loadRequestRef.current
     if (nextPath === activeFinderPathRef.current && !revealSection) {
       const editor = editorRef.current
       const selection = editor?.getSelection()
@@ -452,15 +470,19 @@ export function LatexManuscript({
     setError('')
     setSaveError('')
     try {
-      const preview = await window.projectConsole.files.preview(project.id, nextPath)
-      if (preview.binary || preview.truncated) {
-        throw new Error('LaTeX source files must be UTF-8 text no larger than 1 MB.')
-      }
+      const preview = await window.projectConsole.latex.readSource(project.id, nextPath)
+      if (!mountedRef.current || request !== loadRequestRef.current) return
+      if (preview.content == null) throw Error('The LaTeX source could not be read.')
+      sourceRevisionRef.current = { path: nextPath, revision: preview.revision }
       setPath(nextPath)
       graphicPreviewCacheRef.current.clear()
       graphicResolutionCacheRef.current.clear()
       setSavedContent(preview.content)
       setDraft(preview.content)
+      currentSourceRef.current = { ...currentSourceRef.current, path: nextPath, draft: preview.content, savedContent: preview.content }
+      setDiskConflict(null)
+      setSyncError('')
+      failedAutoSaveRef.current = ''
       requestAnimationFrame(() => {
         if (revealSection && revealSection.sourceFile === nextPath) {
           editorRef.current?.revealLineInCenter(revealSection.startLine)
@@ -468,6 +490,7 @@ export function LatexManuscript({
         }
       })
     } catch (caught) {
+      if (!mountedRef.current || request !== loadRequestRef.current) return
       if (
         pendingViewRestoreRef.current?.path === nextPath &&
         nextPath !== workspace.details.mainFile
@@ -478,7 +501,7 @@ export function LatexManuscript({
       }
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
-      setLoading(false)
+      if (mountedRef.current && request === loadRequestRef.current) setLoading(false)
     }
   }
 
@@ -521,7 +544,9 @@ export function LatexManuscript({
     pendingViewRestoreRef.current = null
   }, [loading, path, savedContent])
 
-  useLayoutEffect(() => {
+  // Monaco's React wrapper applies a controlled value in its passive effect.
+  // Restore after that child effect, not before the replacement moves markers.
+  useEffect(() => {
     const remembered = pendingReloadViewRef.current
     const editor = editorRef.current
     const model = editor?.getModel()
@@ -545,8 +570,19 @@ export function LatexManuscript({
     pendingReloadViewRef.current = null
   }, [loading, path, savedContent])
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      loadRequestRef.current++
+      const current = currentSourceRef.current
+      if (!current.loading) {
+        rememberSourceSnapshot(project.id, current.path, { savedContent: current.savedContent, draft: current.draft })
+        if (!current.inlineBusy && !current.diskConflict && !saveInFlightRef.current &&
+          failedAutoSaveRef.current !== `${current.path}\u0000${current.draft}`) {
+          void flushDetachedSource(project.id, current.path)
+        }
+      }
       if (viewMemoryFrameRef.current) {
         window.cancelAnimationFrame(viewMemoryFrameRef.current)
         viewMemoryFrameRef.current = 0
@@ -564,9 +600,8 @@ export function LatexManuscript({
         disposable.dispose()
       }
       inlineEditDisposablesRef.current = []
-    },
-    []
-  )
+    }
+  }, [])
 
   useEffect(() => {
     setInlineEdit(null)
@@ -586,14 +621,49 @@ export function LatexManuscript({
   }, [project.id, path, savedContent, draft, loading, error])
 
   useEffect(() => {
-    const changed = changes?.files.some((file) => file.path === path)
-    if (!changed || dirty || inlineEditReloadGuardRef.current) return
-    if (inlineEditAppliedPathRef.current === path) {
-      inlineEditAppliedPathRef.current = null
-      return
-    }
-    void load(path)
-  }, [changes?.capturedAt, changeSignature])
+    if (!visible || loading) return
+    let canceled = false
+    const stop = startSettledPolling({
+      intervalMs: 2000,
+      visibility: document,
+      focus: window,
+      run: async () => {
+        const before = currentSourceRef.current
+        if (before.loading || before.saving || before.inlineBusy || saveInFlightRef.current ||
+          inlineEditReloadGuardRef.current || sourceReadInFlightRef.current) return
+        sourceReadInFlightRef.current = true
+        const version = editVersionRef.current
+        try {
+          const known = sourceRevisionRef.current.path === path ? sourceRevisionRef.current.revision : ''
+          const file = await window.projectConsole.latex.readSource(project.id, path, known || undefined)
+          const current = currentSourceRef.current
+          if (canceled || !mountedRef.current || current.path !== path || current.loading || current.saving ||
+            current.inlineBusy || inlineEditReloadGuardRef.current || version !== editVersionRef.current ||
+            current.savedContent !== before.savedContent) return
+          sourceRevisionRef.current = { path, revision: file.revision }
+          setSyncError('')
+          if (file.content == null) return
+          const live = editorRef.current?.getModel()?.getValue() ?? current.draft
+          if (file.content === current.savedContent) {
+            if (current.diskConflict) failedAutoSaveRef.current = ''
+            setDiskConflict(null)
+            return
+          }
+          if (live !== current.savedContent && live !== file.content) { setDiskConflict(file); return }
+          rememberCurrentView()
+          pendingReloadViewRef.current = loadLatexManuscriptView(project.id)
+          currentSourceRef.current = { ...current, draft: file.content, savedContent: file.content, diskConflict: null }
+          setSavedContent(file.content); setDraft(file.content); setDiskConflict(null)
+          failedAutoSaveRef.current = ''
+          rememberSourceSnapshot(project.id, path, { savedContent: file.content, draft: file.content })
+          graphicPreviewCacheRef.current.clear(); graphicResolutionCacheRef.current.clear()
+        } catch (caught) {
+          if (!canceled && mountedRef.current) setSyncError(`Could not check source changes: ${caught instanceof Error ? caught.message : String(caught)}`)
+        } finally { sourceReadInFlightRef.current = false }
+      }
+    })
+    return () => { canceled = true; stop() }
+  }, [project.id, path, visible, loading])
 
   useEffect(() => {
     function saveShortcut(event: KeyboardEvent) {
@@ -608,8 +678,8 @@ export function LatexManuscript({
 
   useEffect(() => {
     if (
-      !manuscriptLayout.autoSave ||
       !dirty ||
+      diskConflict != null ||
       loading ||
       saving ||
       inlineBusy ||
@@ -627,7 +697,7 @@ export function LatexManuscript({
     }, 700)
     return () => window.clearTimeout(timer)
   }, [
-    manuscriptLayout.autoSave,
+    diskConflict,
     dirty,
     draft,
     savedContent,
@@ -658,19 +728,41 @@ export function LatexManuscript({
   async function save(
     content = draft,
     refreshWorkspace = true,
-    automatic = false
+    automatic = false,
+    expectedContent = savedContent
   ): Promise<boolean> {
-    if (inlineBusy || saving) return false
+    if (inlineBusy || saveInFlightRef.current) return false
     const targetPath = path
+    saveInFlightRef.current = true
     setSaving(true)
     setSaveError('')
     try {
-      await window.projectConsole.files.save(project.id, targetPath, content)
-      if (activeFinderPathRef.current === targetPath) setSavedContent(content)
+      const result = await window.projectConsole.latex.saveSource(project.id, targetPath, content, expectedContent)
+      if (result.saved) {
+        const cached = latexSourceSnapshots.get(sourceSnapshotKey(project.id, targetPath))
+        if (cached && (cached.savedContent === expectedContent || cached.savedContent === content)) {
+          rememberSourceSnapshot(project.id, targetPath, { ...cached, savedContent: content })
+          recordEditorSave(`panepilot-latex/${project.id}/${targetPath}`, content)
+        }
+      }
+      if (!mountedRef.current) {
+        if (result.saved) await flushDetachedSource(project.id, targetPath)
+        return result.saved
+      }
+      if (!result.saved) {
+        if (activeFinderPathRef.current === targetPath) setDiskConflict(result.file)
+        failedAutoSaveRef.current = `${targetPath}\u0000${content}`
+        return false
+      }
+      if (activeFinderPathRef.current === targetPath) {
+        currentSourceRef.current.savedContent = content
+        sourceRevisionRef.current = { path: targetPath, revision: '' }
+        setSavedContent(content); setDiskConflict(null)
+      }
       failedAutoSaveRef.current = ''
       if (refreshWorkspace) {
         void onWorkspaceRefresh().catch((caught) => {
-          setSaveError(
+          if (mountedRef.current) setSaveError(
             `Saved, but the Document Map could not refresh: ${
               caught instanceof Error ? caught.message : String(caught)
             }`
@@ -680,37 +772,36 @@ export function LatexManuscript({
       return true
     } catch (caught) {
       if (automatic) failedAutoSaveRef.current = `${targetPath}\u0000${content}`
-      setSaveError(caught instanceof Error ? caught.message : String(caught))
+      if (mountedRef.current) setSaveError(caught instanceof Error ? caught.message : String(caught))
       return false
     } finally {
-      setSaving(false)
+      saveInFlightRef.current = false
+      if (mountedRef.current) setSaving(false)
     }
   }
 
-  function canNavigate(): boolean {
-    if (!dirty) return true
-    if (!window.confirm('Discard your unsaved LaTeX changes?')) return false
-    discardEditorDraft(`panepilot-latex/${project.id}/${path}`, savedContent)
-    rememberSourceSnapshot(project.id, path, { savedContent, draft: savedContent })
-    setDraft(savedContent)
-    return true
+  async function canNavigate(): Promise<boolean> {
+    if (saveInFlightRef.current || loading) return false
+    const current = currentSourceRef.current
+    if (current.draft === current.savedContent) return true
+    const snapshot = current.draft
+    if (!(await save(snapshot, latexOutlineSignature(snapshot) !== latexOutlineSignature(current.savedContent)))) return false
+    return currentSourceRef.current.draft === snapshot
   }
 
-  function selectSection(section: LatexSection | null) {
-    if (!canNavigate()) return
+  async function selectSection(section: LatexSection | null) {
+    if (!(await canNavigate())) return
     setReviewPath(null)
     onSelectSection(section?.id ?? null)
     const nextPath = section?.sourceFile ?? workspace.details.mainFile
     if (nextPath === path) {
-      setDraft(savedContent)
       if (section) editorRef.current?.revealLineInCenter(section.startLine)
     }
   }
 
-  function reviewFile(nextPath: string) {
-    if (!canNavigate()) return
+  async function reviewFile(nextPath: string) {
+    if (!(await canNavigate())) return
     setReviewPath(nextPath)
-    setDraft(savedContent)
   }
 
   async function showActiveFileInFinder() {
@@ -1178,7 +1269,6 @@ export function LatexManuscript({
             ? cached.draft
             : preview.content)
       })
-      inlineEditAppliedPathRef.current = edit.path
       const activeModel = editorRef.current?.getModel()
       if (
         trackedModel &&
@@ -1494,23 +1584,6 @@ export function LatexManuscript({
             Edits{inlineEdits.length ? ` ${inlineEdits.length}` : ''}
           </button>
           <button
-            className={`secondary-button latex-layout-button latex-autosave-toggle ${
-              manuscriptLayout.autoSave ? 'active' : ''
-            }`}
-            onClick={() =>
-              updateManuscriptLayout({ autoSave: !manuscriptLayout.autoSave })
-            }
-            aria-pressed={manuscriptLayout.autoSave}
-            title={
-              manuscriptLayout.autoSave
-                ? 'Auto-save is on; click to turn it off'
-                : 'Auto-save is off; click to turn it on'
-            }
-          >
-            <SaveAll size={12} />
-            Auto {manuscriptLayout.autoSave ? 'on' : 'off'}
-          </button>
-          <button
             className="primary-button"
             onClick={() => void save()}
             disabled={!dirty || saving || inlineBusy}
@@ -1524,6 +1597,18 @@ export function LatexManuscript({
             {saving ? 'Saving…' : 'Save'}
           </button>
         </header>
+
+        {diskConflict && <div className="latex-save-error latex-source-conflict" role="alert">
+          <span>This file changed outside PanePilot. Your unsaved edits are safe; autosave is waiting for your choice.</span>
+          <button disabled={saving || inlineBusy || loading} onClick={() => {
+            if (window.confirm('Replace your unsaved changes with the latest file from disk?')) void load(path)
+          }}>Load disk version</button>
+          <button disabled={saving || inlineBusy} onClick={() => {
+            if (diskConflict.content != null && window.confirm('Replace the changed disk file with your current editor text?'))
+              void save(draft, true, false, diskConflict.content)
+          }}>Keep my version</button>
+        </div>}
+        {syncError && <div className="latex-save-error" role="status"><span>{syncError}</span></div>}
 
         {saveError && (
           <div className="latex-save-error" role="alert">
@@ -1577,9 +1662,14 @@ export function LatexManuscript({
               language="latex"
               theme="panepilot-latex"
               value={draft}
-              onChange={(value) => setDraft(value ?? '')}
+              onChange={(value) => {
+                editVersionRef.current++
+                currentSourceRef.current.draft = value ?? ''
+                setDraft(value ?? '')
+              }}
               onMount={handleMount}
               options={{
+                readOnly: loading,
                 minimap: { enabled: false },
                 fontFamily: '"SFMono-Regular", "Cascadia Code", monospace',
                 fontSize: 12,

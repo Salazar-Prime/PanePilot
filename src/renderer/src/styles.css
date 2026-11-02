@@ -5335,18 +5335,11 @@ select:focus-visible {
 
 .latex-layout-button:hover,
 .latex-layout-button:focus-visible,
-.latex-comments-toggle.active,
-.latex-autosave-toggle.active {
+.latex-comments-toggle.active {
   color: #e3d3b7;
   border-color: #715a36;
   outline: none;
   background: #251e14;
-}
-
-.latex-autosave-toggle.active {
-  color: #9dd7c2;
-  border-color: #376654;
-  background: #14241e;
 }
 
 .latex-save-error {
@@ -5385,6 +5378,9 @@ select:focus-visible {
   color: #ffe6e9;
   outline: 1px solid #73434c;
 }
+
+.latex-source-conflict { flex-wrap: wrap; }
+.latex-source-conflict > button { width: auto; min-height: 24px; padding: 3px 7px; border: 1px solid #73434c; border-radius: 4px; white-space: nowrap; }
 
 .latex-inline-chat-button {
   display: flex;

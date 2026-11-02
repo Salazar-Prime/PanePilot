@@ -17,5 +17,5 @@ self.MonacoEnvironment = {
   }
 }
 
-export { ManagedEditor as Editor, discardEditorDraft, forgetEditorModel } from './ManagedEditor'
+export { ManagedEditor as Editor, discardEditorDraft, forgetEditorModel, recordEditorSave } from './ManagedEditor'
 export { monaco }

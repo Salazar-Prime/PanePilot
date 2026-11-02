@@ -241,6 +241,8 @@ const api: ProjectConsoleApi = {
       ipcRenderer.invoke('conversations:get', projectId, conversationId, query)
   },
   latex: {
+    readSource: (projectId, path, knownRevision) => ipcRenderer.invoke('latex:read-source', projectId, path, knownRevision),
+    saveSource: (projectId, path, content, expectedContent) => ipcRenderer.invoke('latex:save-source', projectId, path, content, expectedContent),
     getWorkspace: (projectId: string) =>
       ipcRenderer.invoke('latex:get-workspace', projectId),
     sourceRevision: (projectId: string) =>

@@ -59,6 +59,7 @@ describe('LaTeX workspace navigation cache', () => {
 
     expect(source).toContain('const latexSourceSnapshots = new LatexSourceCache')
     expect(source).toContain('savedValue={savedContent}')
-    expect(source).toContain('inlineEditAppliedPathRef.current === path')
+    expect(source).toContain('inlineEditReloadGuardRef.current')
+    expect(source).toContain('rememberSourceSnapshot(project.id, path, { savedContent, draft })')
   })
 })

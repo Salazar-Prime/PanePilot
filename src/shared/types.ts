@@ -16,6 +16,8 @@ export type TerminalSessionKind =
 export type LatexChatMode = 'ask' | 'edit'
 export type LatexChatScope = 'project' | 'section'
 export type LatexChatPurpose = 'writing' | 'inline-edit'
+export interface LatexSourceFile { path: string; revision: string; content: string | null }
+export interface LatexSourceSaveResult { saved: boolean; file: LatexSourceFile }
 export type AgentState =
   | 'idle'
   | 'running'
@@ -699,6 +701,8 @@ export interface ProjectConsoleApi {
     get(projectId: string, conversationId: string, query?: string): Promise<ConversationDetail>
   }
   latex: {
+    readSource(projectId: string, path: string, knownRevision?: string): Promise<LatexSourceFile>
+    saveSource(projectId: string, path: string, content: string, expectedContent: string): Promise<LatexSourceSaveResult>
     getWorkspace(projectId: string): Promise<LatexWorkspace>
     sourceRevision(projectId: string): Promise<string>
     getPdf(projectId: string): Promise<LatexPdfDocument>

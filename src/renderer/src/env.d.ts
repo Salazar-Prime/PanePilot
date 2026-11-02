@@ -4,7 +4,7 @@ import type { ProjectConsoleApi } from '../../shared/types'
 
 declare global {
   interface Window {
-    projectConsole: ProjectConsoleApi // Includes fixed-feed Sparkle controls; the bridge is exposed only to the app's main frame.
+    projectConsole: ProjectConsoleApi // Includes guarded LaTeX source reads/saves and fixed-feed Sparkle controls.
   }
 }
 

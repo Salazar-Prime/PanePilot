@@ -778,6 +778,7 @@ export function LatexProjectWorkspace({
           >
             <LatexManuscript
               key={project.id}
+              visible={workspaceActive && tab === 'manuscript'}
               project={project}
               workspace={workspace}
               inlineEdits={inlineEdits}
