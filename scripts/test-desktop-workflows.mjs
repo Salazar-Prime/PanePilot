@@ -279,7 +279,27 @@ async function runFixture() {
     assert.ok((await readFile(manuscriptPath, 'utf8')).includes('FLUSH_ON_PROJECT_SWITCH'), 'Leaving before the debounce still flushes the pending source draft.')
     steps.push('Hidden Manuscript source polling sleeps, return refreshes immediately, and pending drafts persist when switching projects.')
     steps.push('Actual PDF IPC, PDF.js worker, and canvas render complete for a synthetic PDF.')
-    await api(`terminals.stop(${JSON.stringify(session.id)})`)
+    await clickText('.workspace-tabs button', 'Terminals')
+    await waitFor('!!document.querySelector(".terminal-tab .tab-menu-button")', 'ordinary terminal remains available before archive')
+    await evaluate('document.querySelector(".terminal-tab .tab-menu-button").click()')
+    await clickText('.terminal-menu-portal button', 'Archive terminal')
+    await waitFor('!document.querySelector(".terminal-tab") && !!document.querySelector(".terminal-archive-shortcut:not([hidden])")', 'archived tab disappears and the uncrowded bar offers its archive')
+    const archivedSession = (await api(`projects.get(${JSON.stringify(terminal.id)})`)).sessions.find((item) => item.id === session.id)
+    assert.equal(archivedSession.archived, true)
+    assert.equal(archivedSession.state, 'completed')
+    assert.ok(isolation.calls.some((call) => call.args?.includes('kill-session') && call.args.includes('=Workflow shell')), 'Archive stops exactly the private fixture tmux target.')
+    assert.equal(await evaluate('Array.from(document.querySelectorAll(".session-row")).some(row=>row.textContent.includes("Workflow shell"))'), false, 'Archive is hidden in the sidebar.')
+    const launchesBeforeRestore = isolation.calls.filter((call) => call.args?.includes('new-session')).length
+    await evaluate(`Array.from(document.querySelectorAll('.project-row .sidebar-row-main')).find(row=>row.textContent.trim()==='Workflow terminal').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:80,clientY:120}))`)
+    await clickText('.context-menu button span', 'Archived terminals (1)')
+    await waitFor('!!document.querySelector(".terminal-archives-modal")', 'project right-click opens the correct archive')
+    await evaluate(`document.querySelector('.terminal-archives-modal [aria-label="Restore Workflow shell"]').click()`)
+    await waitFor('document.querySelector(".terminal-archives-empty strong")?.textContent==="No archived terminals" && !!document.querySelector(".terminal-tab")', 'Restore returns the exact terminal tab')
+    assert.equal(isolation.calls.filter((call) => call.args?.includes('new-session')).length, launchesBeforeRestore, 'Restore does not implicitly start a shell or agent.')
+    assert.equal((await api(`projects.get(${JSON.stringify(terminal.id)})`)).archived, false, 'Terminal archive never archives its project.')
+    await evaluate('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))')
+    await waitFor('!document.querySelector(".terminal-archives-modal")', 'Escape dismisses only the archive dialog')
+    steps.push('Actual tab-menu Archive stops only its exact tmux session; project context-menu archive and Restore retain the same tab without launching a new process.')
     isolation.assertClean()
     assert.deepEqual(blockedRequests, [], 'No renderer network attempts.')
     assert.deepEqual(failedRequests, [], 'No failed asset loads.')
@@ -289,6 +309,9 @@ async function runFixture() {
       method: 'Actual out/main/index.js, production preload and built renderer in installed Electron. Temporary SQLite/profile/projects, patched test-only OS adapters, private tmux socket with empty config, fake SSH executable. No synthetic projectConsole bridge or replaced application modules.',
       steps, realIpcInvocations: ipcCalls, ipcCounts, childProcesses: isolation.calls, pdfPixels: pixelCounts, warnings, errors, blockedRequests, failedRequests,
       limits: ['Development-runtime launch, not the installed/signed application; updater remains disabled.', 'SSH is a deterministic synthetic executable, so real SSH authentication, latency, disconnections, and remote shells are not validated.', 'No agent/provider launch, external service, user archive, compile toolchain, OS permission prompt, or native printing is exercised.', 'Monaco draft input uses its edit API through a test-only React ref lookup; native keyboard/IME behavior is not exercised.', 'Functional smoke checks are not timing or power measurements.'] }, null, 2))
+    // Tear down the fixture renderer before main closes its temporary database;
+    // no delayed metadata refresh should send new IPC during test shutdown.
+    window.destroy()
     app.quit()
   } catch (error) {
     console.error(error)

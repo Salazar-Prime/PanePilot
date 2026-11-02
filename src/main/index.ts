@@ -563,6 +563,14 @@ function registerIpc(): void {
     }
   )
   ipcMain.handle('terminals:stop', (_event, sessionId: string) => terminals.stop(sessionId))
+  for (const operation of ['archive', 'restore'] as const) {
+    ipcMain.handle(`terminals:${operation}`, (event, sessionId: string) => {
+      if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame || typeof sessionId !== 'string') {
+        throw new Error('Invalid terminal archive request.')
+      }
+      return appUpdates.protectRestartWhile(() => terminals[operation](sessionId))
+    })
+  }
   ipcMain.handle('terminals:delete', (_event, sessionId: string) =>
     terminals.delete(sessionId)
   )

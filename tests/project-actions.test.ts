@@ -265,6 +265,7 @@ describe('project actions persistence', () => {
     const database = new DatabaseSync(databasePath)
     database.exec(`
       DROP INDEX IF EXISTS terminal_sessions_project_qna_idx;
+      DROP INDEX IF EXISTS terminal_sessions_archive_idx;
       DROP TABLE project_actions;
       ALTER TABLE terminal_sessions DROP COLUMN session_kind;
       PRAGMA user_version = 6;

@@ -820,22 +820,11 @@ export class Store {
       DROP TABLE IF EXISTS speech_settings;
     `)
     this.migrateLegacyTerminalOutput()
-    if (previousVersion < 20) {
-      this.inTransaction(() => {
-        // Archive was a PanePilot-only view. Provider archives and archived
-        // projects are separate and are deliberately left untouched.
-        this.db.exec(`
-          DELETE FROM agent_events
-          WHERE terminal_session_id IN (
-            SELECT id FROM terminal_sessions
-            WHERE archived = 1 AND session_kind <> 'project-qna'
-          );
-          DELETE FROM terminal_sessions
-          WHERE archived = 1 AND session_kind <> 'project-qna';
-        `)
-      })
-    }
-    this.db.exec('PRAGMA user_version = 21')
+    // v22 reintroduces per-project terminal archives. Keep any old archives
+    // still present; migration must not delete saved sessions or their output.
+    this.db.exec(`CREATE INDEX IF NOT EXISTS terminal_sessions_archive_idx
+      ON terminal_sessions(project_id, archived, session_kind, updated_at DESC);
+      PRAGMA user_version = ${Math.max(previousVersion, 22)};`)
   }
 
   getQuickNotes(): QuickNotesDocument {
@@ -2309,6 +2298,8 @@ export class Store {
     }
     const existing = this.getSessionWithoutOutput(metadata.terminalId)
     if (existing && existing.projectId !== projectId) return null
+    // A discovery snapshot started before Archive must not undo that decision.
+    if (existing?.archived) return null
     // A v0.7 LaTeX chat could briefly publish its initial ordinary-terminal
     // metadata before the attachment was written. Never let that stale remote
     // snapshot erase a richer attachment already known by this client.
@@ -2789,7 +2780,7 @@ export class Store {
   setSessionState(id: string, state: AgentState, message?: string): boolean {
     if (state === 'completed' || state === 'error') this.clearSessionRebootRecovery(id)
     const session = this.getSessionWithoutOutput(id)
-    if (!session || session.state === state) return false
+    if (!session || session.state === state || (session.archived && state !== 'completed' && state !== 'error')) return false
     const timestamp = now()
     this.db
       .prepare('UPDATE terminal_sessions SET state = ?, updated_at = ? WHERE id = ?')
@@ -2962,6 +2953,25 @@ export class Store {
       flagged ? 'terminal-flagged' : 'terminal-unflagged',
       `${flagged ? 'Flagged' : 'Unflagged'} ${session.name}`
     )
+  }
+
+  setSessionArchived(id: string, archived: boolean): TerminalSession {
+    const session = this.requireSession(id)
+    if (session.kind !== 'terminal') throw new Error('Only ordinary terminal tabs can be archived.')
+    const project = this.getProjectForRuntime(session.projectId)
+    if (!project || project.archived) throw new Error('Restore the project before changing its terminal archive.')
+    if (session.archived === archived) return session
+    if (archived && !['completed', 'error'].includes(session.state)) {
+      throw new Error('Stop the terminal before archiving it.')
+    }
+    this.inTransaction(() => {
+      this.db.prepare('UPDATE terminal_sessions SET archived = ?, reboot_recovery_pending = 0, updated_at = ? WHERE id = ?')
+        .run(archived ? 1 : 0, now(), id)
+      this.addActivity(session.projectId, id, archived ? 'terminal-archived' : 'terminal-restored',
+        `${archived ? 'Archived' : 'Restored'} terminal ${session.name}`)
+      this.updateProjectState(session.projectId)
+    })
+    return this.getSessionWithoutOutput(id)!
   }
 
   deleteSession(id: string): void {

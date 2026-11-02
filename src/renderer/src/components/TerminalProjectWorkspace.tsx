@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  Archive,
   Clipboard,
   FileText,
   Files,
@@ -27,6 +28,7 @@ import type {
 } from '../lib/terminalFileLinks'
 import { isAttentionState } from '../lib/status'
 import { useActiveTabVisibility } from '../lib/useActiveTabVisibility'
+import { archivedTerminals, requestTerminalArchive } from '../lib/terminalArchive'
 import type { ProjectWorkspaceProps } from '../projectTypeRegistry'
 import {
   type ProjectShortcutAction,
@@ -58,6 +60,7 @@ import { RenameDialog } from './RenameDialog'
 import { StatusDot } from './StatusDot'
 import { StatusWorkspaceNav } from './StatusWorkspaceNav'
 import { TerminalLauncher } from './TerminalLauncher'
+import { TerminalArchiveButton } from './TerminalArchiveButton'
 import {
   TerminalProfileIcon
 } from './TerminalProfileIcon'
@@ -104,6 +107,7 @@ export function TerminalProjectWorkspace({
   onWorkspaceDestinationVisited,
   onSwapPanes,
   onTransferSession,
+  onShowArchivedTerminals,
   onSelectSession,
   onChanged
 }: ProjectWorkspaceProps) {
@@ -154,6 +158,7 @@ export function TerminalProjectWorkspace({
     openTabs.find((session) => session.id === selectedSessionId) ?? openTabs[0]
   const terminalTabsRef = useActiveTabVisibility(activeSession?.id,
     JSON.stringify([tab, openTabs.map(({ id, name }) => [id, name])]))
+  const archivedCount = archivedTerminals(project).length
 
   function selectWorkspaceTab(nextTab: WorkspaceTab) {
     setTab(nextTab)
@@ -476,6 +481,13 @@ export function TerminalProjectWorkspace({
     await onChanged()
   }
 
+  async function archive(session: TerminalSession) {
+    setMenu(null)
+    if (!(await requestTerminalArchive(session))) return
+    onCloseSession(session.id)
+    await onChanged()
+  }
+
   function run(action: Promise<void>) {
     void action.catch((caught: unknown) => {
       window.alert(caught instanceof Error ? caught.message : String(caught))
@@ -674,6 +686,9 @@ export function TerminalProjectWorkspace({
                 </div>
               ))}
             </div>
+            {archivedCount > 0 && onShowArchivedTerminals && <TerminalArchiveButton strip={terminalTabsRef}
+              revision={JSON.stringify([project.id, activeSession?.id, openTabs.map(({ id, name }) => [id, name])])}
+              count={archivedCount} onClick={() => onShowArchivedTerminals(project.id)} />}
           </div>
 
           {activeSession ? (
@@ -862,6 +877,9 @@ export function TerminalProjectWorkspace({
                       )}
                     </>
                   )}
+                  <button onClick={() => run(archive(session))}>
+                    <Archive size={14} /> Archive terminal
+                  </button>
                   <button
                     className="danger-text"
                     onClick={() => run(permanentlyDelete(session))}

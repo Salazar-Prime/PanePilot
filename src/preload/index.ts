@@ -115,6 +115,8 @@ const api: ProjectConsoleApi = {
     setFlagged: (sessionId: string, flagged: boolean) =>
       ipcRenderer.invoke('terminals:set-flagged', sessionId, flagged),
     stop: (sessionId: string) => ipcRenderer.invoke('terminals:stop', sessionId),
+    archive: (sessionId: string) => ipcRenderer.invoke('terminals:archive', sessionId),
+    restore: (sessionId: string) => ipcRenderer.invoke('terminals:restore', sessionId),
     delete: (sessionId: string) => ipcRenderer.invoke('terminals:delete', sessionId),
     onData: (listener: (event: TerminalDataEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, payload: TerminalDataEvent): void =>

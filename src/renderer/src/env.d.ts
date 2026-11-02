@@ -4,7 +4,7 @@ import type { ProjectConsoleApi } from '../../shared/types'
 
 declare global {
   interface Window {
-    projectConsole: ProjectConsoleApi // Includes guarded LaTeX source reads/saves and fixed-feed Sparkle controls.
+    projectConsole: ProjectConsoleApi // Includes terminal archive/restore, guarded LaTeX source IO, and fixed-feed updates.
   }
 }
 

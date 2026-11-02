@@ -148,6 +148,8 @@ import {
   type CommandPaletteCommand
 } from './CommandPalette'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
+import { ArchivedTerminalsDialog } from './ArchivedTerminalsDialog'
+import { archivedTerminals, requestTerminalArchive } from '../lib/terminalArchive'
 import { GoogleDriveControl } from './GoogleDriveControl'
 import { GitPane } from './GitPane'
 import { GitHistoryModal } from './GitHistoryModal'
@@ -354,6 +356,7 @@ export function App() {
     useState<WorkspaceRequest | null>(null)
   const [workspaceTabRequest, setWorkspaceTabRequest] =
     useState<WorkspaceTabRequest | null>(null)
+  const [terminalArchiveProjectId, setTerminalArchiveProjectId] = useState<string | null>(null)
   const workspaceRequestSequence = useRef(0)
   const workspaceHistoryRef = useRef(
     loadWorkspaceHistory(window.localStorage)
@@ -1787,6 +1790,25 @@ export function App() {
     await refreshProject(session.projectId)
   }
 
+  async function archiveTerminal(session: TerminalSession) {
+    if (!(await requestTerminalArchive(session))) return
+    closeSession(session.id)
+    await refreshProject(session.projectId)
+  }
+
+  async function restoreTerminal(session: TerminalSession) {
+    await window.projectConsole.terminals.restore(session.id)
+    await refreshProject(session.projectId)
+    openSession(session.id)
+  }
+
+  async function deleteArchivedTerminal(session: TerminalSession) {
+    // The archive dialog owns the explicit permanent-delete confirmation.
+    await window.projectConsole.terminals.delete(session.id)
+    closeSession(session.id)
+    await refreshProject(session.projectId)
+  }
+
   function openNewProject(connectionId?: string, type: ProjectType = 'terminal') {
     setNewProjectConnectionId(connectionId)
     setNewProjectType(type)
@@ -2214,6 +2236,12 @@ export function App() {
           icon: <Archive size={14} />,
           separatorBefore: true,
           action: () => archiveProject(target)
+        },
+        {
+          id: 'archived-terminals',
+          label: `Archived terminals (${archivedTerminals(target).length})`,
+          icon: <Archive size={14} />,
+          action: () => setTerminalArchiveProjectId(target.id)
         }
       ]
     }
@@ -2336,6 +2364,10 @@ export function App() {
             }
           ]
         : []),
+      ...(session.kind === 'terminal' ? [{
+        id: 'archive-terminal', label: 'Archive terminal', icon: <Archive size={14} />,
+        separatorBefore: true, action: () => archiveTerminal(session)
+      }] : []),
       ...(stopped
         ? [
             ...(['codex', 'claude'].includes(session.profile) && providerSessionReference
@@ -3060,6 +3092,7 @@ export function App() {
                   openSessionIds={openSessionIds}
                   onOpenSession={openSession}
                   onCloseSession={closeSession}
+                  onShowArchivedTerminals={setTerminalArchiveProjectId}
                   onSessionSelected={(id, options) => {
                     if (options?.revealSidebar !== false) expandSidebarProject(paneAProject.id)
                     recordSessionSelection(id)
@@ -3143,6 +3176,7 @@ export function App() {
                     openSessionIds={openSessionIds}
                     onOpenSession={openSession}
                     onCloseSession={closeSession}
+                    onShowArchivedTerminals={setTerminalArchiveProjectId}
                     onSessionSelected={(id, options) => {
                       if (options?.revealSidebar !== false) expandSidebarProject(paneBProject.id)
                       recordSessionSelection(id)
@@ -3323,6 +3357,11 @@ export function App() {
         onError={showError}
       />
       <QuickNotesDialog open={showQuickNotes} onClose={() => setShowQuickNotes(false)} />
+      {terminalArchiveProjectId && (() => {
+        const target = projects.find((candidate) => candidate.id === terminalArchiveProjectId)
+        return target ? <ArchivedTerminalsDialog key={target.id} project={target}
+          onClose={() => setTerminalArchiveProjectId(null)} onRestore={restoreTerminal} onDelete={deleteArchivedTerminal} /> : null
+      })()}
       <AppUpdatesDialog open={showAppUpdates} state={updates.state} onClose={() => setShowAppUpdates(false)}
         onCheck={updates.check} onRestart={updates.restart} />
       {projectSortMenu &&

@@ -20,7 +20,7 @@ describe('retired feature storage migrations', () => {
     const database = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
     try {
       expect(database.prepare('PRAGMA user_version').get()).toMatchObject({
-        user_version: 21
+        user_version: 22
       })
       expect(database.prepare(`
         SELECT name FROM sqlite_master
@@ -148,7 +148,7 @@ describe('retired feature storage migrations', () => {
     }
   })
 
-  it('deletes only archived terminal records and output, not archived projects', () => {
+  it('retains existing archived terminals, output and archived projects when upgrading an old workspace', () => {
     const original = new Store(appDataPath)
     original.syncConnections([])
     const project = original.createProject({
@@ -177,7 +177,7 @@ describe('retired feature storage migrations', () => {
 
     const migrated = new Store(appDataPath)
     try {
-      expect(migrated.getSession(archived.id)).toBeNull()
+      expect(migrated.getSession(archived.id)).toMatchObject({ archived: true, output: 'Archived output' })
       expect(migrated.getSession(retained.id)?.output).toBe('Kept output')
       expect(migrated.getProject(project.id)?.archived).toBe(true)
     } finally {

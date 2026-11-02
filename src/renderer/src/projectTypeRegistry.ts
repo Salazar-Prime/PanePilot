@@ -35,6 +35,7 @@ export interface ProjectWorkspaceProps {
   onWorkspaceDestinationVisited(destination: WorkspaceDestination): void
   onSwapPanes?(): void
   onTransferSession?(session: TerminalSession): void
+  onShowArchivedTerminals?(projectId: string): void
   onSelectSession(id: string): void
   onChanged(): Promise<void>
 }

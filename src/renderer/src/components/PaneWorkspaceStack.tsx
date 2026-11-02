@@ -52,6 +52,7 @@ export function PaneWorkspaceStack({
   onWorkspaceDestinationVisited,
   onSwapPanes,
   onTransferSession,
+  onShowArchivedTerminals,
   onSelectSession,
   onChanged
 }: PaneWorkspaceStackProps) {
@@ -127,6 +128,7 @@ export function PaneWorkspaceStack({
                   : undefined
               }
               onSelectSession={onSelectSession}
+              onShowArchivedTerminals={onShowArchivedTerminals}
               onChanged={() => onChanged(project.id)}
             />
           </div>
@@ -163,6 +165,7 @@ export function PaneWorkspaceStack({
                 : undefined
             }
             onSelectSession={onSelectSession}
+            onShowArchivedTerminals={onShowArchivedTerminals}
             onChanged={() => onChanged(activeProject.id)}
           />
         </div>

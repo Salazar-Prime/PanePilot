@@ -1311,6 +1311,7 @@ export class TerminalManager {
 
   private async attachOnce(sessionId: string, cols: number, rows: number, consumerId: string | undefined, pending: { cancelled: boolean }): Promise<{ output: string; generation?: string; sequence?: number }> {
     let session = this.requireSession(sessionId)
+    if (session.archived) throw new Error('Restore the archived terminal before opening it.')
     if (session.backend === 'tmux' && session.tmuxName !== session.name) {
       await this.renameOnce(sessionId, session.name)
       session = this.requireSession(sessionId)
@@ -1970,6 +1971,47 @@ export class TerminalManager {
 
   setFlagged(sessionId: string, flagged: boolean): void {
     this.store.setSessionFlagged(sessionId, flagged)
+  }
+
+  archive(sessionId: string): Promise<void> {
+    return this.serializeOperation(sessionId, async () => {
+      const session = this.requireSession(sessionId)
+      if (session.kind !== 'terminal') throw new Error('Only ordinary terminal tabs can be archived.')
+      if (session.archived) return
+      this.ensureProjectLaunchable(session.projectId)
+      if (AGENT_PROFILES.has(session.profile) && !session.providerSessionId) {
+        const project = this.store.getProjectForRuntime(session.projectId)
+        const connection = project && this.store.getConnection(project.connectionId)
+        if (project && connection) {
+          // Link a final exact provider identity before its tmux title vanishes.
+          await this.discoverProviderSession(session, project.folder, connection).catch(() => {})
+        }
+      }
+      // Includes detached tmux sessions even when a stale local row says they
+      // ended. A failed SSH/stop must leave the archive flag unchanged.
+      const runtime = this.runtimes.get(sessionId)
+      const intentionalStop = runtime?.intentionalStop
+      try { await this.terminateSession(session) }
+      catch (error) {
+        if (runtime) runtime.intentionalStop = intentionalStop ?? false
+        throw error
+      }
+      this.ensureActive()
+      this.flushOutput(sessionId)
+      this.store.setSessionArchived(sessionId, true)
+      this.getWindow()?.webContents.send('terminal:metadata', { sessionId, projectId: session.projectId })
+    })
+  }
+
+  restore(sessionId: string): Promise<void> {
+    return this.serializeOperation(sessionId, async () => {
+      const session = this.requireSession(sessionId)
+      this.ensureProjectLaunchable(session.projectId)
+      this.store.setSessionArchived(sessionId, false)
+      // Restoring the tab does not launch a shell or agent. Linked chats retain
+      // their existing explicit Resume / Force reload controls.
+      this.getWindow()?.webContents.send('terminal:metadata', { sessionId, projectId: session.projectId })
+    })
   }
 
   async archiveProject(projectId: string): Promise<void> {
