@@ -118,14 +118,19 @@ The focused project's tool navigation is centered in that same status bar. Secon
 global and project actions live in the top overflow menu; use the pin beside an action
 to keep it in the top toolbar on this PanePilot client. Drag pinned actions to reorder
 them, or focus one and press Option/Alt-Left/Right; the order persists across restarts.
+Hover or focus **Actions** in the status bar to inspect and run the last used action
+without leaving the current workspace; selecting the control still opens Actions.
 
 After the computer restarts, eligible local tmux-backed terminals and chats are
 recovered only when you open their exact tab. Detaching an ordinary terminal leaves
-its tmux session running. **Delete terminal** closes the exact live session when
-necessary and removes PanePilot's saved output, but never deletes the provider's Codex
-or Claude conversation archive. PanePilot no longer has a separate terminal archive
-or Project Q&A workspace; upgrading removes its legacy Q&A session records and saved
-output while preserving provider-owned archives.
+its tmux session running. **Archive** stops that terminal's exact backend and retains
+a restorable tab under **Archived terminals**; restoring the tab does not start a
+replacement process until you choose **Force reload**. Force reload recreates a shell,
+Codex, or Claude backend in the same tab. **Delete terminal** closes the exact live
+session when necessary and removes PanePilot's saved output, but never deletes the
+provider's Codex or Claude conversation archive. Project Q&A remains retired; upgrading
+removes its legacy session records and saved output while preserving provider-owned
+archives.
 
 Project and terminal metadata, saved output, and activity are stored in
 `~/Library/Application Support/project-console/project-console.sqlite` on macOS.
@@ -177,6 +182,14 @@ heading links, and GitHub-style alerts. Relative links open the target inside th
 project, relative images are loaded through PanePilot's bounded local/SSH file
 preview, and web links open in the system browser. Raw HTML is sanitized before
 rendering.
+
+The app-wide **Markdown viewer** opens a Markdown snapshot from a local file or, only
+after choosing **From clipboard** or **Open Markdown from clipboard**, the current
+clipboard text. PanePilot stores the last 50 snapshots in its local SQLite database;
+removing one from history does not change the source file. The searchable viewer and
+its size persist on this PanePilot client. Content is rendered read-only with raw HTML
+sanitized and scripts disabled. HTTPS images embedded in the Markdown may contact
+their hosts; ordinary external links open only after you select them.
 
 Files ending in `.html`, `.htm`, or `.xhtml` open in a static **Preview** by default
 and retain **Source** and **Edit** modes. PanePilot sanitizes the document and renders
@@ -320,7 +333,9 @@ The choice is saved only on this PanePilot client and applies inside that machin
 group. Project icons light their left and right halves independently to show which
 split pane currently has the project open. Drag open terminal tabs to arrange them;
 the order is saved per project on this client, and pinned tabs always stay in the
-leftmost group. Use **Command/Control-Shift-\\** to swap the left and right pane
+leftmost group. Drag or keyboard-adjust the divider to resize the panes; the balance
+is saved on this PanePilot client, and double-clicking the divider restores an even
+split. Use **Command/Control-Shift-\\** to swap the left and right pane
 contents, or reveal KeyTips and press `S`. For project sorting, **Newest first**
 means the project selected most recently on this PanePilot client; it does not mean
 the newest database record.

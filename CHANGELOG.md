@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.18.0 — 2026-11-22
+
+This release makes frequently used project content easier to reopen while improving
+terminal recovery and LaTeX editing.
+
+- The app-wide **Markdown viewer** opens Markdown from the clipboard or a local file,
+  keeps a searchable on-device history of the last 50 snapshots, and remembers its
+  resizable reading layout. The main workspace split is also resizable and remembers
+  its balance on this PanePilot client.
+- **Actions** exposes the last used project action from its focused or hover popup.
+  Ordinary terminals can be archived into restorable project tabs, and **Force
+  reload** recreates a selected shell or agent backend in the same tab. Dormant SSH
+  terminals recover on demand without creating duplicate workspace records.
+- LaTeX source uses always-on autosave with asynchronous local/SSH writes, detects
+  external changes without discarding drafts, and asks whether to load the disk
+  version or keep the current editor version when changes overlap.
+
+The v0.18.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed and not Apple-notarized. Signed Sparkle updates are available to
+PanePilot v0.16.0 and newer; installation and restart always require user action.
+
 ## 0.17.2 — 2026-10-29
 
 This release reduces desktop resource use and keeps larger workspaces responsive.
