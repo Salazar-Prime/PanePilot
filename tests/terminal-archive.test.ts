@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -31,6 +32,45 @@ function fixture() {
   })
   return { path, store, manager, project, other, session }
 }
+
+describe.each(['/bin/zsh', '/bin/bash', '/bin/sh'])('SSH tmux cleanup under %s', (shell) => {
+  it.skipIf(!existsSync(shell)).each([
+    { name: 'accepts an already missing session after reboot', live: 0, checkCode: 1, killCode: 0, remains: 0, expected: 0 },
+    { name: 'stops and verifies the exact live session', live: 1, checkCode: 1, killCode: 0, remains: 0, expected: 0 },
+    { name: 'propagates a failed stop', live: 1, checkCode: 1, killCode: 42, remains: 0, expected: 42 },
+    { name: 'rejects a session that remains running', live: 1, checkCode: 1, killCode: 0, remains: 1, expected: 1 },
+    { name: 'rejects an unexpected presence-check failure', live: 0, checkCode: 2, killCode: 0, remains: 0, expected: 1 }
+  ])('$name', async ({ live, checkCode, killCode, remains, expected }) => {
+    const { manager } = fixture()
+    const internals = manager as unknown as {
+      tmuxPathForConnection(connection: Connection): Promise<string | null>
+      killTmuxSession(connection: Connection, name: string): Promise<void>
+      execCommand(file: string, args: string[], options: unknown): Promise<{ stdout: string; stderr: string }>
+    }
+    vi.spyOn(internals, 'tmuxPathForConnection').mockResolvedValue('panepilot_test_tmux')
+    const exec = vi.spyOn(internals, 'execCommand').mockResolvedValue({ stdout: '', stderr: '' })
+    await internals.killTmuxSession({ id: 'ssh:fixture', kind: 'ssh', name: 'Fixture', sshAlias: 'fixture' }, 'Setup')
+    expect(exec).toHaveBeenCalledOnce()
+    expect(exec.mock.calls[0][0]).toBe('ssh')
+    const command = exec.mock.calls[0][1].at(-1)!
+    // Execute the generated command with a shell function, never real tmux/SSH.
+    const prelude = `
+      panepilot_test_live=${live};
+      panepilot_test_tmux() {
+        test "$2" = '-t' && test "$3" = '=Setup' || return 99;
+        case "$1" in
+          has-session) test "$panepilot_test_live" -eq 1 && return 0; return ${checkCode} ;;
+          kill-session) test ${killCode} -eq 0 || return ${killCode}; panepilot_test_live=${remains}; return 0 ;;
+          *) return 99 ;;
+        esac;
+      };
+    `
+    const result = spawnSync(shell, ['-c', prelude + command], { encoding: 'utf8', timeout: 2_000 })
+    expect(result.error).toBeUndefined()
+    expect(result.stderr).not.toContain('read-only variable')
+    expect(result.status).toBe(expected)
+  })
+})
 
 describe('per-project terminal archives', () => {
   it('stops only the chosen terminal, retaining identity, pin, flag, output and other projects', async () => {

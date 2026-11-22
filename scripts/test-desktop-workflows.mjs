@@ -417,6 +417,33 @@ async function runFixture() {
     await evaluate('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))')
     await waitFor('!document.querySelector(".terminal-archives-modal")', 'Escape dismisses only the archive dialog')
     steps.push('Actual tab-menu Archive stops only its exact tmux session; project context-menu archive and Restore retain the same tab without launching a new process.')
+    const launchesBeforeReload = isolation.calls.filter((call) => call.pty && call.args?.includes('new-session')).length
+    const waitForReload = async (count) => {
+      for (let attempt = 0; attempt < 200; attempt++) {
+        if (isolation.calls.filter((call) => call.pty && call.args?.includes('new-session')).length === launchesBeforeReload + count) break
+        await delay(25)
+      }
+      assert.equal(isolation.calls.filter((call) => call.pty && call.args?.includes('new-session')).length, launchesBeforeReload + count)
+      const current = (await api(`projects.get(${JSON.stringify(terminal.id)})`)).sessions.filter((item) => item.kind === 'terminal')
+      assert.equal(current.length, 1, 'Force reload never creates a second saved terminal tab.')
+      assert.equal(current[0].id, session.id)
+      assert.equal(current[0].name, 'Workflow shell')
+      assert.equal(current[0].state, 'idle')
+    }
+    // Restore left no tmux backend. Force reload must recreate it via the real
+    // preload/main path, not just try to reattach to that missing backend.
+    await evaluate('document.querySelector(".terminal-tab .tab-menu-button").click()')
+    await clickText('.terminal-menu-portal button', 'Force reload')
+    await waitForReload(1)
+    await evaluate(`Array.from(document.querySelectorAll('.session-row')).find(row=>row.textContent.includes('Workflow shell')).dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:90,clientY:160}))`)
+    await clickText('.context-menu button span', 'Force reload')
+    await waitForReload(2)
+    await evaluate('window.dispatchEvent(new KeyboardEvent("keydown",{key:"k",metaKey:true,bubbles:true,cancelable:true}))')
+    await waitFor('!!document.querySelector(".command-palette input")', 'Command-K opens for the active shell')
+    await evaluate(`(() => {const input=document.querySelector('.command-palette input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'force reload');input.dispatchEvent(new Event('input',{bubbles:true}));})()`)
+    await clickText('.command-copy strong', 'Force reload')
+    await waitForReload(3)
+    steps.push('Force reload in the tab menu recreates the missing shell tmux backend in the same tab; sidebar and Command-K offer the same compact label and restart that exact terminal.')
     isolation.assertClean()
     assert.deepEqual(blockedRequests, [], 'No renderer network attempts.')
     assert.deepEqual(failedRequests, [], 'No failed asset loads.')

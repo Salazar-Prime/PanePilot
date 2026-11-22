@@ -460,7 +460,7 @@ export function TerminalProjectWorkspace({
     await onChanged()
   }
 
-  async function forceReloadAgent(session: TerminalSession) {
+  async function forceReload(session: TerminalSession) {
     setMenu(null)
     await window.projectConsole.terminals.forceReloadAgent(session.id)
     selectWorkspaceTab('terminal')
@@ -842,10 +842,9 @@ export function TerminalProjectWorkspace({
                       Copy {session.profile === 'claude' ? 'Claude session' : 'Codex thread'} ID
                     </button>
                   )}
-                  {['codex', 'claude'].includes(session.profile) && (
-                    <button onClick={() => run(forceReloadAgent(session))}>
-                      <RefreshCw size={14} /> Force reload{' '}
-                      {session.profile === 'claude' ? 'Claude' : 'Codex'} chat
+                  {['shell', 'codex', 'claude'].includes(session.profile) && (
+                    <button onClick={() => run(forceReload(session))}>
+                      <RefreshCw size={14} /> Force reload
                     </button>
                   )}
                   {session.tmuxName && (

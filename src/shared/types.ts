@@ -628,6 +628,7 @@ export interface ProjectConsoleApi {
     resize(sessionId: string, cols: number, rows: number): Promise<void>
     acknowledge(sessionId: string): Promise<void>
     resumeAgent(sessionId: string): Promise<void>
+    /** Force reload a shell or agent tab; the legacy bridge name is retained for compatibility. */
     forceReloadAgent(sessionId: string): Promise<void>
     rename(sessionId: string, name: string): Promise<void>
     transfer(sessionId: string, targetProjectId: string): Promise<TerminalSession>

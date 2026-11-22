@@ -70,11 +70,12 @@ describe('contextual palette commands', () => {
   it('reuses menu actions and confirmation handlers without running them during search', async () => {
     const action = vi.fn()
     const commands = contextualCommands([
-      { id: 'force-reload-agent', label: 'Force reload Codex chat', action },
+      { id: 'force-reload-agent', label: 'Force reload', action },
       { id: 'transfer', label: 'Transfer', disabled: true, action },
       { id: 'delete', label: 'Delete terminal', danger: true, action }
     ], { id: 'session:chat', section: 'Current terminal', detail: 'Research · paper-chat' })
     expect(commands.map((item) => item.id)).toEqual(['session:chat:force-reload-agent', 'session:chat:delete'])
+    expect(commands[0].label).toBe('Force reload')
     expect(commands[1].danger).toBe(true)
     expect(filterCommands(commands, 'restart paper-chat')).toEqual([commands[0]])
     expect(action).not.toHaveBeenCalled()

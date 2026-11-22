@@ -1837,23 +1837,27 @@ export class TerminalManager {
   }
 
   forceReloadAgent(sessionId: string): Promise<void> {
-    return this.serializeOperation(sessionId, () => this.forceReloadAgentOnce(sessionId))
+    // Keep the existing IPC/bridge name compatible with open renderers. The
+    // user-facing Force reload action also supports ordinary login shells.
+    return this.serializeOperation(sessionId, () => this.forceReloadOnce(sessionId))
   }
 
-  private async forceReloadAgentOnce(sessionId: string): Promise<void> {
+  private async forceReloadOnce(sessionId: string): Promise<void> {
     let session = this.requireSession(sessionId)
-    if (!AGENT_PROFILES.has(session.profile)) {
-      throw new Error('Only Codex or Claude chats can be force reloaded.')
+    const isAgent = AGENT_PROFILES.has(session.profile)
+    if (!isAgent && !(session.kind === 'terminal' && session.profile === 'shell')) {
+      throw new Error('Only shell terminals or Codex/Claude chats can be force reloaded.')
     }
     if (session.archived) {
-      throw new Error('Restore the archived chat before force reloading it.')
+      throw new Error('Restore the archived terminal before force reloading it.')
     }
+    this.ensureProjectLaunchable(session.projectId)
 
     const project = this.store.getProjectForRuntime(session.projectId)
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (!project || !connection) throw new Error('The terminal project is unavailable.')
 
-    if (!session.providerSessionId) {
+    if (isAgent && !session.providerSessionId) {
       try {
         await this.discoverProviderSession(session, project.folder, connection)
       } catch {
@@ -1862,7 +1866,7 @@ export class TerminalManager {
       }
       session = this.requireSession(sessionId)
     }
-    const providerSessionReference = session.providerSessionId
+    const providerSessionReference = isAgent ? session.providerSessionId : null
 
     const runtime = this.runtimes.get(sessionId)
     const cols = runtime?.cols ?? 100
@@ -1879,9 +1883,11 @@ export class TerminalManager {
       this.changeState(
         session,
         'idle',
-        providerSessionReference
-          ? `Force reloaded ${providerLabel} session ${providerSessionReference}.`
-          : `Force reloaded ${providerLabel} as a new chat because no provider session ID was available.`
+        !isAgent
+          ? `Force reloaded terminal ${session.name}.`
+          : providerSessionReference
+            ? `Force reloaded ${providerLabel} session ${providerSessionReference}.`
+            : `Force reloaded ${providerLabel} as a new chat because no provider session ID was available.`
       )
       await this.launch(
         this.requireSession(sessionId),
@@ -3488,11 +3494,12 @@ export class TerminalManager {
     const executable = quote(tmuxPath)
     // A successful SSH result proves the exact target stopped; transport failure
     // remains an error and must never archive/delete its durable record.
+    // The remote login shell may be zsh, where `status` is read-only.
     const remoteCommand =
       `if ${executable} has-session -t ${target} 2>/dev/null; then ` +
       `${executable} kill-session -t ${target} || exit $?; ` +
-      `if ${executable} has-session -t ${target} 2>/dev/null; then exit 1; else status=$?; test "$status" -eq 1; fi; ` +
-      `else status=$?; test "$status" -eq 1; fi`
+      `if ${executable} has-session -t ${target} 2>/dev/null; then exit 1; else panepilot_tmux_status=$?; test "$panepilot_tmux_status" -eq 1; fi; ` +
+      `else panepilot_tmux_status=$?; test "$panepilot_tmux_status" -eq 1; fi`
     await this.execCommand('ssh', [
       '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5',
       connection.sshAlias ?? connection.name, remoteCommand

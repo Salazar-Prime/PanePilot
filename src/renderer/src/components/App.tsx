@@ -1774,7 +1774,7 @@ export function App() {
     await selectSession(owner.id, session.id)
   }
 
-  async function forceReloadAgentSession(
+  async function forceReloadSession(
     owner: Project,
     session: TerminalSession
   ) {
@@ -2367,13 +2367,13 @@ export function App() {
             }
           ]
         : []),
-      ...(['codex', 'claude'].includes(session.profile)
+      ...(['shell', 'codex', 'claude'].includes(session.profile)
         ? [
             {
               id: 'force-reload-agent',
-              label: `Force reload ${session.profile === 'claude' ? 'Claude' : 'Codex'} chat`,
+              label: 'Force reload',
               icon: <RefreshCw size={14} />,
-              action: () => forceReloadAgentSession(owner, session)
+              action: () => forceReloadSession(owner, session)
             }
           ]
         : []),
