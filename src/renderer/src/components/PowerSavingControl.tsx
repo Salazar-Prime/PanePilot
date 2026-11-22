@@ -1,11 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Leaf, X } from 'lucide-react'
-import { DEFAULT_POWER_SAVING, type AppMemorySnapshot, type PowerSavingSettings, type PowerSavingState } from '@shared/powerSaving'
+import { DEFAULT_POWER_SAVING, type AppMemorySnapshot, type ProcessMemoryGroup, type PowerSavingSettings, type PowerSavingState } from '@shared/powerSaving'
 import { useModalEscape } from '../lib/modalEscape'
 import '../power-saving.css'
 
-const memoryLabel = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB` : `${Math.round(bytes / 1024 ** 2)} MB`
+const memoryLabel = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB` : bytes > 0 && bytes < 1024 ** 2 ? '<1 MB' : `${Math.round(bytes / 1024 ** 2)} MB`
+const processLabel = (count: number) => `${count} ${count === 1 ? 'process' : 'processes'}`
+
+function MemoryGroup({ label, group, note }: { label: string; group?: ProcessMemoryGroup; note: string }) {
+  return <details className="power-memory-group">
+    <summary><span>{label}<small>{!group ? 'Reading…' : group.bytes == null ? 'Unavailable' : `${processLabel(group.processCount)}${group.warning ? ' measured' : ''}`}</small></span>
+      <b>{group?.bytes == null ? '—' : `${group.warning ? '≥ ' : ''}${memoryLabel(group.bytes)}`}</b></summary>
+    <p>{note}</p>
+    {group?.warning && <p className="power-memory-warning" role="status">{group.warning}</p>}
+    <div className="power-memory-rows">
+      {group?.rows.map(row => <div className="power-memory-row" key={row.id}>
+        <span title={row.name}>{row.name}<small>{row.detail} · {row.bytes == null ? 'Unavailable' : processLabel(row.processCount)}</small></span>
+        <span>{row.bytes == null ? '—' : memoryLabel(row.bytes)}</span>
+      </div>)}
+      {group && !group.rows.length && !group.warning && <p>No active processes in this group.</p>}
+      {!!group?.omittedRows && <p>Showing the 100 largest entries; {group.omittedRows} more included in the total.</p>}
+    </div>
+  </details>
+}
 
 export function PowerSavingControl() {
   const [state, setState] = useState<PowerSavingState | null>(null)
@@ -113,10 +131,14 @@ export function PowerSavingControl() {
         {(error || state?.error) && <div role="alert" className="power-saving-error">{error || state?.error}</div>}
         <button className="power-saving-apply" type="submit" disabled={!state || busy}>{busy ? 'Saving…' : 'Save settings'}</button>
       </form>
-      <section className="power-saving-memory" aria-label="Electron memory usage">
-        <div><strong>Electron memory</strong><b>{memory ? memoryLabel(memory.totalBytes) : '—'}</b></div>
-        {memory?.processes.map(item => <div key={item.pid}><span>{item.name} <small>· {item.pid}</small></span><span>{memoryLabel(item.bytes)}</span></div>)}
-        <p>{memoryError || 'Estimated process working sets; shared pages may be counted twice. Excludes tmux, agents, and SSH hosts. Refreshes here every 5 seconds.'}</p>
+      <section className="power-saving-memory" aria-label="Local memory usage">
+        <div className="power-memory-heading"><strong>Memory</strong><small>This Mac</small></div>
+        <MemoryGroup label="Electron" group={memory ? { bytes: memory.totalBytes, processCount: memory.processes.length, warning: null, omittedRows: 0,
+          rows: memory.processes.map(item => ({ id: String(item.pid), name: item.name, detail: `PID ${item.pid}`, bytes: item.bytes, processCount: 1 })) } : undefined}
+          note="PanePilot's main process, renderer, GPU and utilities." />
+        <MemoryGroup label="tmux" group={memory?.tmux} note="The local shared tmux server and its attached clients. The server may also support sessions outside PanePilot." />
+        <MemoryGroup label="Agents" group={memory?.agents} note="PanePilot-managed local Codex and Claude session trees, including shells and child tools. Shared PIDs count once in the total." />
+        <p>{memoryError || 'Resident-memory estimates; shared pages may be counted twice. Remote hosts and unrelated agent sessions are excluded. Refreshes here every 5 seconds.'}</p>
       </section>
     </div>, document.body)}
   </>

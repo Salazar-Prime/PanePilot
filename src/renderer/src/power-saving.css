@@ -14,7 +14,20 @@
 .power-saving-error { color: #ffb6a6; font-size: 11px; margin: 10px 0; }
 .power-saving-apply { width: 100%; padding: 7px 10px; border: 1px solid #53695e; border-radius: 6px; background: #26362e; color: #bcdfc8; font: inherit; font-size: 11px; }
 .power-saving-memory { border-top: 1px solid #30394e; padding: 12px 14px; }
-.power-saving-memory > div { display: flex; justify-content: space-between; gap: 10px; margin: 7px 0; font-size: 11px; }
-.power-saving-memory > div:first-child { margin: 0 0 12px; }
-.power-saving-memory b { font-size: 16px; font-weight: 500; color: #bcdfc8; }
-.power-saving-memory small { color: #7d8797; }
+.power-memory-heading { display: flex; justify-content: space-between; align-items: center; margin: 0 0 8px; font-size: 11px; }
+.power-saving-memory b { font-size: 14px; font-weight: 500; color: #bcdfc8; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.power-saving-memory small { color: #939dac; font-size: 10px; }
+.power-memory-group { border-bottom: 1px solid #30394e; }
+.power-memory-group summary { display: flex; align-items: center; gap: 8px; padding: 9px 0; cursor: pointer; list-style: none; font-size: 11px; }
+.power-memory-group summary::-webkit-details-marker { display: none; }
+.power-memory-group summary::before { content: '›'; color: #939dac; width: 9px; flex: none; }
+.power-memory-group[open] summary::before { transform: rotate(90deg); }
+.power-memory-group summary > span { flex: 1; }
+.power-memory-group summary small, .power-memory-row small { display: block; margin-top: 3px; }
+.power-memory-group summary:focus-visible { outline: 1px solid #96d9ac; outline-offset: 2px; border-radius: 4px; }
+.power-memory-group > p { margin-top: 0; }
+.power-memory-rows { max-height: 180px; overflow-y: auto; overscroll-behavior: contain; }
+.power-memory-row { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0 7px 16px; font-size: 11px; }
+.power-memory-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.power-memory-row > span:last-child { flex: none; font-variant-numeric: tabular-nums; }
+.power-memory-warning { color: #efc18d !important; }

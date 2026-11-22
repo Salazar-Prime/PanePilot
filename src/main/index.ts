@@ -190,14 +190,16 @@ function registerIpc(): void {
   }
   ipcMain.handle('power-saving:get', (event) => { powerSavingSender(event); return powerSaving.get() })
   ipcMain.handle('power-saving:save', (event, settings: unknown) => { powerSavingSender(event); return powerSaving.save(settings) })
-  ipcMain.handle('power-saving:memory', (event) => {
+  ipcMain.handle('power-saving:memory', async (event) => {
     powerSavingSender(event)
     // Electron reports each process working set in KiB. This is an estimate,
-    // not a measurement of tmux/provider processes or unique system-wide RAM.
+    // not a measurement of unique system-wide RAM. External process trees are
+    // sampled separately, with Electron PIDs excluded from agent attribution.
     const processes = app.getAppMetrics().map(metric => ({ pid: metric.pid,
       name: metric.type === 'Browser' ? 'Main' : metric.type === 'Tab' ? 'Renderer' : metric.type,
       bytes: Math.max(0, metric.memory.workingSetSize) * 1024 }))
-    return { totalBytes: processes.reduce((sum, item) => sum + item.bytes, 0), processes, sampledAt: new Date().toISOString() }
+    const external = await terminals.localProcessMemory(processes.map(item => item.pid))
+    return { totalBytes: processes.reduce((sum, item) => sum + item.bytes, 0), processes, ...external, sampledAt: new Date().toISOString() }
   })
   ipcMain.on('terminals:set-visible', (event, sessionId: unknown, viewId: unknown, visible: unknown) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame ||

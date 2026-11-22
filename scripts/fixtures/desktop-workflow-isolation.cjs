@@ -89,6 +89,7 @@ exports.install = function install({ root, temp, electron }) {
     const safe = command === wrapper || command === safeShell ||
       (command === 'sh' && values[0] === '-lc' && (values[1] === 'command -v tmux' || (values[1]?.includes(wrapper) && !values[1]?.includes('ssh')))) ||
       (command === 'which' && values.length === 1 && values[0] === 'tmux') ||
+      (command === '/bin/ps' && JSON.stringify(values) === JSON.stringify(['-U', String(process.getuid()), '-o', 'pid=,ppid=,rss='])) ||
       (command === 'ssh' && values.includes('fixture-ssh')) ||
       (command === path.join(bin, 'rclone') && values.length === 1 && values[0] === 'listremotes') ||
       (command === 'git' && values.includes('-C') && inside(temp, values[values.indexOf('-C') + 1] ?? '')) ||

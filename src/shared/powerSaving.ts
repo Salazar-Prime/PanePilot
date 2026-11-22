@@ -27,6 +27,24 @@ export interface AppMemorySnapshot {
   totalBytes: number
   processes: Array<{ pid: number; name: string; bytes: number }>
   sampledAt: string
+  tmux: ProcessMemoryGroup
+  agents: ProcessMemoryGroup
+}
+
+export interface ProcessMemoryRow {
+  id: string
+  name: string
+  detail: string
+  bytes: number | null
+  processCount: number
+}
+
+export interface ProcessMemoryGroup {
+  bytes: number | null
+  processCount: number
+  rows: ProcessMemoryRow[]
+  omittedRows: number
+  warning: string | null
 }
 
 export interface PowerSavingApi {

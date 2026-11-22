@@ -71,6 +71,38 @@ describe('local chat power saving with disposable mocked backends', () => {
     expect(store.getSession(chat.id)?.recoveryPending).toBe(false)
   })
 
+  it('measures only local owned agent trees, coalesces reads, and collects no command arguments', async () => {
+    const chat = saved(), id = add(chat)
+    const shell = saved('shell'), shellId = add(shell)
+    const remoteProject = store.createProject({ type: 'terminal', name: 'SSH', connectionId: 'ssh:other', folder: root, repositoryUrl: null })
+    const remoteId = add(saved('codex', remoteProject.id))
+    const original = subprocess.exec.getMockImplementation()!
+    subprocess.exec.mockImplementation(async (file, args, ...rest) => {
+      if (args.includes('list-panes')) return { stdout: `${id}\t20\t10\n${shellId}\t40\t10\n${remoteId}\t60\t10\n`, stderr: '' }
+      if (args.includes('list-clients')) return { stdout: '11\n', stderr: '' }
+      if (file === '/bin/ps') {
+        expect(args).toEqual(['-U', String(process.getuid!()), '-o', 'pid=,ppid=,rss='])
+        return { stdout: '10 1 100\n11 1 10\n20 10 1\n21 20 200\n40 10 500\n60 10 600\n', stderr: '' }
+      }
+      return original(file, args, ...rest)
+    })
+    const first = manager.localProcessMemory([]), second = manager.localProcessMemory([])
+    expect(first).toBe(second)
+    const result = await first
+    expect(result.tmux).toMatchObject({ bytes: 110 * 1024, processCount: 2 })
+    expect(result.agents).toMatchObject({ bytes: 201 * 1024, processCount: 2 })
+    expect(result.agents.rows.map(row => row.id)).toEqual([chat.id])
+    expect(subprocess.exec.mock.calls.filter(([file]) => file === '/bin/ps')).toHaveLength(1)
+    expect(subprocess.exec.mock.calls.some(([file, args]) => file === 'ssh' || args.includes('kill-session'))).toBe(false)
+  })
+
+  it('keeps memory failures explicit and avoids process scans without live tmux', async () => {
+    expect((await manager.localProcessMemory([])).agents.bytes).toBe(0)
+    expect(subprocess.exec.mock.calls.some(([file]) => file === '/bin/ps')).toBe(false)
+    add(saved()) // Fixture deliberately rejects list-panes and ps in this test.
+    expect((await manager.localProcessMemory([])).agents).toMatchObject({ bytes: null, warning: expect.stringContaining('could not be read') })
+  })
+
   it('preserves the floor and protects visible, externally attached, running, unread and unlinked chats', async () => {
     const chats = Array.from({ length: 7 }, () => saved())
     for (const [i, chat] of chats.entries()) add(chat, i === 1 ? { clients: 1 } : i === 2 ? { title: 'Working' } : {})

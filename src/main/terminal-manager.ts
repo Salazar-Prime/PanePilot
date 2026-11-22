@@ -47,6 +47,7 @@ import { TerminalOutputFlow } from './terminal-output-flow'
 import { ConnectionRetryCoordinator } from './connection-retry-coordinator'
 import type { TerminalPreviewSnapshot } from '../shared/types'
 import type { IdleChat } from './power-saving-service'
+import { parseProcessMemory, summarizeProcessMemory, unavailableProcessMemory, type MemoryTopology } from './process-memory'
 import {
   panePilotTmuxMetadata,
   parseTmuxSessionList,
@@ -455,6 +456,7 @@ export class TerminalManager {
   private powerSavingRevision = 0
   private readonly powerSavingRevisions = new Map<string, number>()
   private readonly powerSavingStops = new Set<string>()
+  private memoryRead: Promise<ReturnType<typeof summarizeProcessMemory>> | null = null
 
   constructor(
     private readonly store: Store,
@@ -485,6 +487,54 @@ export class TerminalManager {
     if (views.size) this.visibleViews.set(sessionId, views)
     else this.visibleViews.delete(sessionId)
     this.lastInteraction.set(sessionId, Date.now())
+  }
+
+  localProcessMemory(electronPids: number[]): Promise<ReturnType<typeof summarizeProcessMemory>> {
+    if (this.memoryRead) return this.memoryRead
+    const read = this.readLocalProcessMemory(electronPids).finally(() => { if (this.memoryRead === read) this.memoryRead = null })
+    this.memoryRead = read
+    return read
+  }
+
+  private async readLocalProcessMemory(electronPids: number[]) {
+    try {
+      const listed = await this.listLocalTmuxSessions()
+      if (!listed) return unavailableProcessMemory('Local tmux statistics are unavailable.')
+      const topology: MemoryTopology = { servers: [], clients: [], sessions: [], warning: null }
+      if (!listed.length) return summarizeProcessMemory(topology, [], electronPids)
+      if (!process.getuid) return unavailableProcessMemory('Process memory is unavailable on this platform.')
+      const [panes, clients, processList] = await Promise.all([
+        this.execCommand(this.tmuxPath!, ['-u', 'list-panes', '-a', '-F', '#{session_id}\t#{pane_pid}\t#{pid}'], { encoding: 'utf8', timeout: 3_000, maxBuffer: 512 * 1024 }),
+        this.execCommand(this.tmuxPath!, ['-u', 'list-clients', '-F', '#{client_pid}'], { encoding: 'utf8', timeout: 3_000, maxBuffer: 128 * 1024 }),
+        this.execCommand('/bin/ps', ['-U', String(process.getuid()), '-o', 'pid=,ppid=,rss='], { encoding: 'utf8', timeout: 3_000, maxBuffer: 2 * 1024 * 1024 })
+      ])
+      const roots = new Map<string, number[]>()
+      const validPid = (text: string) => /^\d+$/.test(text) && Number.isSafeInteger(Number(text)) && Number(text) > 0
+      for (const line of panes.stdout.trim().split('\n').filter(Boolean)) {
+        const [id, pane, server, ...extra] = line.split('\t')
+        if (extra.length || !/^\$\d+$/.test(id) || !validPid(pane) || !validPid(server)) throw new Error('Invalid tmux process snapshot.')
+        topology.servers.push(Number(server))
+        roots.set(id, [...roots.get(id) ?? [], Number(pane)])
+      }
+      for (const line of clients.stdout.trim().split('\n').filter(Boolean)) {
+        if (!validPid(line.trim())) throw new Error('Invalid tmux client snapshot.')
+        topology.clients.push(Number(line.trim()))
+      }
+      const byId = new Map(listed.filter(item => item.metadata).map(item => [item.metadata!.terminalId, item]))
+      for (const project of this.store.listProjectsForRuntime()) {
+        if (project.archived || this.store.getConnection(project.connectionId)?.kind !== 'local') continue
+        for (const session of project.sessions) {
+          const live = byId.get(session.id), paneRoots = live ? roots.get(live.tmuxId) : null
+          if (!session.archived && AGENT_PROFILES.has(session.profile) && live && !live.paneDead && paneRoots &&
+              live.name === session.tmuxName && live.metadata!.profile === session.profile && sameRemoteProjectPath(live.metadata!.projectPath, project.folder)) {
+            topology.sessions.push({ id: session.id, name: session.name, detail: `${project.name} · ${session.profile === 'codex' ? 'Codex' : 'Claude'}`, roots: paneRoots })
+          }
+        }
+      }
+      return summarizeProcessMemory(topology, parseProcessMemory(processList.stdout), electronPids)
+    } catch {
+      return unavailableProcessMemory('Local process statistics could not be read. Retrying while this popup is open.')
+    }
   }
 
   private powerSavingEntries(listed: ListedTmuxSession[]) {
