@@ -190,6 +190,13 @@ function isLatexInlineEditSession(session: TerminalSession): boolean {
   return session.latexChat?.purpose === 'inline-edit'
 }
 
+function canRecoverInteractiveSession(session: TerminalSession): boolean {
+  return !session.archived && session.backend === 'tmux' && Boolean(session.tmuxName) &&
+    ['terminal', 'temporary-chat', 'latex-chat'].includes(session.kind) &&
+    (session.profile === 'shell' || AGENT_PROFILES.has(session.profile)) &&
+    !isLatexInlineEditSession(session)
+}
+
 function latexInlineExecCommand(prompt: string): string {
   return [
     'panepilot_inline_output=$(mktemp "${TMPDIR:-/tmp}/panepilot-inline-output.XXXXXX") || exit 1',
@@ -1343,8 +1350,9 @@ export class TerminalManager {
           `${session.name} could not be restored because it used a non-persistent PTY.`
         )
       } else {
-        if (connection.kind === 'local' && this.store.isSessionPendingRebootRecovery(sessionId)) {
-          await this.restoreLocalSessionOnAttach(session, project, connection, cols, rows)
+        if (this.store.isSessionPendingRebootRecovery(sessionId) ||
+            (connection.kind === 'ssh' && canRecoverInteractiveSession(session))) {
+          await this.restoreSessionOnAttach(session, project, connection, cols, rows, pending)
         } else {
           if (
             connection.kind === 'local' &&
@@ -1472,29 +1480,66 @@ export class TerminalManager {
     complete()
   }
 
-  private async restoreLocalSessionOnAttach(
+  private async restoreSessionOnAttach(
     session: TerminalSession,
     project: Project,
     connection: Connection,
     cols: number,
-    rows: number
+    rows: number,
+    pending: { cancelled: boolean }
   ): Promise<void> {
-    if (!(await this.localTmuxPath()) || !session.tmuxName) {
+    if (!(await this.tmuxPathForConnection(connection)) || !session.tmuxName) {
       throw new Error('Tmux is unavailable, so this terminal cannot resume yet.')
     }
     // Recheck ownership at selection time: another client may have restored it
     // since startup. Never attach to an unrelated session that reused the name.
-    const listed = await this.listLocalTmuxSessions()
+    const listed = await this.listTmuxSessions(connection)
     if (!listed) throw new Error('Could not check tmux. Retry opening this terminal.')
-    const live = listed.find((candidate) => candidate.name === session.tmuxName)
-    if (live && live.metadata?.terminalId !== session.id) {
+    this.ensureProjectLaunchable(project.id)
+    if (pending.cancelled) return
+    session = this.requireSession(session.id)
+    if (session.archived || ['completed', 'error'].includes(session.state)) {
+      throw new Error('This terminal was stopped or archived while opening it.')
+    }
+    // A different client may also have renamed the same UUID. Follow its exact
+    // identity rather than creating a second backend under the stale name.
+    const live = listed.find((candidate) => candidate.metadata?.terminalId === session.id) ??
+      listed.find((candidate) => candidate.name === session.tmuxName)
+    if (live && (live.metadata?.terminalId !== session.id ||
+        !sameRemoteProjectPath(live.metadata.projectPath, project.folder))) {
       throw new Error(`Another tmux session is using the name “${session.name}”. PanePilot did not attach to it.`)
+    }
+    const remote = connection.kind === 'ssh'
+    if (live && live.name !== session.tmuxName && live.metadata) {
+      this.store.upsertDiscoveredTmuxSession(project.id, live.name, live.metadata)
+      session = this.requireSession(session.id)
+    }
+    if (remote && !live) {
+      this.deferRemoteSessionRecovery(session)
+      session = this.requireSession(session.id)
+      if (AGENT_PROFILES.has(session.profile) && !session.providerSessionId) {
+        throw new Error('The remote tmux session is missing and this chat has no verified provider session ID. Link its exact ID or use Force reload to explicitly start a new chat.')
+      }
     }
     await this.launch(
       session, project.folder, connection, cols, rows, !live,
       !live && AGENT_PROFILES.has(session.profile) && Boolean(session.providerSessionId)
     )
-    this.store.prepareSessionForRebootRecovery(session.id, !live)
+    if (!remote || !live || this.store.isSessionPendingRebootRecovery(session.id)) {
+      this.store.prepareSessionForRebootRecovery(session.id, !live, remote)
+    }
+    if (remote && live) this.applyCodexPaneSnapshot(this.requireSession(session.id), live)
+    this.getWindow()?.webContents.send('terminal:metadata', { sessionId: session.id, projectId: project.id })
+  }
+
+  private deferRemoteSessionRecovery(session: TerminalSession): void {
+    this.store.deferSessionForRebootRecovery(session.id, true)
+    this.getWindow()?.webContents.send('terminal:state', {
+      sessionId: session.id, projectId: session.projectId, state: 'idle'
+    })
+    this.getWindow()?.webContents.send('terminal:metadata', {
+      sessionId: session.id, projectId: session.projectId
+    })
   }
 
   async retryAttach(sessionId: string, cols: number, rows: number): Promise<void> {
@@ -1502,7 +1547,10 @@ export class TerminalManager {
     const project = this.store.getProjectForRuntime(session.projectId)
     const connection = project ? this.store.getConnection(project.connectionId) : null
     if (!project || !connection) throw new Error('The terminal project is unavailable.')
-    if (connection.kind === 'local' && this.store.isSessionPendingRebootRecovery(sessionId)) {
+    if (this.store.isSessionPendingRebootRecovery(sessionId) ||
+        (connection.kind === 'ssh' && canRecoverInteractiveSession(session) &&
+          !this.runtimes.has(sessionId) && !['completed', 'error'].includes(session.state))) {
+      this.cancelReconnect(sessionId)
       await this.attach(sessionId, cols, rows)
       return
     }
@@ -2922,7 +2970,7 @@ export class TerminalManager {
       `if [ "$panepilot_code" -eq 0 ]; then ` +
       `printf '%s\\n' "$panepilot_output"; exit 0; fi; ` +
       `case "$panepilot_output" in ` +
-      `*"no server running"*|*"failed to connect to server"*) exit 0 ;; ` +
+      `*"no server running"*|*"(No such file or directory)"*|*"(Connection refused)"*) exit 0 ;; ` +
       `*) printf '%s\\n' "$panepilot_output" >&2; exit "$panepilot_code" ;; ` +
       `esac`
     try {
@@ -3079,6 +3127,15 @@ export class TerminalManager {
     )
     if (!remote) {
       this.cancelReconnect(session.id)
+      // A confirmed missing backend is recoverable, but reconnect polling must
+      // never start agents. Explicit selection/Retry takes the recovery path.
+      if (canRecoverInteractiveSession(session) &&
+          !listed.some((candidate) => candidate.name === session.tmuxName || candidate.metadata?.terminalId === session.id)) {
+        this.deferRemoteSessionRecovery(session)
+        this.emitTransport(session.id, 'detached', reconnect.attempt,
+          'The remote tmux session is missing. Open this tab again or Retry to resume it on its host.')
+        return
+      }
       const state = reconnect.lastExitCode === 0 ? 'completed' : 'error'
       this.changeState(
         session,
@@ -3309,8 +3366,9 @@ export class TerminalManager {
         metadata
       )
       if (!result) continue
+      const wasPending = this.store.isSessionPendingRebootRecovery(result.session.id)
       this.store.clearSessionRebootRecovery(result.session.id)
-      let changed = result.changed
+      let changed = result.changed || wasPending
       const runtime = this.runtimes.get(result.session.id)
       const screenText = runtime?.title
         ? this.visibleScreenText(runtime)
@@ -3372,7 +3430,7 @@ export class TerminalManager {
           continue
         }
         if (liveMetadataIds.has(session.id)) continue
-        if (connection.kind === 'local' && this.store.isSessionPendingRebootRecovery(session.id)) continue
+        if (this.store.isSessionPendingRebootRecovery(session.id)) continue
         const nameMatch = liveByName.get(session.tmuxName)
         if (nameMatch && !nameMatch.metadata) {
           if (await this.syncSessionMetadata(session.id)) {
@@ -3381,12 +3439,13 @@ export class TerminalManager {
           }
           continue
         }
-        if (
-          this.store.getSessionTmuxMetadataVersion(session.id) === 1 &&
-          !this.runtimes.has(session.id) &&
-          Date.now() - Date.parse(session.createdAt) > DISCOVERY_GRACE_MS &&
-          this.store.markMissingTmuxSession(session.id)
-        ) {
+        if (this.store.getSessionTmuxMetadataVersion(session.id) !== 1 ||
+            this.runtimes.has(session.id) ||
+            Date.now() - Date.parse(session.createdAt) <= DISCOVERY_GRACE_MS) continue
+        if (connection.kind === 'ssh' && !nameMatch && canRecoverInteractiveSession(session)) {
+          this.deferRemoteSessionRecovery(session)
+          changes += 1
+        } else if (this.store.markMissingTmuxSession(session.id)) {
           changes += 1
           this.getWindow()?.webContents.send('terminal:state', {
             sessionId: session.id,

@@ -103,6 +103,19 @@ if (!process.versions.electron) {
       assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.pane-workspace-entry.active .terminal-tab-select > span:last-child'),e=>e.textContent)`),
         ['project-2-first', 'project-2-second'], 'Surface retention must not reorder tabs')
 
+      await evaluate(`window.markRecovery('project-2-second');window.changeFixture({index:2})`)
+      await settle()
+      assert.equal(await evaluate(`window.attaches.filter(id=>id==='project-2-second').length`), 1,
+        'Background recovery metadata must not restart the currently visible backend')
+      await evaluate(`window.changeFixture({index:3,selected:'project-3-second'})`)
+      await settle()
+      await evaluate(`window.changeFixture({index:2,selected:'project-2-second'})`)
+      await settle()
+      assert.equal(await evaluate(`window.attaches.filter(id=>id==='project-2-second').length`), 2,
+        'Selecting a cached recovery-pending surface retries its exact attachment')
+      assert.equal(await evaluate(`window.keptNode===document.querySelector('[data-terminal-session-id="project-2-second"] .xterm')`), false,
+        'Recovery replaces the stale output subscription and xterm together')
+
       await evaluate(`window.changeFixture({latex:true,selected:'writing-chat'})`)
       await waitFor(`document.querySelector('.latex-agent-terminal .xterm')!==null`)
       await settle()
@@ -201,6 +214,7 @@ function fixture() {
       repositoryUrl:null,latex:null,state:'idle',archived:false,createdAt:'2026-01-01',updatedAt:'2026-01-01',
       sessions:[session(id+'-first',id),session(id+'-second',id)],actions:[],activities:[]});
     const projects=Array.from({length:5},(_,i)=>project('project-'+i));
+    window.markRecovery=(id)=>{for(const project of projects)project.sessions=project.sessions.map(session=>session.id===id?{...session,recoveryPending:true}:session)};
     const paper={...project('paper'),type:'latex',sessions:[{...session('writing-chat','paper'),kind:'latex-chat',profile:'codex',
       latexChat:{purpose:'writing',scope:'project',mode:'ask',sectionId:null}}]};
     const connections=[{id:'local',kind:'local',name:'Local'}];

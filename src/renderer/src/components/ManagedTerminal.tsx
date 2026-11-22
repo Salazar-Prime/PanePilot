@@ -52,6 +52,7 @@ export function ManagedTerminal({
   const fitRef = useRef<FitAddon | null>(null)
   const activeRef = useRef(active)
   activeRef.current = active
+  const previouslyActiveRef = useRef(active)
   const profileRef = useRef(session.profile)
   profileRef.current = session.profile
   const writableRef = useRef(false)
@@ -457,6 +458,16 @@ export function ManagedTerminal({
     })
     return () => window.cancelAnimationFrame(frame)
   }, [active, session.id])
+
+  useEffect(() => {
+    const reopening = active && !previouslyActiveRef.current
+    previouslyActiveRef.current = active
+    // Initial mounts already attach below. A cached surface must retry only
+    // when selected again, not when background discovery reports host loss.
+    if (reopening && session.recoveryPending) {
+      setOutputSubscriptionVersion((current) => current + 1)
+    }
+  }, [active, session.recoveryPending])
 
   useEffect(() => {
     if (!active) setContextMenu(null)

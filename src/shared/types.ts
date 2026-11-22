@@ -35,6 +35,8 @@ export interface Connection {
 }
 
 export interface TerminalSession {
+  /** Backend is missing; opening this surface may recover it on its own host. */
+  recoveryPending?: boolean
   id: string
   projectId: string
   kind: TerminalSessionKind

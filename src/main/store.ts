@@ -162,6 +162,7 @@ type SessionRow = {
   archived: number
   pinned: number
   flagged: number
+  reboot_recovery_pending: number
   output: string
   created_at: string
   updated_at: string
@@ -438,6 +439,7 @@ function mapSession(
     archived: Boolean(row.archived),
     pinned: Boolean(row.pinned),
     flagged: Boolean(row.flagged),
+    recoveryPending: Boolean(row.reboot_recovery_pending),
     output,
     latexChat,
     createdAt: row.created_at,
@@ -820,11 +822,34 @@ export class Store {
       DROP TABLE IF EXISTS speech_settings;
     `)
     this.migrateLegacyTerminalOutput()
+    // v23 retains remotely lost interactive tabs for lazy recovery. Older
+    // clients recorded transport-confirmed tmux loss as completed/error. Only
+    // upgrade that exact ending, never explicit stops or restored archives.
+    if (previousVersion < 23) {
+      this.db.exec(`
+        CREATE INDEX IF NOT EXISTS activities_session_idx ON activities(session_id, created_at DESC);
+        UPDATE terminal_sessions AS s SET reboot_recovery_pending = 1, state = 'idle'
+        WHERE backend = 'tmux' AND tmux_name IS NOT NULL AND archived = 0
+          AND state IN ('completed', 'error')
+          AND session_kind IN ('terminal', 'temporary-chat', 'latex-chat')
+          AND profile IN ('shell', 'codex', 'claude')
+          AND NOT EXISTS (SELECT 1 FROM latex_chat_sessions l
+            WHERE l.terminal_session_id = s.id AND l.purpose = 'inline-edit')
+          AND project_id IN (SELECT p.id FROM projects p JOIN connections c ON c.id = p.connection_id
+            WHERE p.archived = 0 AND c.kind = 'ssh')
+          AND (SELECT a.message FROM activities a WHERE a.session_id = s.id
+            AND a.kind IN ('state-changed', 'terminal-archived', 'terminal-restored')
+            ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1) = s.name || ' is no longer running in tmux.';
+      `)
+      const pendingProjects = this.db.prepare('SELECT DISTINCT project_id FROM terminal_sessions WHERE reboot_recovery_pending = 1')
+        .all() as { project_id: string }[]
+      for (const project of pendingProjects) this.updateProjectState(project.project_id)
+    }
     // v22 reintroduces per-project terminal archives. Keep any old archives
     // still present; migration must not delete saved sessions or their output.
     this.db.exec(`CREATE INDEX IF NOT EXISTS terminal_sessions_archive_idx
       ON terminal_sessions(project_id, archived, session_kind, updated_at DESC);
-      PRAGMA user_version = ${Math.max(previousVersion, 22)};`)
+      PRAGMA user_version = ${Math.max(previousVersion, 23)};`)
   }
 
   getQuickNotes(): QuickNotesDocument {
@@ -1929,7 +1954,7 @@ export class Store {
         `SELECT id, project_id, session_kind, name, profile,
                 provider_session_id, provider_session_name,
                 custom_command, backend, tmux_name, state,
-                dangerous_mode, archived, pinned, flagged,
+                dangerous_mode, archived, pinned, flagged, reboot_recovery_pending,
                 ${includeOutput ? 'output' : "'' AS output"},
                 created_at, updated_at
          FROM terminal_sessions WHERE project_id = ? ORDER BY created_at`
@@ -2652,7 +2677,7 @@ export class Store {
     ).run(id)
   }
 
-  deferSessionForRebootRecovery(id: string): void {
+  deferSessionForRebootRecovery(id: string, remote = false): void {
     const session = this.requireSession(id)
     if (this.isSessionPendingRebootRecovery(id)) return
     if (session.backend !== 'tmux' || !session.tmuxName ||
@@ -2663,15 +2688,18 @@ export class Store {
       "UPDATE terminal_sessions SET reboot_recovery_pending = 1, state = 'idle', updated_at = ? WHERE id = ?"
     ).run(now(), id)
     this.addActivity(
-      session.projectId, id, 'terminal-reboot-pending',
-      `${session.name} will resume when opened after the computer restarted.`
+      session.projectId, id, remote ? 'terminal-remote-pending' : 'terminal-reboot-pending',
+      remote
+        ? `${session.name} will resume on its SSH host when opened; its tmux session is missing.`
+        : `${session.name} will resume when opened after the computer restarted.`
     )
     this.updateProjectState(session.projectId)
   }
 
   prepareSessionForRebootRecovery(
     id: string,
-    recreated = true
+    recreated = true,
+    remote = false
   ): TerminalSession {
     const session = this.requireSession(id)
     if (
@@ -2690,8 +2718,10 @@ export class Store {
     this.addActivity(
       session.projectId,
       session.id,
-      'terminal-reboot-restored',
-      `${recreated ? 'Recreated' : 'Recovered'} ${session.name} after the computer restarted.`
+      remote ? 'terminal-remote-restored' : 'terminal-reboot-restored',
+      remote
+        ? `${recreated ? 'Recreated' : 'Recovered'} ${session.name} on its SSH host.`
+        : `${recreated ? 'Recreated' : 'Recovered'} ${session.name} after the computer restarted.`
     )
     this.updateProjectState(session.projectId)
     return this.requireSession(id)
@@ -2731,7 +2761,7 @@ export class Store {
         `SELECT id, project_id, session_kind, name, profile,
                 provider_session_id, provider_session_name,
                 custom_command, backend, tmux_name, state,
-                dangerous_mode, archived, pinned, flagged,
+                dangerous_mode, archived, pinned, flagged, reboot_recovery_pending,
                 ${includeOutput ? 'output' : "'' AS output"},
                 created_at, updated_at
          FROM terminal_sessions WHERE id = ?`

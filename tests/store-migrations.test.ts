@@ -20,7 +20,7 @@ describe('retired feature storage migrations', () => {
     const database = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
     try {
       expect(database.prepare('PRAGMA user_version').get()).toMatchObject({
-        user_version: 22
+        user_version: 23
       })
       expect(database.prepare(`
         SELECT name FROM sqlite_master
@@ -36,6 +36,49 @@ describe('retired feature storage migrations', () => {
     for (let pass = 0; pass < 2; pass += 1) {
       const store = new Store(appDataPath)
       store.close()
+      expectCurrentSchema()
+    }
+  })
+
+  it('upgrades only remotely lost tabs from v22, preserving IDs, output, and explicit stops/archives', () => {
+    const original = new Store(appDataPath)
+    original.syncConnections(['host'])
+    const remote = original.createProject({ type: 'terminal', name: 'Remote', connectionId: 'ssh:host',
+      folder: '/srv/project', repositoryUrl: null })
+    const local = original.createProject({ type: 'terminal', name: 'Local', connectionId: 'local',
+      folder: appDataPath, repositoryUrl: null })
+    const make = (name: string, projectId = remote.id) => original.createSession({ projectId,
+      name, profile: 'codex', backend: 'tmux', tmuxName: name, providerSessionName: null,
+      customCommand: null, dangerousMode: true })
+    const missing = make('Missing')
+    original.setSessionProviderId(missing.id, 'codex', 'exact-saved-thread')
+    original.replaceOutput(missing.id, 'saved output')
+    original.setSessionState(missing.id, 'error', `${missing.name} is no longer running in tmux.`)
+    const stopped = make('Stopped')
+    original.setSessionState(stopped.id, 'completed', `${stopped.name} was stopped.`)
+    const restored = make('Restored')
+    original.setSessionState(restored.id, 'completed', `${restored.name} is no longer running in tmux.`)
+    original.setSessionArchived(restored.id, true)
+    original.setSessionArchived(restored.id, false)
+    const archived = make('Archived')
+    original.setSessionState(archived.id, 'completed', `${archived.name} is no longer running in tmux.`)
+    original.setSessionArchived(archived.id, true)
+    const localMissing = make('Local missing', local.id)
+    original.setSessionState(localMissing.id, 'completed', `${localMissing.name} is no longer running in tmux.`)
+    original.close()
+    const legacy = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
+    legacy.exec('PRAGMA user_version = 22')
+    legacy.close()
+    for (let pass = 0; pass < 2; pass++) {
+      const migrated = new Store(appDataPath)
+      try {
+        expect(migrated.getSession(missing.id)).toMatchObject({ state: 'idle', recoveryPending: true,
+          providerSessionId: 'exact-saved-thread', dangerousMode: true, output: 'saved output' })
+        expect(migrated.getProjectForRuntime(remote.id)?.sessions.find((s) => s.id === missing.id)?.recoveryPending).toBe(true)
+        for (const tab of [stopped, restored, archived, localMissing]) {
+          expect(migrated.getSession(tab.id)).toMatchObject({ state: 'completed', recoveryPending: false })
+        }
+      } finally { migrated.close() }
       expectCurrentSchema()
     }
   })
