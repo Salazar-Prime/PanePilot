@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Clipboard, FileText, FolderOpen, Search, Trash2, X } from 'lucide-react'
 import { MARKDOWN_HISTORY_LIMIT, type MarkdownViewerEntry, type MarkdownViewerSummary } from '@shared/markdownViewer'
 import { useModalEscape } from '../lib/modalEscape'
+import { useMarkdownViewerResize } from '../lib/useMarkdownViewerResize'
 import { MarkdownPreview } from './MarkdownPreview'
 import '../markdown-viewer.css'
 
@@ -14,6 +15,7 @@ export function MarkdownViewerDialog({ clipboardOnOpen, onClose }: { clipboardOn
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const panel = useRef<HTMLElement>(null)
+  const resize = useMarkdownViewerResize(panel)
   const generation = useRef(0)
   const alive = useRef(true)
   const mutating = useRef(false)
@@ -99,7 +101,7 @@ export function MarkdownViewerDialog({ clipboardOnOpen, onClose }: { clipboardOn
 
   const results = history.filter((entry) => `${entry.title} ${entry.sourcePath ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   return createPortal(<div className="modal-backdrop markdown-viewer-backdrop" onMouseDown={() => { if (!busy) onClose() }}>
-    <section className="modal markdown-viewer-modal" ref={panel} role="dialog" aria-modal="true" aria-labelledby="markdown-viewer-title"
+    <section className={`modal markdown-viewer-modal${resize.resizing ? ' is-resizing' : ''}`} style={resize.style} ref={panel} role="dialog" aria-modal="true" aria-labelledby="markdown-viewer-title"
       onMouseDown={(event) => event.stopPropagation()} onKeyDown={(event) => {
         if (event.key !== 'Tab') return
         const controls = Array.from(panel.current!.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),a[href]'))
@@ -142,6 +144,10 @@ export function MarkdownViewerDialog({ clipboardOnOpen, onClose }: { clipboardOn
       </div>
       {error && <div className="markdown-viewer-error" role="alert">{error}</div>}
       <footer><span role="status">{busy ? 'Updating history…' : 'Saved on this device'}</span><span title="HTML is sanitized and scripts cannot run. Relative images and file links require the Files workspace; HTTPS images may contact their hosts.">Read-only snapshot · GitHub-style preview</span></footer>
+      <button type="button" className="markdown-viewer-resize" aria-label="Resize Markdown viewer"
+        title="Drag to resize · Arrow keys adjust · Double-click or press Enter to reset" {...resize.handle}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 12 12 4M8 12l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+      </button>
     </section>
   </div>, document.body)
 }
