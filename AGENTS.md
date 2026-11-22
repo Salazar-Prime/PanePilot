@@ -151,6 +151,8 @@ When the provider records an explicit agent hierarchy path (for example `/root/c
 
 The Markdown viewer's bottom-right grip resizes its reading area in both dimensions, retaining the chosen size locally across reopen/restart and fitting it inside the current app window. Arrow keys resize from the focused grip; double-click, Enter, or Home resets the default. Resizing keeps the selected snapshot and mounted preview intact; the history layout adapts to the viewer's own width.
 
+The main workspace split has a draggable, keyboard-accessible divider. Its app-wide left/right proportion is client-local and retained across closing/reopening the split and app restarts. Each pane stays at least 280 px wide when space allows (otherwise the split balances), within 20–80% bounds. Narrowing the window temporarily clamps the displayed proportion without discarding the saved preference. Arrow keys adjust, Home/End reach the bounds, and double-click or Enter restores equal widths. Direct dragging is immediate; split opening/closing keeps its existing reduced-motion-aware reveal. Resizing must preserve pane identity, selection, mounted terminals/editors and focused-project ownership, and must not restart or send input to sessions.
+
 ## Agent lifecycle semantics
 
 Agent state describes the current turn, not merely whether the terminal process exists.

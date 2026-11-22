@@ -139,6 +139,7 @@ import { ArchivedProjectsPage } from './ArchivedProjectsPage'
 import { SubagentOverlay } from './SubagentOverlay'
 import { QuickNotesDialog } from './QuickNotesDialog'
 import { MarkdownViewerDialog } from './MarkdownViewerDialog'
+import { WorkspaceSplit } from './WorkspaceSplit'
 import { visibleCodexSession } from '../lib/subagents'
 import { AutomaticSubagentAction } from './AutomaticSubagentAction'
 import { SubagentActivityIcon } from './SubagentActivityIcon'
@@ -3079,7 +3080,7 @@ export function App() {
             onDelete={deleteArchivedProject}
           />
         ) : (
-          <div className={`workspace-split ${splitOpen ? 'split' : ''}`}>
+          <WorkspaceSplit open={splitOpen}>
             <div
               className={`workspace-pane ${
                 !splitOpen || focusedPane === 'a' ? 'focused' : ''
@@ -3233,7 +3234,7 @@ export function App() {
                   </div>
                 ))}
             </div>
-          </div>
+          </WorkspaceSplit>
         )}
       </main>
 
