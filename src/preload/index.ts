@@ -23,6 +23,13 @@ import type {
 } from '../shared/types'
 
 const api: ProjectConsoleApi = {
+  markdownViewer: {
+    list: () => ipcRenderer.invoke('markdown-viewer:list'),
+    get: (id) => ipcRenderer.invoke('markdown-viewer:get', id),
+    fromClipboard: () => ipcRenderer.invoke('markdown-viewer:clipboard'),
+    openFile: () => ipcRenderer.invoke('markdown-viewer:open-file'),
+    remove: (id) => ipcRenderer.invoke('markdown-viewer:remove', id)
+  },
   updates: {
     get: () => ipcRenderer.invoke('updates:get'),
     check: () => ipcRenderer.invoke('updates:check'),

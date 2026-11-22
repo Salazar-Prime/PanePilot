@@ -40,6 +40,7 @@ if (!process.versions.electron) {
       child.once('exit', (code) => { clearTimeout(timeout); done(code ?? 1) })
     })
     const result = JSON.parse(await readFile(join(temp, 'result.json'), 'utf8'))
+    if (process.env.PANEPILOT_MARKDOWN_SCREENSHOT) await writeFile(process.env.PANEPILOT_MARKDOWN_SCREENSHOT, await readFile(join(temp, 'markdown-viewer.png')))
     result.sourceRevision = revision
     await mkdir(dirname(output), { recursive: true })
     await writeFile(output, JSON.stringify(result, null, 2) + '\n')
@@ -152,6 +153,50 @@ async function runFixture() {
     const remote = connections.find((item) => item.sshAlias === 'fixture-ssh')
     assert.ok(local && remote, 'Only synthetic SSH config is imported.')
     assert.equal(connections.length, 2)
+    // Real main/preload + renderer Markdown reader, with only synthetic clipboard
+    // data and an explicitly stubbed native picker pointing inside this fixture.
+    await waitFor(`!!document.querySelector('button[aria-label="Open Markdown viewer"]')`, 'Markdown toolbar action')
+    electron.clipboard.writeText('# Clipboard reader\n\n**Readable Markdown**\n\n<script>window.markdownExecuted=true</script>')
+    await evaluate('window.dispatchEvent(new KeyboardEvent("keydown",{key:"k",metaKey:true,bubbles:true,cancelable:true}))')
+    await waitFor('!!document.querySelector(".command-palette input")', 'Command-K Markdown entry')
+    await evaluate(`(() => {const input=document.querySelector('.command-palette input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'markdown clipboard');input.dispatchEvent(new Event('input',{bubbles:true}));})()`)
+    await clickText('.command-copy strong', 'Open Markdown from clipboard')
+    await waitFor('document.querySelector(".markdown-viewer-modal .markdown-body h1")?.textContent.includes("Clipboard reader")', 'Clipboard Markdown renders')
+    assert.equal(await evaluate('!!window.markdownExecuted || !!document.querySelector(".markdown-viewer-modal article script")'), false)
+    assert.equal((await api('markdownViewer.list()')).length, 1)
+    const realDialog = electron.dialog.showOpenDialog
+    electron.dialog.showOpenDialog = async (_owner, options) => {
+      assert.equal(options.title, 'Open Markdown')
+      return { canceled: false, filePaths: [join(temp, 'standalone.md')] }
+    }
+    try {
+      await clickText('.markdown-viewer-heading button', 'Open file')
+      await waitFor('document.querySelector(".markdown-viewer-modal .markdown-body")?.textContent.includes("STANDALONE_MARKDOWN_OK")', 'Selected file snapshot renders')
+    } finally { electron.dialog.showOpenDialog = realDialog }
+    await evaluate('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}))')
+    await waitFor('!document.querySelector(".markdown-viewer-modal")', 'Markdown Escape dismissal')
+    await window.webContents.reload()
+    await waitFor(`!!document.querySelector('button[aria-label="Open Markdown viewer"]')`, 'Markdown toolbar after renderer restart')
+    await evaluate(`document.querySelector('button[aria-label="Open Markdown viewer"]').click()`)
+    await waitFor('document.querySelector(".markdown-viewer-modal .markdown-body")?.textContent.includes("STANDALONE_MARKDOWN_OK")', 'Markdown history survives renderer restart')
+    assert.equal((await api('markdownViewer.list()')).length, 2)
+    assert.ok((await api('markdownViewer.list()')).every((entry) => !('content' in entry)))
+    await clickText('.markdown-viewer-history nav strong', 'Clipboard reader')
+    await waitFor('document.querySelector(".markdown-viewer-modal .markdown-body h1")?.textContent.includes("Clipboard reader")', 'History selection reads exact clipboard snapshot')
+    await evaluate(`(() => {const input=document.querySelector('.markdown-history-search input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'standalone');input.dispatchEvent(new Event('input',{bubbles:true}));})()`)
+    await waitFor('document.querySelectorAll(".markdown-viewer-history nav button").length===1', 'History filtering')
+    await clickText('.markdown-viewer-history nav strong', 'standalone.md')
+    await waitFor('document.querySelector(".markdown-viewer-modal .markdown-body")?.textContent.includes("STANDALONE_MARKDOWN_OK")', 'Filtered file selection')
+    await evaluate(`(() => {const input=document.querySelector('.markdown-history-search input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'');input.dispatchEvent(new Event('input',{bubbles:true}));})()`)
+    if (process.env.PANEPILOT_MARKDOWN_SCREENSHOT) {
+      await delay(200)
+      await writeFile(join(temp, 'markdown-viewer.png'), (await window.webContents.capturePage()).toPNG())
+    }
+    await evaluate(`document.querySelector('button[aria-label="Remove preview from history"]').click()`)
+    await waitFor('document.querySelectorAll(".markdown-viewer-history nav button").length===1 && document.querySelector(".markdown-viewer-modal .markdown-body h1")?.textContent.includes("Clipboard reader")', 'Remove only the selected snapshot')
+    assert.ok((await readFile(join(temp, 'standalone.md'), 'utf8')).includes('STANDALONE_MARKDOWN_OK'), 'Removing history never removes the original file')
+    await evaluate(`document.querySelector('button[aria-label="Close Markdown viewer"]').click()`)
+    steps.push('Markdown toolbar and Command-K clipboard import use real SQLite/IPC; sanitized preview, explicit file selection, Escape, and retained history survive a renderer restart.')
     const terminal = await api(`projects.create(${JSON.stringify({ name: 'Workflow terminal', connectionId: local.id, folder: join(temp, 'projects', 'terminal'), type: 'terminal' })})`)
     const latex = await api(`projects.create(${JSON.stringify({ name: 'Workflow manuscript', connectionId: local.id, folder: join(temp, 'projects', 'manuscript'), type: 'latex', latex: { mainFile: 'main.tex', contextFolder: 'context' } })})`)
     const session = await api(`terminals.start(${JSON.stringify({ projectId: terminal.id, name: 'Workflow shell', profile: 'shell', dangerousMode: false, cols: 100, rows: 28 })})`)
@@ -327,6 +372,7 @@ async function prepare(fixture, tmux) {
   const { temp, bin, socket, terminalFolder, latexFolder } = fixture
   for (const directory of [bin, terminalFolder, latexFolder, join(latexFolder, 'context'), join(temp, 'synthetic-home/.ssh'), join(temp, 'synthetic-home/.codex/sessions'), join(temp, 'appdata/project-console'), join(temp, 'session'), join(temp, 'logs')]) await mkdir(directory, { recursive: true })
   await writeFile(join(temp, 'synthetic-home/.ssh/config'), 'Host fixture-ssh\n  HostName fixture.invalid\n')
+  await writeFile(join(temp, 'standalone.md'), '# STANDALONE_MARKDOWN_OK\n\nA read-only file preview.\n\n## Release checklist\n\n- [x] Preview from clipboard\n- [x] Keep recent documents\n- [ ] Ship the next idea\n\n> [!NOTE]\n> Snapshots stay on this device.\n\n| Source | Preview |\n| --- | --- |\n| Clipboard | Markdown text |\n| File | Saved snapshot |\n\n```typescript\nconst history = previews.slice(0, 50)\n```\n')
   await writeFile(join(bin, 'tmux'), `#!/bin/sh\nexec ${quote(tmux)} -S ${quote(socket)} -f /dev/null "$@"\n`)
   const shell = '#!/bin/sh\nunset ENV BASH_ENV ZDOTDIR\ncase "$1" in\n  -lic|-lc|-c) shift; exec /bin/sh -c "$1" ;;\n  -l) exec /bin/sh ;;\n  *) exec /bin/sh "$@" ;;\nesac\n'
   await writeFile(join(bin, 'fixture-shell'), shell)

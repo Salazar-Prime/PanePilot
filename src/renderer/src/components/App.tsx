@@ -138,6 +138,7 @@ import { commandPaletteSession, contextualCommands } from '../lib/commandPalette
 import { ArchivedProjectsPage } from './ArchivedProjectsPage'
 import { SubagentOverlay } from './SubagentOverlay'
 import { QuickNotesDialog } from './QuickNotesDialog'
+import { MarkdownViewerDialog } from './MarkdownViewerDialog'
 import { visibleCodexSession } from '../lib/subagents'
 import { AutomaticSubagentAction } from './AutomaticSubagentAction'
 import { SubagentActivityIcon } from './SubagentActivityIcon'
@@ -289,6 +290,7 @@ export function App() {
   const [showAppUpdates, setShowAppUpdates] = useState(false)
   const [subagentSessionId, setSubagentSessionId] = useState<string | null>(null)
   const [showQuickNotes, setShowQuickNotes] = useState(false)
+  const [markdownViewer, setMarkdownViewer] = useState<{ clipboard: boolean; nonce: number } | null>(null)
   const [visibleDestinations, setVisibleDestinations] = useState<Record<WorkspacePane, WorkspaceDestination | null>>({ a: null, b: null })
   const [connections, setConnections] = useState<Connection[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -1005,7 +1007,7 @@ export function App() {
         event.key.toLocaleLowerCase() === 'k'
       ) {
         event.preventDefault()
-        if (document.querySelector('.subagent-observatory, .quick-notes-modal')) return
+        if (document.querySelector('.subagent-observatory, .quick-notes-modal, .markdown-viewer-modal')) return
         setShowCommandPalette((current) => !current)
         return
       }
@@ -1857,6 +1859,16 @@ export function App() {
   )
   const commandPaletteCommands: CommandPaletteCommand[] = [
     {
+      id: 'action:markdown-clipboard', section: 'Actions', label: 'Open Markdown from clipboard',
+      detail: 'Read Markdown and keep the last 50 previews on this device', keywords: ['paste', 'md', 'preview', 'reader'],
+      icon: <Clipboard size={15} />, action: () => setMarkdownViewer((current) => ({ clipboard: true, nonce: (current?.nonce ?? 0) + 1 }))
+    },
+    {
+      id: 'action:markdown-viewer', section: 'Actions', label: 'Open Markdown viewer',
+      detail: 'Open a Markdown file or revisit preview history', keywords: ['md', 'file', 'preview', 'history'],
+      icon: <FileText size={15} />, action: () => setMarkdownViewer((current) => ({ clipboard: false, nonce: (current?.nonce ?? 0) + 1 }))
+    },
+    {
       id: 'action:app-updates', section: 'Actions', label: 'Check for PanePilot updates…',
       detail: 'Download signed updates and restart when ready', keywords: ['sparkle', 'upgrade', 'version', 'install'],
       icon: <Download size={15} />, action: () => setShowAppUpdates(true)
@@ -2431,6 +2443,11 @@ export function App() {
   const localRepository = isOriginlessGitRepository(gitStatus)
   const topToolbarActions: TopToolbarAction[] = [
     {
+      id: 'markdown-viewer', label: 'Markdown viewer', icon: <FileText size={15} />,
+      group: 'general', available: true, visibleInMenu: true,
+      run: () => setMarkdownViewer((current) => ({ clipboard: false, nonce: (current?.nonce ?? 0) + 1 }))
+    },
+    {
       id: 'app-updates', label: updates.state.phase === 'ready' ? 'Install PanePilot update…' : 'Check for updates…',
       icon: <AppUpdateIcon state={updates.state} />, group: 'general', available: true, visibleInMenu: true,
       run: () => setShowAppUpdates(true)
@@ -2613,6 +2630,9 @@ export function App() {
               hideWhenDisconnected
             />
           )}
+          {!topToolbarPins.includes('markdown-viewer') && <button className="icon-button"
+            aria-label="Open Markdown viewer" title="Markdown viewer"
+            onClick={() => setMarkdownViewer({ clipboard: false, nonce: 1 })}><FileText size={16} /></button>}
           {topToolbarPins.length > 0 && (
             <PinnedToolbarActions ids={topToolbarPins} actions={topToolbarActions}
               onReorder={setTopToolbarPins} />
@@ -3357,6 +3377,8 @@ export function App() {
         onError={showError}
       />
       <QuickNotesDialog open={showQuickNotes} onClose={() => setShowQuickNotes(false)} />
+      {markdownViewer && <MarkdownViewerDialog key={markdownViewer.nonce} clipboardOnOpen={markdownViewer.clipboard}
+        onClose={() => setMarkdownViewer(null)} />}
       {terminalArchiveProjectId && (() => {
         const target = projects.find((candidate) => candidate.id === terminalArchiveProjectId)
         return target ? <ArchivedTerminalsDialog key={target.id} project={target}

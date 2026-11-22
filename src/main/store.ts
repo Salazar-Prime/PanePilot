@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto'
-import { join, posix } from 'node:path'
+import { createHash, randomUUID } from 'node:crypto'
+import { basename, join, posix } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type {
   Activity,
@@ -25,6 +25,7 @@ import type {
 } from '../shared/types'
 import { normalizeProjectIcon } from '../shared/project-icon'
 import { validateQuickNotes, type QuickNotesDocument } from '../shared/quickNotes'
+import { MARKDOWN_HISTORY_LIMIT, MARKDOWN_PREVIEW_BYTE_LIMIT, type MarkdownViewerEntry, type MarkdownViewerSummary } from '../shared/markdownViewer'
 import type {
   PanePilotTmuxLatexMetadata,
   PanePilotTmuxMetadata
@@ -508,6 +509,15 @@ export class Store {
   private migrate(): void {
     const previousVersion = (this.db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS markdown_previews (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('clipboard', 'file')),
+        source_path TEXT,
+        content TEXT NOT NULL,
+        opened_at TEXT NOT NULL,
+        opened_order INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS quick_notes (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         revision INTEGER NOT NULL DEFAULT 0,
@@ -849,7 +859,50 @@ export class Store {
     // still present; migration must not delete saved sessions or their output.
     this.db.exec(`CREATE INDEX IF NOT EXISTS terminal_sessions_archive_idx
       ON terminal_sessions(project_id, archived, session_kind, updated_at DESC);
-      PRAGMA user_version = ${Math.max(previousVersion, 23)};`)
+      PRAGMA user_version = ${Math.max(previousVersion, 24)};`)
+  }
+
+  listMarkdownPreviews(): MarkdownViewerSummary[] {
+    return this.db.prepare(`SELECT id, title, source, source_path AS sourcePath, opened_at AS openedAt
+      FROM markdown_previews ORDER BY opened_order DESC LIMIT ${MARKDOWN_HISTORY_LIMIT}`).all() as unknown as MarkdownViewerSummary[]
+  }
+
+  getMarkdownPreview(id: string): MarkdownViewerEntry {
+    if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id)) throw new Error('Invalid Markdown preview ID.')
+    const entry = this.db.prepare(`SELECT id, title, source, source_path AS sourcePath, opened_at AS openedAt, content
+      FROM markdown_previews WHERE id = ?`).get(id) as unknown as MarkdownViewerEntry | undefined
+    if (!entry) throw new Error('This Markdown preview is no longer in history.')
+    return entry
+  }
+
+  addMarkdownPreview(content: string, source: 'clipboard' | 'file', sourcePath: string | null = null): MarkdownViewerEntry {
+    if (typeof content !== 'string' || Buffer.byteLength(content, 'utf8') > MARKDOWN_PREVIEW_BYTE_LIMIT) {
+      throw new Error('Markdown previews support up to 1 MB of text.')
+    }
+    if (source !== 'clipboard' && source !== 'file') throw new Error('Invalid Markdown preview source.')
+    if (!content.trim()) throw new Error('There is no Markdown text to preview.')
+    if (content.includes('\0')) throw new Error('Binary data cannot be previewed as Markdown.')
+    if (source === 'file' && (typeof sourcePath !== 'string' || !sourcePath || sourcePath.length > 4096)) {
+      throw new Error('A selected Markdown file path is required.')
+    }
+    const path = source === 'file' ? sourcePath : null
+    const title = path ? basename(path) : content.trimStart().split(/\r?\n/, 1)[0]
+      .replace(/^\s*#{1,6}\s+/, '').replace(/\s+/g, ' ').trim().slice(0, 100).replace(/[\uD800-\uDBFF]$/, '') || 'Clipboard Markdown'
+    const id = createHash('sha256').update(JSON.stringify([source, path, content])).digest('hex')
+    this.inTransaction(() => {
+      this.db.prepare(`INSERT INTO markdown_previews (id, title, source, source_path, content, opened_at, opened_order)
+        VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(opened_order), 0) + 1 FROM markdown_previews))
+        ON CONFLICT(id) DO UPDATE SET opened_at = excluded.opened_at, opened_order = excluded.opened_order`)
+        .run(id, title, source, path, content, now())
+      this.db.exec(`DELETE FROM markdown_previews WHERE id NOT IN
+        (SELECT id FROM markdown_previews ORDER BY opened_order DESC LIMIT ${MARKDOWN_HISTORY_LIMIT})`)
+    })
+    return this.getMarkdownPreview(id)
+  }
+
+  removeMarkdownPreview(id: string): void {
+    this.getMarkdownPreview(id)
+    this.db.prepare('DELETE FROM markdown_previews WHERE id = ?').run(id)
   }
 
   getQuickNotes(): QuickNotesDocument {

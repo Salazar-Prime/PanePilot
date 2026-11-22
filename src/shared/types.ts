@@ -578,6 +578,7 @@ export interface CodexSubagentSummary {
 }
 
 export interface ProjectConsoleApi {
+  markdownViewer: import('./markdownViewer').MarkdownViewerApi
   updates: import('./appUpdates').AppUpdatesApi
   quickNotes: {
     get(): Promise<import('./quickNotes').QuickNotesDocument>

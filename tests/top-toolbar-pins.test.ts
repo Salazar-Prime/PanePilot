@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { loadTopToolbarPins, moveTopToolbarPin, saveTopToolbarPins, toggleTopToolbarPin } from '../src/renderer/src/lib/topToolbarPins'
 
 describe('top toolbar pins', () => {
+  it('retains the app-wide Markdown reader pin', () => {
+    expect(loadTopToolbarPins({ getItem: () => '["markdown-viewer","quick-notes"]' })).toEqual(['markdown-viewer', 'quick-notes'])
+  })
   it('keeps valid, unique pins in the chosen order', () => {
     const storage = { getItem: () => '["quick-notes","unknown","quick-notes","project-settings"]' }
     expect(loadTopToolbarPins(storage)).toEqual(['quick-notes', 'project-settings'])

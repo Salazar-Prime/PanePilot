@@ -66,6 +66,7 @@ import {
 } from './remote-file-service'
 import { discoverSshAliases } from './ssh-config'
 import { Store } from './store'
+import { readMarkdownViewerFile } from './markdown-viewer'
 import { TerminalManager } from './terminal-manager'
 import { TerminalDropService } from './terminal-drop-service'
 import { AppUpdateService } from './app-update-service'
@@ -182,6 +183,24 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  const markdownSender = (event: Electron.IpcMainInvokeEvent) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid Markdown viewer sender.')
+  }
+  ipcMain.handle('markdown-viewer:list', (event) => { markdownSender(event); return store.listMarkdownPreviews() })
+  ipcMain.handle('markdown-viewer:get', (event, id: string) => { markdownSender(event); return store.getMarkdownPreview(id) })
+  ipcMain.handle('markdown-viewer:clipboard', (event) => {
+    markdownSender(event)
+    return store.addMarkdownPreview(clipboard.readText(), 'clipboard')
+  })
+  ipcMain.handle('markdown-viewer:open-file', async (event) => {
+    markdownSender(event)
+    const selection = await dialog.showOpenDialog(mainWindow!, { title: 'Open Markdown', properties: ['openFile'],
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown'] }] })
+    if (selection.canceled || !selection.filePaths[0]) return null
+    const selected = await readMarkdownViewerFile(selection.filePaths[0])
+    return store.addMarkdownPreview(selected.content, 'file', selected.path)
+  })
+  ipcMain.handle('markdown-viewer:remove', (event, id: string) => { markdownSender(event); store.removeMarkdownPreview(id) })
   const updateSender = (event: Electron.IpcMainInvokeEvent) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid update sender.')
   }

@@ -20,7 +20,7 @@ describe('retired feature storage migrations', () => {
     const database = new DatabaseSync(join(appDataPath, 'project-console.sqlite'))
     try {
       expect(database.prepare('PRAGMA user_version').get()).toMatchObject({
-        user_version: 23
+        user_version: 24
       })
       expect(database.prepare(`
         SELECT name FROM sqlite_master

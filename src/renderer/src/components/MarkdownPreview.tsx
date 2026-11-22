@@ -12,7 +12,7 @@ export interface MarkdownPreviewAnchor {
 }
 
 interface MarkdownPreviewProps {
-  projectId: string
+  projectId: string | null
   path: string
   content: string
   anchor?: MarkdownPreviewAnchor | null
@@ -74,7 +74,9 @@ export function MarkdownPreview({
       input.disabled = true
     }
     return loadMarkdownImages(root, path, (imagePath) =>
-      window.projectConsole.files.preview(projectId, imagePath)
+      projectId
+        ? window.projectConsole.files.preview(projectId, imagePath)
+        : Promise.reject(new Error('Relative images require a project folder.'))
     )
   }, [html, path, projectId])
 

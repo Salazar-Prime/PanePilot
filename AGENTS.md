@@ -147,6 +147,8 @@ When the provider records an explicit agent hierarchy path (for example `/root/c
 
 92. Ordinary terminal tabs can be archived individually after explicit confirmation. PanePilot stops and verifies the exact backend before setting the durable archive flag; a local/SSH failure leaves the tab unarchived. Name, UUID, provider ID, permission mode, pin/flag, and existing saved output are retained, with Codex raw output still application-lifetime only. Archived terminals do not appear in normal tabs, sidebar rows, recency navigation, or agent counts, and late lifecycle/discovery snapshots cannot reactivate them. Restore returns the stopped tab without launching a process; linked Codex/Claude chats keep explicit Resume/Force reload. Actions, quick chats and LaTeX capability runners cannot be individually archived. The project's right-click menu always opens its own searchable archive with Restore and confirmed Delete. When there are archives and spare tab-bar space, a compact icon/count appears at the far right; it must hide completely rather than squeeze, wrap or truncate terminal titles. The dialog is portaled, traps focus, restores its opener and blocks dismissal during mutations. Archive state is client-local SQLite, not a new remote daemon or provider mutation. Schema v22 preserves existing old/new archives and output across upgrades/restarts; previously deleted records cannot be reconstructed.
 
+93. Markdown viewer is app-wide, available from its top toolbar icon, pinnable overflow command, and Command-K. Open Markdown from clipboard reads plain text only on that explicit request, never in the background and never changes the clipboard. Open file uses a native local picker for UTF-8 `.md`, `.markdown`, or `.mdown` files. Previews are read-only snapshots, bounded to 1 MB each, stored in the independent `markdown_previews` SQLite table (schema v24). Only the newest fifty unique source/content snapshots remain; reopening the same snapshot promotes it without duplication. Lists transfer summaries, and selection reads one document. History survives restarts and project deletion, stays local to this PanePilot client, and supports search and individual removal without changing original files. The modal reuses the sanitized GitHub-style Markdown renderer; scripts never run, project-relative images/links are unavailable without a project context, and HTTPS images may contact their hosts. Escape closes only this topmost modal, mutations consume dismissal, focus is trapped/restored, and stale reads cannot replace newer selections. The desktop workflow fixture exercises actual main/preload/renderer clipboard import, file selection, sanitization and retained history using synthetic data only.
+
 ## Agent lifecycle semantics
 
 Agent state describes the current turn, not merely whether the terminal process exists.
@@ -233,6 +235,7 @@ The database is:
 Core tables:
 
 - `quick_notes`: one local, revisioned app-wide Thoughts and Checklist document, independent of project ownership.
+- `markdown_previews`: at most fifty app-wide local Markdown snapshots, independent of project ownership; source files are never edited or deleted by the viewer.
 
 - `connections`: local or SSH connection identities.
 - `projects`: base project identity, type, connection, folder, repository URL, aggregate state, and timestamps.
