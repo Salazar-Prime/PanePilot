@@ -48,6 +48,15 @@ export function ManagedTerminal({
   onOpenFile
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
+  const visibilityId = useRef(crypto.randomUUID())
+  useEffect(() => {
+    // Keep the selected pane protected even while the app is minimized, so
+    // returning to the window never leaves the current terminal disconnected.
+    window.projectConsole.terminals.setVisible?.(session.id, visibilityId.current, active)
+    return () => {
+      window.projectConsole.terminals.setVisible?.(session.id, visibilityId.current, false)
+    }
+  }, [session.id, active])
   const terminalRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const activeRef = useRef(active)

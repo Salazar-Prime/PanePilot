@@ -46,6 +46,7 @@ import { TerminalOutputBuffer } from './terminal-output-buffer'
 import { TerminalOutputFlow } from './terminal-output-flow'
 import { ConnectionRetryCoordinator } from './connection-retry-coordinator'
 import type { TerminalPreviewSnapshot } from '../shared/types'
+import type { IdleChat } from './power-saving-service'
 import {
   panePilotTmuxMetadata,
   parseTmuxSessionList,
@@ -449,6 +450,11 @@ export class TerminalManager {
   private shuttingDown = false
   private readonly stoppingProjects = new Set<string>()
   private readonly processAbort = new AbortController()
+  private readonly visibleViews = new Map<string, Set<string>>()
+  private readonly lastInteraction = new Map<string, number>()
+  private powerSavingRevision = 0
+  private readonly powerSavingRevisions = new Map<string, number>()
+  private readonly powerSavingStops = new Set<string>()
 
   constructor(
     private readonly store: Store,
@@ -465,6 +471,107 @@ export class TerminalManager {
 
   private ensureActive(): void {
     if (this.shuttingDown) throw new Error('PanePilot is closing.')
+  }
+
+  setVisible(sessionId: string, viewId: string, visible: boolean): void {
+    if (!this.store.getSessionWithoutOutput(sessionId)) {
+      this.visibleViews.delete(sessionId)
+      this.lastInteraction.delete(sessionId)
+      return
+    }
+    const views = this.visibleViews.get(sessionId) ?? new Set<string>()
+    if (visible) views.add(viewId)
+    else views.delete(viewId)
+    if (views.size) this.visibleViews.set(sessionId, views)
+    else this.visibleViews.delete(sessionId)
+    this.lastInteraction.set(sessionId, Date.now())
+  }
+
+  private powerSavingEntries(listed: ListedTmuxSession[]) {
+    const entries: Array<{ session: TerminalSession; live: ListedTmuxSession; connection: Connection; folder: string }> = []
+    const byId = new Map(listed.filter(item => item.metadata).map(item => [item.metadata!.terminalId, item]))
+    for (const project of this.store.listProjectsForRuntime()) {
+      const connection = this.store.getConnection(project.connectionId)
+      if (project.archived || connection?.kind !== 'local') continue
+      for (const session of project.sessions) {
+        const live = byId.get(session.id)
+        if (!session.archived && !session.recoveryPending && canRecoverInteractiveSession(session) &&
+            AGENT_PROFILES.has(session.profile) && !['completed', 'error'].includes(session.state) &&
+            live && !live.paneDead && live.name === session.tmuxName &&
+            sameRemoteProjectPath(live.metadata!.projectPath, project.folder)) {
+          entries.push({ session, live, connection, folder: project.folder })
+        }
+      }
+    }
+    return entries
+  }
+
+  private powerSavingIdle(session: TerminalSession, live: ListedTmuxSession): boolean {
+    const runtime = this.runtimes.get(session.id)
+    return session.state === 'idle' && Boolean(session.providerSessionId) && !this.visibleViews.has(session.id) &&
+      !this.launches.has(session.id) && !this.reconnects.has(session.id) &&
+      live.attachedClients <= (runtime && !runtime.closingTransport ? 1 : 0) &&
+      (session.profile !== 'codex' || codexStateFromPaneTitle(live.paneTitle, 'completed') === 'idle')
+  }
+
+  async powerSavingSnapshot(): Promise<IdleChat[]> {
+    const listed = await this.listLocalTmuxSessions()
+    if (!listed) throw new Error('Could not verify local chat backends; no chats were closed.')
+    return this.powerSavingEntries(listed).map(({ session, live }) => ({ id: session.id,
+      idle: this.powerSavingIdle(session, live),
+      activityAt: Math.max(Date.parse(session.updatedAt) || 0, this.lastInteraction.get(session.id) ?? 0) }))
+  }
+
+  suspendForPowerSaving(sessionId: string, cutoff: number, keepAtLeast: number, allowed: () => boolean): Promise<boolean> {
+    return this.serializeOperation(sessionId, async () => {
+      if (!allowed() || this.shuttingDown) return false
+      const listed = await this.listLocalTmuxSessions()
+      if (!listed) return false
+      const entries = this.powerSavingEntries(listed)
+      const entry = entries.find(item => item.session.id === sessionId)
+      if (!entry || entries.length <= keepAtLeast || !this.powerSavingIdle(entry.session, entry.live)) return false
+      const screen = await this.captureCodexQuestionScreen(entry.connection, entry.live.name)
+      // An unavailable live screen is not evidence that it is safe to close.
+      if (screen == null || codexQueuedQuestionOnScreen(screen) || /(?:esc(?:ape)? to (?:interrupt|cancel)|waiting for (?:approval|input)|allow once|allow this|do you want to proceed)/i.test(screen.split('\n').slice(-12).join('\n'))) return false
+      // Capture and sub-agent reads can take time. Recheck the floor, ownership,
+      // title and attached clients immediately before acting on the server ID.
+      const finalSnapshot = await this.listLocalTmuxSessions()
+      if (!finalSnapshot) return false
+      const finalEntries = this.powerSavingEntries(finalSnapshot)
+      const finalEntry = finalEntries.find(item => item.session.id === sessionId && item.live.tmuxId === entry.live.tmuxId)
+      if (!finalEntry || finalEntries.length <= keepAtLeast) return false
+      const latest = this.store.getSessionWithoutOutput(sessionId)
+      if (!allowed() || !latest || !this.powerSavingIdle(latest, finalEntry.live) ||
+          Math.max(Date.parse(latest.updatedAt) || 0, this.lastInteraction.get(sessionId) ?? 0) > cutoff) return false
+      const runtime = this.runtimes.get(sessionId)
+      if (runtime) runtime.intentionalStop = true
+      this.powerSavingStops.add(sessionId)
+      this.powerSavingRevisions.set(sessionId, ++this.powerSavingRevision)
+      try {
+        // Use the verified server-assigned ID, so a reused display name cannot
+        // redirect cleanup to an unrelated backend.
+        await this.execCommand(this.tmuxPath!, ['kill-session', '-t', entry.live.tmuxId], {
+          encoding: 'utf8', timeout: 3_000, maxBuffer: 64 * 1024
+        }).catch(error => {
+          if (runtime) runtime.intentionalStop = false
+          throw error
+        })
+        // Record recoverability before cleaning up the PTY. Failed cleanup or
+        // verification must not strand a saved chat without its backend.
+        this.store.deferSessionForPowerSaving(sessionId)
+        if (runtime && this.runtimes.get(sessionId) === runtime) this.closeRuntimeForReconnect(runtime)
+        this.emitTransport(sessionId, 'detached', 0, 'Paused for power saving. Open this tab to resume your saved chat.')
+        this.getWindow()?.webContents.send('terminal:metadata', { sessionId, projectId: latest.projectId })
+        const remaining = await this.listLocalTmuxSessions()
+        if (!remaining || remaining.some(item => item.tmuxId === entry.live.tmuxId)) {
+          throw new Error(`Could not confirm that ${latest.name} stopped.`)
+        }
+        return true
+      } finally {
+        this.powerSavingStops.delete(sessionId)
+        this.powerSavingRevisions.set(sessionId, ++this.powerSavingRevision)
+      }
+    })
   }
 
   private ensureProjectLaunchable(projectId: string): void {
@@ -1411,6 +1518,8 @@ export class TerminalManager {
   }
 
   clearOutputConsumers(): void {
+    for (const id of this.visibleViews.keys()) this.lastInteraction.set(id, Date.now())
+    this.visibleViews.clear()
     for (const pending of this.pendingConsumers.values()) pending.cancelled = true
     for (const [sessionId, state] of this.outputs) {
       for (const consumerId of state.consumers.keys()) this.unsubscribeOutput(sessionId, consumerId)
@@ -1661,6 +1770,7 @@ export class TerminalManager {
     if (Buffer.byteLength(data, 'utf8') > MAX_TERMINAL_INPUT_BYTES) {
       throw new Error('Terminal input is limited to 2 MB at a time.')
     }
+    this.lastInteraction.set(sessionId, Date.now())
     for (const chunk of terminalInputChunks(data)) runtime.pty.write(chunk)
   }
 
@@ -2170,6 +2280,9 @@ export class TerminalManager {
       this.ensureActive()
       this.cancelReconnect(sessionId)
       this.store.deleteSession(sessionId)
+      this.visibleViews.delete(sessionId)
+      this.lastInteraction.delete(sessionId)
+      this.powerSavingRevisions.delete(sessionId)
       this.discardPendingOutput(sessionId)
       const output = this.outputs.get(sessionId)
       output?.flow.dispose()
@@ -3288,6 +3401,8 @@ export class TerminalManager {
     connection: Connection,
     projects: Project[]
   ): Promise<number> {
+    const powerSavingRevision = this.powerSavingRevision
+    const cleanupOverlapped = (id: string) => this.powerSavingStops.has(id) || (this.powerSavingRevisions.get(id) ?? 0) > powerSavingRevision
     const listed = await this.listTmuxSessions(connection)
     if (this.shuttingDown) return 0
     if (!listed) return 0
@@ -3331,6 +3446,9 @@ export class TerminalManager {
 
     for (const listedSession of listed) {
       let metadata = listedSession.metadata
+      // A scan from before/during cleanup cannot resurrect a stopped backend
+      // or erase its durable lazy-recovery marker. A later fresh scan can.
+      if (metadata && cleanupOverlapped(metadata.terminalId)) continue
       let repairMetadata = false
       if (metadata && metadata.sessionKind == null) {
         const known = this.store.getSessionWithoutOutput(metadata.terminalId)
@@ -3427,6 +3545,7 @@ export class TerminalManager {
 
     for (const project of projects) {
       for (const session of project.sessions) {
+        if (cleanupOverlapped(session.id)) continue
         if (
           session.backend !== 'tmux' ||
           !session.tmuxName ||

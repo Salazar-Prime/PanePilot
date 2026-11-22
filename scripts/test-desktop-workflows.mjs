@@ -41,6 +41,7 @@ if (!process.versions.electron) {
     })
     const result = JSON.parse(await readFile(join(temp, 'result.json'), 'utf8'))
     if (process.env.PANEPILOT_MARKDOWN_SCREENSHOT) await writeFile(process.env.PANEPILOT_MARKDOWN_SCREENSHOT, await readFile(join(temp, 'markdown-viewer.png')))
+    if (process.env.PANEPILOT_POWER_SAVING_SCREENSHOT) await writeFile(process.env.PANEPILOT_POWER_SAVING_SCREENSHOT, await readFile(join(temp, 'power-saving.png')))
     result.sourceRevision = revision
     await mkdir(dirname(output), { recursive: true })
     await writeFile(output, JSON.stringify(result, null, 2) + '\n')
@@ -153,6 +154,43 @@ async function runFixture() {
     const remote = connections.find((item) => item.sshAlias === 'fixture-ssh')
     assert.ok(local && remote, 'Only synthetic SSH config is imported.')
     assert.equal(connections.length, 2)
+    // Power saving UI uses the real bridge and isolated database. Toggle it
+    // back off before any fixture sessions exist; never prune user backends.
+    await waitFor('!!document.querySelector(".power-saving-toggle")', 'Power saving footer control')
+    assert.deepEqual((await api('powerSaving.get()')).settings, { enabled: false, idleMinutes: 30, keepAtLeast: 3 })
+    assert.equal(await evaluate('document.querySelector(".status-right").lastElementChild.classList.contains("power-saving-toggle")'), true)
+    assert.ok(await evaluate('window.innerWidth - document.querySelector(".power-saving-toggle").getBoundingClientRect().right < 12'), 'Power button stays at the far right even without a YOLO pill.')
+    const footerHeight = await evaluate('document.querySelector(".status-bar").getBoundingClientRect().height')
+    await evaluate('document.querySelector(".power-saving-toggle").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true}))')
+    await waitFor('!!document.querySelector(".power-saving-popover")', 'Right-click opens settings')
+    await waitFor('document.querySelectorAll(".power-saving-memory small").length > 0', 'Real Electron memory breakdown renders')
+    const memory = await api('powerSaving.memory()')
+    assert.ok(memory.totalBytes > 0 && memory.processes.length > 0)
+    assert.equal(memory.totalBytes, memory.processes.reduce((total, process) => total + process.bytes, 0))
+    if (process.env.PANEPILOT_POWER_SAVING_SCREENSHOT) {
+      await delay(250)
+      await writeFile(join(temp, 'power-saving.png'), (await window.webContents.capturePage()).toPNG())
+    }
+    assert.equal((await api('powerSaving.get()')).settings.enabled, false, 'Context menu must not enable cleanup.')
+    for (const [label, value] of [['Idle timeout in minutes', '12'], ['Minimum open chats', '2']]) {
+      await evaluate(`(() => {const input=document.querySelector('input[aria-label="${label}"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`)
+    }
+    await clickText('.power-saving-apply', 'Save settings')
+    await waitFor('!document.querySelector(".power-saving-popover")', 'Save closes settings')
+    assert.deepEqual((await api('powerSaving.get()')).settings, { enabled: false, idleMinutes: 12, keepAtLeast: 2 })
+    await evaluate('document.querySelector(".power-saving-toggle").dispatchEvent(new PointerEvent("pointerdown",{button:0,clientX:10,clientY:10,bubbles:true}))')
+    await waitFor('!!document.querySelector(".power-saving-popover")', 'Long press opens settings')
+    await evaluate('document.querySelector(".power-saving-toggle").dispatchEvent(new PointerEvent("pointerup",{button:0,bubbles:true}));document.querySelector(".power-saving-toggle").click()')
+    assert.equal((await api('powerSaving.get()')).settings.enabled, false, 'Long-press release must not toggle cleanup.')
+    await evaluate('window.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true,cancelable:true}))')
+    await waitFor('!document.querySelector(".power-saving-popover")', 'Power saving Escape dismissal')
+    await evaluate('document.querySelector(".power-saving-toggle").click()')
+    await waitFor('document.querySelector(".power-saving-toggle").getAttribute("aria-pressed")==="true"', 'Click enables filled state')
+    assert.equal(await evaluate('document.querySelector(".power-saving-toggle svg").getAttribute("fill")'), 'currentColor')
+    await evaluate('document.querySelector(".power-saving-toggle").click()')
+    await waitFor('document.querySelector(".power-saving-toggle").getAttribute("aria-pressed")==="false"', 'Second click restores outline state')
+    assert.equal(await evaluate('document.querySelector(".status-bar").getBoundingClientRect().height'), footerHeight)
+    steps.push('Power saving: rightmost outline/fill toggle, right-click and hold settings, persisted idle/floor, Electron memory and Escape; no live cleanup')
     // Real main/preload + renderer Markdown reader, with only synthetic clipboard
     // data and an explicitly stubbed native picker pointing inside this fixture.
     await waitFor(`!!document.querySelector('button[aria-label="Open Markdown viewer"]')`, 'Markdown toolbar action')
@@ -195,6 +233,7 @@ async function runFixture() {
     await waitFor('!document.querySelector(".markdown-viewer-modal")', 'Markdown Escape dismissal')
     await window.webContents.reload()
     await waitFor(`!!document.querySelector('button[aria-label="Open Markdown viewer"]')`, 'Markdown toolbar after renderer restart')
+    assert.deepEqual((await api('powerSaving.get()')).settings, { enabled: false, idleMinutes: 12, keepAtLeast: 2 }, 'Power saving settings survive renderer restart')
     await evaluate(`document.querySelector('button[aria-label="Open Markdown viewer"]').click()`)
     await waitFor('document.querySelector(".markdown-viewer-modal .markdown-body")?.textContent.includes("STANDALONE_MARKDOWN_OK")', 'Markdown history survives renderer restart')
     await delay(200)

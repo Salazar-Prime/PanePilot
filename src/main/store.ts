@@ -25,6 +25,7 @@ import type {
 } from '../shared/types'
 import { normalizeProjectIcon } from '../shared/project-icon'
 import { validateQuickNotes, type QuickNotesDocument } from '../shared/quickNotes'
+import { DEFAULT_POWER_SAVING, validatePowerSaving, type PowerSavingSettings } from '../shared/powerSaving'
 import { MARKDOWN_HISTORY_LIMIT, MARKDOWN_PREVIEW_BYTE_LIMIT, type MarkdownViewerEntry, type MarkdownViewerSummary } from '../shared/markdownViewer'
 import type {
   PanePilotTmuxLatexMetadata,
@@ -509,6 +510,13 @@ export class Store {
   private migrate(): void {
     const previousVersion = (this.db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS power_saving_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        idle_minutes INTEGER NOT NULL DEFAULT 30,
+        keep_at_least INTEGER NOT NULL DEFAULT 3
+      );
+      INSERT OR IGNORE INTO power_saving_settings (id) VALUES (1);
       CREATE TABLE IF NOT EXISTS markdown_previews (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
@@ -859,7 +867,29 @@ export class Store {
     // still present; migration must not delete saved sessions or their output.
     this.db.exec(`CREATE INDEX IF NOT EXISTS terminal_sessions_archive_idx
       ON terminal_sessions(project_id, archived, session_kind, updated_at DESC);
-      PRAGMA user_version = ${Math.max(previousVersion, 24)};`)
+      PRAGMA user_version = ${Math.max(previousVersion, 25)};`)
+  }
+
+  getPowerSavingSettings(): PowerSavingSettings {
+    const row = this.db.prepare('SELECT enabled, idle_minutes, keep_at_least FROM power_saving_settings WHERE id = 1')
+      .get() as { enabled: number; idle_minutes: number; keep_at_least: number } | undefined
+    if (!row) return { ...DEFAULT_POWER_SAVING }
+    return validatePowerSaving({ enabled: Boolean(row.enabled), idleMinutes: row.idle_minutes, keepAtLeast: row.keep_at_least })
+  }
+
+  savePowerSavingSettings(settings: PowerSavingSettings): void {
+    const value = validatePowerSaving(settings)
+    this.db.prepare('UPDATE power_saving_settings SET enabled = ?, idle_minutes = ?, keep_at_least = ? WHERE id = 1')
+      .run(Number(value.enabled), value.idleMinutes, value.keepAtLeast)
+  }
+
+  deferSessionForPowerSaving(id: string): void {
+    const session = this.requireSession(id)
+    if (session.archived || ['completed', 'error'].includes(session.state) || session.backend !== 'tmux' || !session.providerSessionId) {
+      throw new Error('Only idle, resumable chats can be paused for power saving.')
+    }
+    this.db.prepare('UPDATE terminal_sessions SET reboot_recovery_pending = 1, updated_at = ? WHERE id = ?').run(now(), id)
+    this.addActivity(session.projectId, id, 'terminal-power-saved', `${session.name} was paused for power saving. Open it to resume the saved chat.`)
   }
 
   listMarkdownPreviews(): MarkdownViewerSummary[] {
@@ -2774,7 +2804,7 @@ export class Store {
       remote ? 'terminal-remote-restored' : 'terminal-reboot-restored',
       remote
         ? `${recreated ? 'Recreated' : 'Recovered'} ${session.name} on its SSH host.`
-        : `${recreated ? 'Recreated' : 'Recovered'} ${session.name} after the computer restarted.`
+        : `${recreated ? 'Recreated' : 'Recovered'} ${session.name} from its saved session.`
     )
     this.updateProjectState(session.projectId)
     return this.requireSession(id)

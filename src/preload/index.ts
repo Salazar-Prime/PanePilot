@@ -23,6 +23,16 @@ import type {
 } from '../shared/types'
 
 const api: ProjectConsoleApi = {
+  powerSaving: {
+    get: () => ipcRenderer.invoke('power-saving:get'),
+    save: (settings) => ipcRenderer.invoke('power-saving:save', settings),
+    memory: () => ipcRenderer.invoke('power-saving:memory'),
+    onChanged: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: import('../shared/powerSaving').PowerSavingState) => listener(state)
+      ipcRenderer.on('power-saving:changed', handler)
+      return () => ipcRenderer.removeListener('power-saving:changed', handler)
+    }
+  },
   markdownViewer: {
     list: () => ipcRenderer.invoke('markdown-viewer:list'),
     get: (id) => ipcRenderer.invoke('markdown-viewer:get', id),
@@ -88,6 +98,7 @@ const api: ProjectConsoleApi = {
     branches: (projectId: string) => ipcRenderer.invoke('git:branches', projectId)
   },
   terminals: {
+    setVisible: (sessionId, viewId, visible) => ipcRenderer.send('terminals:set-visible', sessionId, viewId, visible),
     preview: (sessionId: string) => ipcRenderer.invoke('terminals:preview', sessionId),
     subagents: (sessionId: string) => ipcRenderer.invoke('terminals:subagents', sessionId),
     subagentSummary: (sessionId: string) => ipcRenderer.invoke('terminals:subagent-summary', sessionId),

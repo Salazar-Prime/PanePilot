@@ -70,6 +70,7 @@ import { readMarkdownViewerFile } from './markdown-viewer'
 import { TerminalManager } from './terminal-manager'
 import { TerminalDropService } from './terminal-drop-service'
 import { AppUpdateService } from './app-update-service'
+import { PowerSavingService } from './power-saving-service'
 import { HTML_PREVIEW_SCHEME, HTML_PREVIEW_PRIVILEGES, InteractiveHtmlPreviewService, guardInteractiveHtmlNavigation, isInteractiveHtmlUrl } from './html-interactive-preview'
 import type { OpenInteractiveHtmlInput } from '../shared/types'
 
@@ -80,6 +81,7 @@ let rendererOwnerSequence = 0
 const rendererOwners = new WeakMap<Electron.WebContents, number>()
 let store: Store
 let terminals: TerminalManager
+let powerSaving: PowerSavingService
 let terminalDrops: TerminalDropService
 let conversations: AsyncConversationIndexer
 let remoteConversations: RemoteConversationIndexer
@@ -183,6 +185,25 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  const powerSavingSender = (event: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid power saving sender.')
+  }
+  ipcMain.handle('power-saving:get', (event) => { powerSavingSender(event); return powerSaving.get() })
+  ipcMain.handle('power-saving:save', (event, settings: unknown) => { powerSavingSender(event); return powerSaving.save(settings) })
+  ipcMain.handle('power-saving:memory', (event) => {
+    powerSavingSender(event)
+    // Electron reports each process working set in KiB. This is an estimate,
+    // not a measurement of tmux/provider processes or unique system-wide RAM.
+    const processes = app.getAppMetrics().map(metric => ({ pid: metric.pid,
+      name: metric.type === 'Browser' ? 'Main' : metric.type === 'Tab' ? 'Renderer' : metric.type,
+      bytes: Math.max(0, metric.memory.workingSetSize) * 1024 }))
+    return { totalBytes: processes.reduce((sum, item) => sum + item.bytes, 0), processes, sampledAt: new Date().toISOString() }
+  })
+  ipcMain.on('terminals:set-visible', (event, sessionId: unknown, viewId: unknown, visible: unknown) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame ||
+        typeof sessionId !== 'string' || sessionId.length > 100 || typeof viewId !== 'string' || viewId.length > 100 || typeof visible !== 'boolean') return
+    terminals.setVisible(sessionId, viewId, visible)
+  })
   const markdownSender = (event: Electron.IpcMainInvokeEvent) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error('Invalid Markdown viewer sender.')
   }
@@ -904,6 +925,22 @@ if (!ownsSingleInstanceLock) {
         remoteConversations,
         metadata
       )
+      powerSaving = new PowerSavingService({
+        readSettings: () => store.getPowerSavingSettings(),
+        saveSettings: (settings) => store.savePowerSavingSettings(settings),
+        snapshot: () => terminals.powerSavingSnapshot(),
+        suspend: async (id, cutoff, keepAtLeast, allowed) => {
+          const session = store.getSessionWithoutOutput(id)
+          const project = session ? store.getProjectForRuntime(session.projectId) : null
+          if (!session || !project || !allowed()) return false
+          if (session.profile === 'codex' && session.providerSessionId) {
+            const agents = await codexSubagents.summary(session.providerSessionId, project.folder)
+            if (agents.running || agents.limited || !agents.rootFound) return false
+          }
+          return terminals.suspendForPowerSaving(id, cutoff, keepAtLeast, allowed)
+        },
+        notify: (state) => { if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('power-saving:changed', state) }
+      })
       const restoredLocalSessions = await terminals.prepareLocalSessionsAfterReboot()
       if (shutdownStarted) return
       if (restoredLocalSessions > 0) {
@@ -919,6 +956,7 @@ if (!ownsSingleInstanceLock) {
       })
       registerIpc()
       createWindow()
+      powerSaving.start()
       void appUpdates.initialize()
       setTimeout(() => {
         void terminals.removeLegacyProjectQnaSessions().catch((error) => {
@@ -953,6 +991,7 @@ app.on('before-quit', (event) => {
   if (shutdownStarted) return
   shutdownStarted = true
   appUpdates.dispose()
+  powerSaving?.dispose()
   terminalDrops?.shutdown()
   terminals?.shutdown()
   portForwards?.shutdown()

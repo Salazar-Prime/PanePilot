@@ -814,6 +814,7 @@ select:focus-visible {
   white-space: nowrap;
 }
 .status-right {
+  grid-column: 3;
   display: flex;
   min-width: 0;
   max-width: 100%;
@@ -869,6 +870,7 @@ select:focus-visible {
 }
 
 .status-brand {
+  grid-column: 1;
   justify-self: start;
   flex-shrink: 0;
   gap: 6px;
@@ -877,6 +879,7 @@ select:focus-visible {
 .status-brand:empty { display: none; }
 
 .status-workspace-nav {
+  grid-column: 2;
   min-width: 0;
   width: max-content;
   max-width: 100%;

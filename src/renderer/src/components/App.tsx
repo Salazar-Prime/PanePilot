@@ -90,6 +90,7 @@ import { useCollapsedProjects } from '../lib/sidebarCollapse'
 import { trimSidebarTail } from '../lib/sidebarDisclosure'
 import { SidebarSessionTree } from './SidebarSessionTree'
 import { StatusSessionMenu } from './StatusSessionMenu'
+import { PowerSavingControl } from './PowerSavingControl'
 import { statusSessionTab } from '../lib/statusSessions'
 import { useSelectionRecency } from '../lib/selectionRecency'
 import { useSidebarProjectMotion } from '../lib/useSidebarProjectMotion'
@@ -3286,6 +3287,7 @@ export function App() {
           <TerminalDropStatus />
           <StatusSessionMenu projects={activeProjects} connections={connections}
             onSelect={openStatusSession} />
+          <PowerSavingControl />
         </div>
       </footer>
 

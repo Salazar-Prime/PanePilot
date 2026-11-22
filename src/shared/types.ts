@@ -578,6 +578,7 @@ export interface CodexSubagentSummary {
 }
 
 export interface ProjectConsoleApi {
+  powerSaving: import('./powerSaving').PowerSavingApi
   markdownViewer: import('./markdownViewer').MarkdownViewerApi
   updates: import('./appUpdates').AppUpdatesApi
   quickNotes: {
@@ -614,6 +615,7 @@ export interface ProjectConsoleApi {
     branches(projectId: string): Promise<GitBranchRef[]>
   }
   terminals: {
+    setVisible(sessionId: string, viewId: string, visible: boolean): void
     preview(sessionId: string): Promise<TerminalPreviewSnapshot>
     subagents(sessionId: string): Promise<CodexSubagentSnapshot>
     subagentSummary(sessionId: string): Promise<CodexSubagentSummary>
