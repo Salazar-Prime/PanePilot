@@ -2514,7 +2514,7 @@ export class TerminalManager {
           exitCode === 0
             ? `${latest.name} finished.`
             : `${latest.name} exited with code ${exitCode}.`
-        this.changeState(latest, state, message)
+        this.changeState(latest, state, message, exitCode)
         this.emitTransport(latest.id, 'detached', 0, message)
         return
       }
@@ -3021,7 +3021,7 @@ export class TerminalManager {
       snapshot.exitCode === 0
         ? `${latest.name} finished.`
         : `${latest.name} exited with code ${snapshot.exitCode}.`
-    this.changeState(latest, state, message)
+    this.changeState(latest, state, message, snapshot.exitCode)
     this.emitTransport(latest.id, 'detached', 0, message)
   }
 
@@ -3675,13 +3675,16 @@ export class TerminalManager {
     ], { encoding: 'utf8', timeout: 7_000, maxBuffer: 64 * 1024 })
   }
 
-  private changeState(session: TerminalSession, state: AgentState, message?: string): void {
+  private changeState(session: TerminalSession, state: AgentState, message?: string, actionExitCode?: number): void {
     if (this.shuttingDown) return
     if (!this.store.setSessionState(session.id, state, message)) return
     this.getWindow()?.webContents.send('terminal:state', {
       sessionId: session.id,
       projectId: session.projectId,
-      state
+      state,
+      ...(session.kind === 'action' && actionExitCode !== undefined
+        ? { actionCompletion: { name: session.name, exitCode: actionExitCode } }
+        : {})
     })
   }
 

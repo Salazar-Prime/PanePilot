@@ -43,6 +43,7 @@ if (!process.versions.electron) {
     const waitFor = async (code) => { for (let i = 0; i < 100; i++) { if (await evaluate(code)) return; await pause(20) }; throw Error(`UI did not settle: ${code}`) }
     const trigger = `document.querySelector('[aria-label="Project tools"] button')`
     const popup = `document.querySelector('.last-action-popover')`
+    const pill = `document.querySelector('.action-completion-pill')`
     const hover = async () => {
       window.webContents.sendInputEvent({ type: 'mouseMove', x: 400, y: 300 })
       await pause(30)
@@ -51,6 +52,7 @@ if (!process.versions.electron) {
     }
     try {
       await window.loadFile(join(temp, 'index.html')); await waitFor(`!!${trigger}`)
+      assert.equal(await evaluate(`!!${pill}`), false, 'Saved completed runs never trigger notifications')
       await evaluate(`document.querySelector('[data-status-filter="working"]').click()`)
       await waitFor(`!!document.getElementById('status-session-menu')`)
       const reference = await evaluate(`(()=>{const el=document.getElementById('status-session-menu'),s=getComputedStyle(el);return {background:s.backgroundColor,border:s.borderColor,radius:s.borderRadius,shadow:s.boxShadow,header:getComputedStyle(el.querySelector('header')).padding}})()`)
@@ -79,6 +81,25 @@ if (!process.versions.electron) {
       await evaluate(`window.finishRun('completed');window.reorder(['p:build','p:tests'])`)
       await waitFor(`${popup}.querySelector('[role="status"] strong').textContent==='Finished'`)
       assert.equal(await evaluate(`${popup}.querySelector('.last-action-run strong').textContent`), 'Tests', 'Last run wins over grid order')
+      await waitFor(`!!${pill}`)
+      assert.equal(await evaluate(`${pill}.textContent`), 'Run completeTests · Local project')
+      await evaluate(`document.getElementById('editor').focus();window.repeatCompletion()`)
+      await pause(380)
+      assert.equal(await evaluate(`document.querySelectorAll('.action-completion-pill').length`), 1, 'One notice per exact run, including duplicate events')
+      assert.equal(await evaluate(`document.activeElement.id`), 'editor', 'Completion never steals input focus')
+      assert.equal(await evaluate(`getComputedStyle(${pill}).pointerEvents`), 'none', 'Pill cannot block clicks underneath')
+      const before = await evaluate(`${pill}.getBoundingClientRect().top`)
+      await pause(250)
+      assert.ok(await evaluate(`${pill}.getBoundingClientRect().top`) < before, 'Pill floats upward')
+      assert.equal(await evaluate(`document.querySelector('.status-bar').getBoundingClientRect().height`), height)
+      assert.equal(await evaluate(`${pill}.closest('.status-workspace-nav')===null`), true, 'Pill escapes footer clipping')
+      assert.equal(await evaluate(`(()=>{const r=${pill}.getBoundingClientRect(),a=${trigger}.getBoundingClientRect();return r.bottom<a.top&&Math.abs((r.left+r.width/2)-(a.left+a.width/2))<2})()`), true, 'Pill rises from Actions')
+      if (process.env.PANEPILOT_COMPLETION_SCREENSHOT) await writeFile(process.env.PANEPILOT_COMPLETION_SCREENSHOT, (await window.webContents.capturePage()).toPNG())
+      await pause(2100); await waitFor(`!${pill}`)
+      await evaluate(`window.repeatCompletion();window.changeProject('remote')`); await pause(50)
+      await evaluate(`window.changeProject('p')`); await pause(50)
+      assert.equal(await evaluate(`!!${pill}`), false, 'No replay from repeated events or project switches')
+      await hover()
 
       await evaluate(`${popup}.querySelector('.status-session-close').click()`); await waitFor(`!${popup}`)
       assert.equal(await evaluate(`document.activeElement===${trigger}`), true)
@@ -103,6 +124,25 @@ if (!process.versions.electron) {
       await evaluate(`window.completeRun()`); await waitFor(`window.refreshed.at(-1)==='latex'`)
       assert.equal(await evaluate(`${popup}.querySelector('[role="status"] strong').textContent`), 'Running')
 
+      // Backend events identify completion even before a fast run is hydrated,
+      // and remain independent of the focused project or number of split panes.
+      await evaluate(`document.getElementById('editor').focus();window.emitCompletion('failed','remote',7);window.emitCompletion('stopped','p',null);window.emitCompletion('old','p',null)`)
+      await pause(40); assert.equal(await evaluate(`!!${pill}`), false, 'Failures, stops and ordinary completed snapshots stay quiet')
+      await evaluate(`window.emitCompletion('background','remote',0)`); await waitFor(`!!${pill}`)
+      assert.equal(await evaluate(`${pill}.textContent`), 'Run completeBackground build · SSH project')
+      await evaluate(`window.emitCompletion('burst-1','p',0);window.emitCompletion('burst-2','p',0);window.emitCompletion('burst-3','p',0)`)
+      await waitFor(`document.querySelectorAll('.action-completion-pill').length===3`)
+      await pause(2900); await waitFor(`!${pill}`)
+
+      await window.webContents.debugger.attach('1.3')
+      await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+      await pause(80)
+      await evaluate(`window.emitCompletion('reduced-motion','latex',0)`); await waitFor(`!!${pill}`)
+      await pause(400)
+      assert.equal(await evaluate(`getComputedStyle(${pill}).transform`), 'none', 'Reduced motion only fades, without travel')
+      await pause(2500); await waitFor(`!${pill}`)
+      await window.webContents.debugger.detach()
+
       const colors = await evaluate(`(()=>{const selected=getComputedStyle(document.querySelector('#selected-row'));return {selected:selected.backgroundColor,inactive:getComputedStyle(document.querySelector('#inactive-row')).backgroundColor,attention:getComputedStyle(document.querySelector('#attention-row')).backgroundColor,yellow:getComputedStyle(document.querySelector('#attention-row .label')).color}})()`)
       assert.equal(colors.selected, 'rgb(44, 47, 54)'); assert.equal(colors.attention, colors.selected)
       assert.notEqual(colors.inactive, colors.selected); assert.equal(colors.yellow, 'rgb(242, 198, 109)', 'Attention yellow survives the greyer selection')
@@ -112,7 +152,7 @@ if (!process.versions.electron) {
         await evaluate('new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))'); await pause(200)
         await writeFile(process.env.PANEPILOT_UI_SCREENSHOT, (await window.webContents.capturePage()).toPNG())
       }
-      process.stdout.write('Action popup passed: ordered first-action fallback, last-run priority, direct Run, Starting/Running/Finished, duplicate guards, shared popup design, keyboard/hover safety, original-project refresh, local/SSH/LaTeX parity, and greyer sidebar selection with yellow attention retained.\n')
+      process.stdout.write('Action popup and completion pill passed: ordered fallback, direct Run, live status, exactly-once completion, upward fade, reduced motion, background/fast runs, bounded bursts, no false success/replay, input and footer safety, local/SSH/LaTeX parity, and sidebar selection.\n')
       window.destroy(); app.exit(0)
     } catch (cause) { process.stderr.write(`${cause.stack ?? cause}\n`); window.destroy(); app.exit(1) }
   })
@@ -122,6 +162,7 @@ function fixture() {
   return `
     import React from 'react';import {createRoot} from 'react-dom/client';
     import {LastActionTool} from './src/renderer/src/components/LastActionTool';
+    import {ActionCompletionNotice} from './src/renderer/src/components/ActionCompletionNotice';
     import {StatusWorkspaceNav} from './src/renderer/src/components/StatusWorkspaceNav';
     import {StatusSessionMenu} from './src/renderer/src/components/StatusSessionMenu';
     import {StatusDot} from './src/renderer/src/components/StatusDot';
@@ -130,14 +171,18 @@ function fixture() {
     let projectId='p',runNumber=0;window.calls=[];window.refreshed=[];window.opened=0;window.errors=[];
     window.addEventListener('error',e=>window.errors.push(e.message));
     localStorage.setItem('panepilot.action-order.v1:p',JSON.stringify(['p:tests','p:build']));
-    window.projectConsole={actions:{run:async id=>{window.calls.push(id);return new Promise((resolve,reject)=>{window.completeRun=()=>{const owner=Object.values(projects).find(p=>p.actions.some(a=>a.id===id));const session={id:'run-'+(++runNumber),projectId:owner.id,kind:'action',createdAt:new Date().toISOString(),state:'running'};owner.sessions.push(session);owner.actions.find(a=>a.id===id).lastSessionId=session.id;resolve(session)};window.rejectRun=message=>reject(Error(message))})}}};
+    const stateListeners=new Set();let lastCompletion;
+    const emit=event=>{lastCompletion=event;for(const listener of stateListeners)listener(event)};
+    window.repeatCompletion=()=>emit(lastCompletion);
+    window.emitCompletion=(id,projectId,exitCode)=>emit({sessionId:id,projectId,state:exitCode?'error':'completed',...(exitCode===null?{}:{actionCompletion:{name:'Background build',exitCode}})});
+    window.projectConsole={terminals:{onState:listener=>{stateListeners.add(listener);return()=>stateListeners.delete(listener)}},actions:{run:async id=>{window.calls.push(id);return new Promise((resolve,reject)=>{window.completeRun=()=>{const owner=Object.values(projects).find(p=>p.actions.some(a=>a.id===id));const action=owner.actions.find(a=>a.id===id);const session={id:'run-'+(++runNumber),name:action.name,projectId:owner.id,kind:'action',createdAt:new Date().toISOString(),state:'running'};owner.sessions.push(session);action.lastSessionId=session.id;resolve(session)};window.rejectRun=message=>reject(Error(message))})}}};
     const refresh=async id=>{window.refreshed.push(id);render()};
     const referenceProject={...projects.p,sessions:[{id:'reference',projectId:'p',name:'Reference terminal',profile:'shell',state:'running',kind:'terminal',archived:false}]};
     function Fixture(){const project=projects[projectId];return <><main id="workspace"><aside id="sidebar"><p>Sidebar selection</p>{['inactive','selected','attention'].map((name,i)=><div id={name+'-row'} key={name} className={'session-row '+(i?'selected ':'')+(i===2?'attention-state':'')}><button className="sidebar-row-main"><StatusDot state={i===2?'needs-input':'idle'} compact/><span className="label">{i===0?'Other terminal':i===1?'Active terminal':'Needs your input'}</span></button></div>)}</aside><textarea id="editor" defaultValue="Current terminal stays active"/></main>
       <footer className="status-bar"><div/><div id="status-workspace-nav" className="status-workspace-nav"/><div className="status-right"><StatusSessionMenu projects={[referenceProject]} connections={[{id:'local',name:'This computer'}]} onSelect={()=>{}}/></div></footer>
-      <StatusWorkspaceNav active><nav className="workspace-tabs" aria-label="Project tools"><LastActionTool project={project} active={false} onOpen={()=>window.opened++} onChanged={()=>refresh(project.id)}/><button>Files</button></nav></StatusWorkspaceNav></>}
+      <StatusWorkspaceNav active><nav className="workspace-tabs" aria-label="Project tools"><LastActionTool project={project} active={false} onOpen={()=>window.opened++} onChanged={()=>refresh(project.id)}/><button>Files</button></nav></StatusWorkspaceNav><ActionCompletionNotice projects={Object.values(projects)} activeProjectId={project.id}/></>}
     const root=createRoot(document.getElementById('root'));const render=()=>root.render(<Fixture/>);
-    window.changeProject=id=>{projectId=id;render()};window.finishRun=state=>{for(const p of Object.values(projects))for(const s of p.sessions)s.state=state;render()};
+    window.changeProject=id=>{projectId=id;render()};window.finishRun=state=>{for(const p of Object.values(projects))for(const s of p.sessions){s.state=state;emit({sessionId:s.id,projectId:p.id,state,actionCompletion:{name:s.name,exitCode:state==='completed'?0:1}})}render()};
     window.reorder=ids=>{localStorage.setItem('panepilot.action-order.v1:p',JSON.stringify(ids));window.dispatchEvent(new CustomEvent('panepilot-action-order-changed',{detail:{projectId:'p',ids}}))};render();
   `
 }

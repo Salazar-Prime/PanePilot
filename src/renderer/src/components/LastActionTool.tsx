@@ -125,7 +125,7 @@ function LastActionToolInstance({ project, active, keytip, onOpen, onChanged }: 
   }
 
   return <>
-    <button className={active ? 'active' : ''} ref={trigger}
+    <button className={active ? 'active' : ''} ref={trigger} data-action-completion-anchor
       aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
       onPointerEnter={(event) => {
         if (event.pointerType === 'touch') return

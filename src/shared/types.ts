@@ -386,6 +386,8 @@ export interface TerminalStateEvent {
   sessionId: string
   projectId: string
   state: AgentState
+  /** Live Action exit only; absent for stops, recovery, and saved-state hydration. */
+  actionCompletion?: { name: string; exitCode: number }
 }
 
 export interface TerminalMetadataEvent {

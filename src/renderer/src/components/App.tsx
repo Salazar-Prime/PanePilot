@@ -91,6 +91,7 @@ import { trimSidebarTail } from '../lib/sidebarDisclosure'
 import { SidebarSessionTree } from './SidebarSessionTree'
 import { StatusSessionMenu } from './StatusSessionMenu'
 import { PowerSavingControl } from './PowerSavingControl'
+import { ActionCompletionNotice } from './ActionCompletionNotice'
 import { statusSessionTab } from '../lib/statusSessions'
 import { useSelectionRecency } from '../lib/selectionRecency'
 import { useSidebarProjectMotion } from '../lib/useSidebarProjectMotion'
@@ -3290,6 +3291,8 @@ export function App() {
           <PowerSavingControl />
         </div>
       </footer>
+
+      <ActionCompletionNotice projects={activeProjects} activeProjectId={project?.id ?? null} />
 
       {showNewProject && (
         <NewProjectDialog

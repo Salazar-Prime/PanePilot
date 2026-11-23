@@ -2,6 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { BrowserWindow } from 'electron'
 import { ConversationIndexer } from '../src/main/conversation-indexer'
 import { RemoteConversationIndexer } from '../src/main/remote-conversation-indexer'
 import { Store } from '../src/main/store'
@@ -109,7 +110,8 @@ exec /bin/sh -c "$command"
       })
       session = store.getSessionWithoutOutput(session.id)!
     }
-    manager = new TerminalManager(store, () => null, new ConversationIndexer(), new RemoteConversationIndexer())
+    const send = vi.fn()
+    manager = new TerminalManager(store, () => ({ webContents: { send } }) as unknown as BrowserWindow, new ConversationIndexer(), new RemoteConversationIndexer())
     const internals = manager as unknown as Internals
     internals.tmuxPath = tmux
     internals.remoteTmuxPaths.set('ssh:fixture-host', tmux)
@@ -125,7 +127,7 @@ exec /bin/sh -c "$command"
     internals.runtimes.set(session.id, runtime)
     const kill = vi.spyOn(internals, 'killTmuxSession').mockImplementation(() => {})
     return {
-      store, manager, internals, runtime, kill,
+      store, manager, internals, runtime, kill, send,
       set(name: string, value: string) { writeFileSync(join(root!, name), value) },
       calls(): string[][] {
         return readFileSync(join(root!, 'calls'), 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line))
@@ -156,6 +158,10 @@ exec /bin/sh -c "$command"
     expect(Buffer.byteLength(snapshot!.output)).toBeLessThanOrEqual(1024 * 1024 + 1)
     await f.internals.finishActionWhenPaneExits(f.runtime)
     expect(f.store.getSession(f.runtime.session.id)).toMatchObject({ state: 'completed' })
+    expect(f.send).toHaveBeenCalledWith('terminal:state', {
+      sessionId: f.runtime.session.id, projectId: f.runtime.session.projectId, state: 'completed',
+      actionCompletion: { name: f.runtime.session.name, exitCode: 0 }
+    })
     expect(f.store.getSession(f.runtime.session.id)?.output.endsWith('final line\r\n')).toBe(true)
     expect(f.kill).toHaveBeenCalledExactlyOnceWith(f.runtime.connection, f.runtime.session.tmuxName)
     expect(f.runtime.pty.kill).toHaveBeenCalledOnce()
@@ -170,6 +176,9 @@ exec /bin/sh -c "$command"
     f.internals.retainTerminalOutput(f.runtime.session, 'streamed final output\r\n')
     await f.internals.finishActionWhenPaneExits(f.runtime)
     expect(f.store.getSession(f.runtime.session.id)).toMatchObject({ state: 'error', output: 'streamed final output\r\n' })
+    expect(f.send).toHaveBeenCalledWith('terminal:state', expect.objectContaining({
+      state: 'error', actionCompletion: { name: f.runtime.session.name, exitCode: 7 }
+    }))
     expect(f.kill).toHaveBeenCalledExactlyOnceWith(f.runtime.connection, f.runtime.session.tmuxName)
     expect(f.runtime.actionTimer).toBeNull()
   })
@@ -191,6 +200,15 @@ exec /bin/sh -c "$command"
     expect(f.runtime.actionTimer).not.toBeNull()
   })
 
+  it('does not mark an explicitly stopped action as a successful run', async () => {
+    const f = fixture()
+    await f.manager.stop(f.runtime.session.id)
+    expect(f.send).toHaveBeenCalledWith('terminal:state', {
+      sessionId: f.runtime.session.id, projectId: f.runtime.session.projectId, state: 'completed'
+    })
+    expect(f.send.mock.calls.some(([channel, event]) => channel === 'terminal:state' && event.actionCompletion)).toBe(false)
+  })
+
   it.each([false, true])('preserves inline-edit result markers and volatile replay when capture fails: %s', async (captureFails) => {
     const f = fixture('ssh', true)
     const output = `${LATEX_INLINE_OUTPUT_START}${Buffer.from('model note 🙂').toString('base64')}${LATEX_INLINE_OUTPUT_END}`
@@ -202,6 +220,7 @@ exec /bin/sh -c "$command"
     await f.internals.finishActionWhenPaneExits(f.runtime)
     expect(resolve).toHaveBeenCalledExactlyOnceWith(f.runtime.session.id, { exitCode: 0, output })
     expect(f.store.getSession(f.runtime.session.id)).toMatchObject({ state: 'response-ready', output: '' })
+    expect(f.send.mock.calls.some(([channel, event]) => channel === 'terminal:state' && event.actionCompletion)).toBe(false)
     expect((await f.manager.attach(f.runtime.session.id, 80, 24)).output).toBe(output)
     expect(f.kill).not.toHaveBeenCalled()
   })
