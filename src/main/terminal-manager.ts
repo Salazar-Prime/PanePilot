@@ -456,6 +456,9 @@ export class TerminalManager {
   private powerSavingRevision = 0
   private readonly powerSavingRevisions = new Map<string, number>()
   private readonly powerSavingStops = new Set<string>()
+  private renameRevision = 0
+  private readonly renameRevisions = new Map<string, number>()
+  private readonly renamingSessions = new Set<string>()
   private memoryRead: Promise<ReturnType<typeof summarizeProcessMemory>> | null = null
 
   constructor(
@@ -2073,46 +2076,88 @@ export class TerminalManager {
 
   private async renameOnce(sessionId: string, name: string): Promise<void> {
     const cleaned = validatedTerminalName(name)
+    const project = this.store.getProjectForRuntime(this.requireSession(sessionId).projectId)
+    // Subsequent attaches must not join a name snapshot from before this edit.
+    if (project) this.remoteTmuxReads.delete(project.connectionId)
+    this.renamingSessions.add(sessionId)
+    this.renameRevisions.set(sessionId, ++this.renameRevision)
+    try {
+      await this.renameVerifiedSession(sessionId, cleaned)
+    } finally {
+      if (project) this.remoteTmuxReads.delete(project.connectionId)
+      this.renamingSessions.delete(sessionId)
+      this.renameRevisions.set(sessionId, ++this.renameRevision)
+    }
+  }
+
+  private async renameVerifiedSession(sessionId: string, cleaned: string): Promise<void> {
     const session = this.requireSession(sessionId)
     let tmuxName = session.tmuxName
     if (session.backend === 'tmux' && session.tmuxName) {
-      if (cleaned === session.name && cleaned === session.tmuxName) return
       const project = this.store.getProjectForRuntime(session.projectId)
       const connection = project ? this.store.getConnection(project.connectionId) : null
-      if (!connection) throw new Error('Project connection not found.')
+      if (!project || !connection) throw new Error('Project connection not found.')
       const connectionTmuxPath = await this.tmuxPathForConnection(connection)
-      const persistentSessionExists = await this.tmuxSessionExists(
-        connection,
-        session.tmuxName
-      )
-      if (cleaned !== session.tmuxName && persistentSessionExists) {
-        if (await this.tmuxSessionExists(connection, cleaned)) {
-          throw new Error(
-            `A tmux session named “${cleaned}” already exists on ${connection.name}.`
+      if (!connectionTmuxPath) throw new Error('Tmux is unavailable.')
+      // Never borrow an in-flight discovery snapshot: another client may have
+      // renamed this UUID already, or reused its previous name for another tab.
+      const readFresh = () => connection.kind === 'local'
+        ? this.listLocalTmuxSessions() : this.readRemoteTmuxSessions(connection)
+      let listed = await readFresh()
+      // Metadata refresh briefly marks a session unmanaged while replacing its
+      // options. Allow that bounded write to settle, without trusting an
+      // unverified name or starting/retagging any backend ourselves.
+      for (let attempt = 0; attempt < 2 && listed &&
+        this.store.getSessionTmuxMetadataVersion(sessionId) === 1 &&
+        !listed.some((candidate) => candidate.metadata?.terminalId === sessionId) &&
+        listed.some((candidate) => (candidate.name === session.tmuxName || candidate.name === cleaned) && !candidate.metadata); attempt += 1) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 150 * (attempt + 1)))
+        listed = await readFresh()
+      }
+      if (!listed) throw new Error(`Could not verify tmux sessions on ${connection.name}. Refresh the connection and retry renaming.`)
+      const owned = listed.filter((candidate) => candidate.metadata?.terminalId === sessionId)
+      if (owned.length > 1) throw new Error('Multiple tmux sessions claim this terminal. Refresh the connection before renaming.')
+      const live = owned[0] ?? listed.find((candidate) => candidate.name === session.tmuxName)
+      if (live && (live.metadata
+        ? live.metadata.terminalId !== sessionId || !sameRemoteProjectPath(live.metadata.projectPath, project.folder)
+        : this.store.getSessionTmuxMetadataVersion(sessionId) === 1)) {
+        throw new Error('The saved tmux name belongs to a different or unverified session. Refresh the connection before renaming.')
+      }
+      const destination = listed.find((candidate) => candidate.name === cleaned)
+      if (destination && destination.tmuxId !== live?.tmuxId) {
+        throw new Error(`A tmux session named “${cleaned}” already exists on ${connection.name}.`)
+      }
+      if (live && live.name !== cleaned) {
+        // tmux's immutable server-local ID survives a concurrent rename. Never
+        // mutate whichever session happens to occupy a stale display name.
+        const args = ['-u', 'rename-session', '-t', live.tmuxId, cleaned]
+        try {
+          await this.execCommand(
+            connection.kind === 'local' ? connectionTmuxPath : 'ssh',
+            connection.kind === 'local' ? args : [
+              '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5',
+              connection.sshAlias ?? connection.name,
+              [connectionTmuxPath, ...args].map(quote).join(' ')
+            ],
+            { encoding: 'utf8', timeout: connection.kind === 'local' ? 3_000 : 7_000, maxBuffer: 64 * 1024 }
           )
+        } catch (error) {
+          // SSH may disconnect after tmux commits the rename. Accept only fresh
+          // proof of the exact owned backend already having the requested name.
+          const after = await readFresh().catch(() => null)
+          const renamed = after?.filter((candidate) => candidate.metadata?.terminalId === sessionId)
+          if (renamed?.length !== 1 || renamed[0].tmuxId !== live.tmuxId ||
+              renamed[0].name !== cleaned || !sameRemoteProjectPath(renamed[0].metadata!.projectPath, project.folder)) throw error
         }
       }
-      const renamedTmux = cleaned
-      if (persistentSessionExists) {
-        if (!connectionTmuxPath) throw new Error('Tmux is unavailable.')
-        const args = ['rename-session', '-t', `=${session.tmuxName}`, renamedTmux]
-        await this.execCommand(
-          connection.kind === 'local' ? connectionTmuxPath : 'ssh',
-          connection.kind === 'local' ? args : [
-            '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5',
-            connection.sshAlias ?? connection.name,
-            [connectionTmuxPath, ...args].map(quote).join(' ')
-          ],
-          { encoding: 'utf8', timeout: connection.kind === 'local' ? 3_000 : 7_000, maxBuffer: 64 * 1024 }
-        )
-      }
-      tmuxName = renamedTmux
+      tmuxName = cleaned
     }
     if (cleaned === session.name && tmuxName === session.tmuxName) return
     this.store.renameSession(sessionId, cleaned, tmuxName)
     const runtime = this.runtimes.get(sessionId)
     const latest = this.store.getSessionWithoutOutput(sessionId)
     if (runtime && latest) runtime.session = latest
+    this.getWindow()?.webContents.send('terminal:metadata', { sessionId, projectId: session.projectId })
   }
 
   transferSession(
@@ -3452,7 +3497,9 @@ export class TerminalManager {
     projects: Project[]
   ): Promise<number> {
     const powerSavingRevision = this.powerSavingRevision
-    const cleanupOverlapped = (id: string) => this.powerSavingStops.has(id) || (this.powerSavingRevisions.get(id) ?? 0) > powerSavingRevision
+    const renameRevision = this.renameRevision
+    const cleanupOverlapped = (id: string) => this.powerSavingStops.has(id) || (this.powerSavingRevisions.get(id) ?? 0) > powerSavingRevision ||
+      this.renamingSessions.has(id) || (this.renameRevisions.get(id) ?? 0) > renameRevision
     const listed = await this.listTmuxSessions(connection)
     if (this.shuttingDown) return 0
     if (!listed) return 0
