@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.19.0 — 2026-11-24
+
+This release improves SSH terminal creation and renaming, adds optional idle-chat
+power saving, and makes completed Actions easier to notice.
+
+- New terminals choose a free name with one bounded host read instead of repeated
+  SSH probes. Connection failures report an error rather than silently falling
+  back to a nonpersistent terminal. Renaming verifies the exact tmux identity and
+  handles changes made from another PanePilot client without renaming another session.
+- Optional **Power saving** pauses eligible idle local Codex and Claude backends
+  after a configurable timeout while keeping a chosen minimum number open. Saved
+  chats resume when reopened. Its settings also show separate resident-memory
+  estimates for Electron, local tmux, and PanePilot-managed agent process trees.
+- Successful project Actions show a brief **Run complete** pill above the status
+  bar without interrupting typing or expanding the toolbar.
+
+The v0.19.0 desktop build supports Apple silicon Macs on macOS 12 or newer. It is
+ad-hoc signed and not Apple-notarized. Signed Sparkle updates are available to
+PanePilot v0.16.0 and newer; installation and restart always require user action.
+
 ## 0.18.0 — 2026-11-22
 
 This release makes frequently used project content easier to reopen while improving
