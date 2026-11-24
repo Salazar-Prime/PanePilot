@@ -9,7 +9,7 @@ import { TerminalManager, type LatexInlineExecResult } from '../src/main/termina
 
 interface Internals {
   requireProjectTmux(id: string, capability: string): Promise<void>
-  tmuxSessionExists(...args: unknown[]): Promise<boolean>
+  availableSessionName(...args: unknown[]): Promise<string>
   runLatexInlineEditExecOnce(id: string, prompt: string): Promise<LatexInlineExecResult>
 }
 function deferred<T>() {
@@ -40,12 +40,12 @@ function fixture() {
 describe('asynchronous terminal lifecycle serialization', () => {
   it('creates one inline runner when two panes request it during a slow availability read', async () => {
     const f = fixture()
-    const check = deferred<boolean>()
-    const exists = vi.spyOn(f.internal, 'tmuxSessionExists').mockReturnValue(check.promise)
+    const check = deferred<string>()
+    const exists = vi.spyOn(f.internal, 'availableSessionName').mockReturnValue(check.promise)
     const first = f.manager.startLatexInlineChat(f.project.id)
     const second = f.manager.startLatexInlineChat(f.project.id)
     await vi.waitFor(() => expect(exists).toHaveBeenCalledOnce())
-    check.resolve(false)
+    check.resolve('Inline edits · Fixture paper')
     const [a, b] = await Promise.all([first, second])
     expect(a.id).toBe(b.id)
     expect(f.store.getProjectForRuntime(f.project.id)?.sessions).toHaveLength(1)
@@ -54,12 +54,12 @@ describe('asynchronous terminal lifecycle serialization', () => {
 
   it('does not persist an inline runner after shutdown during its name check', async () => {
     const f = fixture()
-    const check = deferred<boolean>()
-    const exists = vi.spyOn(f.internal, 'tmuxSessionExists').mockReturnValue(check.promise)
+    const check = deferred<string>()
+    const exists = vi.spyOn(f.internal, 'availableSessionName').mockReturnValue(check.promise)
     const pending = f.manager.startLatexInlineChat(f.project.id)
     await vi.waitFor(() => expect(exists).toHaveBeenCalledOnce())
     f.manager.shutdown()
-    check.resolve(false)
+    check.resolve('Inline edits · Fixture paper')
     await expect(pending).rejects.toThrow('closing')
     expect(f.store.getProjectForRuntime(f.project.id)?.sessions).toHaveLength(0)
   })

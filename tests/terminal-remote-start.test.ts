@@ -31,7 +31,7 @@ describe('remote terminal start', () => {
       [
         '#!/bin/sh',
         'case "$*" in',
-        '  *has-session*) sleep 0.15; exit 1 ;;',
+        '  *list-sessions*) sleep 0.15; exit 0 ;;',
         '  *panepilot_tmux*) sleep 0.15; printf "/usr/bin/tmux\\n"; exit 0 ;;',
         '  *) sleep 5 ;;',
         'esac'

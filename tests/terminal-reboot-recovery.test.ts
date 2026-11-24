@@ -171,7 +171,7 @@ describe('terminal reboot recovery', () => {
     expect(await instance.prepareLocalSessionsAfterReboot(bootTime)).toBe(1)
     expect(pty.spawn).not.toHaveBeenCalled()
     await instance.attach(existing.id, 100, 30)
-    expect(vi.mocked(pty.spawn).mock.calls[0][1]).toEqual(['attach-session', '-t', `=${existing.name}`])
+    expect(vi.mocked(pty.spawn).mock.calls[0][1]).toEqual(['-u', 'attach-session', '-t', `=${existing.name}`])
   })
 
   it('rechecks ownership when another client restores a waiting session', async () => {
@@ -180,7 +180,7 @@ describe('terminal reboot recovery', () => {
     await instance.prepareLocalSessionsAfterReboot(bootTime)
     live(waiting)
     await instance.attach(waiting.id, 100, 30)
-    expect(vi.mocked(pty.spawn).mock.calls[0][1]).toEqual(['attach-session', '-t', `=${waiting.name}`])
+    expect(vi.mocked(pty.spawn).mock.calls[0][1]).toEqual(['-u', 'attach-session', '-t', `=${waiting.name}`])
     expect(store.isSessionPendingRebootRecovery(waiting.id)).toBe(false)
   })
 

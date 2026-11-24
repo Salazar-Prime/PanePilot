@@ -2963,6 +2963,15 @@ export class Store {
     return true
   }
 
+  listReservedTmuxNames(connectionId: string): Set<string> {
+    const rows = this.db.prepare(
+      `SELECT ts.tmux_name AS name FROM terminal_sessions ts
+       JOIN projects p ON p.id = ts.project_id
+       WHERE p.connection_id = ? AND ts.tmux_name IS NOT NULL`
+    ).all(connectionId) as Array<{ name: string }>
+    return new Set(rows.map((row) => row.name))
+  }
+
   listClaimedProviderSessionIds(connectionId: string): Set<string> {
     const rows = this.db
       .prepare(

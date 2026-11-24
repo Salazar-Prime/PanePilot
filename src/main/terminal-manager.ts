@@ -320,7 +320,10 @@ async function terminalPath(): Promise<string | undefined> {
   return extras.length > 0 ? `${loginPath}:${extras.join(':')}` : loginPath
 }
 
-function remoteTmuxResolutionCommand(): string {
+function remoteTmuxResolutionCommand(reportMissing = false): string {
+  const missing = reportMissing
+    ? `printf '%s\\n' 'PANEPILOT_TMUX_UNAVAILABLE'; exit 0`
+    : 'exit 127'
   return (
     `panepilot_tmux=$(command -v tmux 2>/dev/null || true); ` +
     `if [ -z "$panepilot_tmux" ]; then ` +
@@ -331,15 +334,15 @@ function remoteTmuxResolutionCommand(): string {
     `panepilot_tmux=$("\${SHELL:-/bin/sh}" -lic 'command -v tmux' 2>/dev/null | tail -n 1); ` +
     `fi; ` +
     `case "$panepilot_tmux" in ` +
-    `/*) test -x "$panepilot_tmux" || exit 127 ;; ` +
-    `*) exit 127 ;; ` +
+    `/*) test -x "$panepilot_tmux" || { ${missing}; } ;; ` +
+    `*) ${missing} ;; ` +
     `esac`
   )
 }
 
 async function resolveRemoteTmuxAsync(alias: string): Promise<string | null> {
   const discoveryCommand =
-    `${remoteTmuxResolutionCommand()}; ` +
+    `${remoteTmuxResolutionCommand(true)}; ` +
     `printf '%s\\n' "$panepilot_tmux"`
   try {
     const result = await execFileAsync(
@@ -349,13 +352,13 @@ async function resolveRemoteTmuxAsync(alias: string): Promise<string | null> {
         '-o',
         'BatchMode=yes',
         '-o',
-        'ConnectTimeout=3',
+        'ConnectTimeout=8',
         alias,
         discoveryCommand
       ],
       {
         encoding: 'utf8',
-        timeout: 3_000,
+        timeout: 12_000,
         maxBuffer: 64 * 1024
       }
     )
@@ -364,17 +367,21 @@ async function resolveRemoteTmuxAsync(alias: string): Promise<string | null> {
       .split(/\r?\n/)
       .at(-1)
       ?.trim()
+    if (path === 'PANEPILOT_TMUX_UNAVAILABLE') return null
     if (
       !path ||
       !path.startsWith('/') ||
       path.length > 4_096 ||
       /[\u0000-\u001f\u007f]/.test(path)
     ) {
-      return null
+      throw new Error('The remote tmux check returned an invalid path.')
     }
     return path
-  } catch {
-    return null
+  } catch (error) {
+    const failure = error as { stderr?: string; killed?: boolean; message?: string }
+    const detail = failure.stderr?.trim() ||
+      (failure.killed ? 'The SSH check timed out.' : failure.message || 'The SSH check failed.')
+    throw new Error(`Could not check tmux on ${alias}: ${detail.slice(0, 500)}`)
   }
 }
 
@@ -708,14 +715,7 @@ export class TerminalManager {
 
     if (existing) return existing
 
-    const baseName = generatedTerminalName(`Inline edits · ${project.name}`)
-    let name = baseName
-    let suffix = 2
-    while (await this.tmuxSessionExists(connection, name)) {
-      const suffixText = ` ${suffix}`
-      name = `${baseName.slice(0, 80 - suffixText.length).trimEnd()}${suffixText}`
-      suffix += 1
-    }
+    const name = await this.availableSessionName(connection, generatedTerminalName(`Inline edits · ${project.name}`))
     this.ensureProjectLaunchable(projectId)
     const created = this.store.createSession({
       projectId,
@@ -1176,13 +1176,7 @@ export class TerminalManager {
     let sessionName =
       preparedSessionName ?? this.sessionNameForInput(input, project)
     if (tmuxAvailable && !preparedSessionName) {
-      const baseName = sessionName
-      let suffix = 2
-      while (await this.tmuxSessionExists(connection, sessionName)) {
-        const suffixText = ` ${suffix}`
-        sessionName = `${baseName.slice(0, 80 - suffixText.length).trimEnd()}${suffixText}`
-        suffix += 1
-      }
+      sessionName = await this.availableSessionName(connection, sessionName)
     }
     this.ensureProjectLaunchable(project.id)
     const tmuxName = tmuxAvailable ? sessionName : null
@@ -1251,6 +1245,51 @@ export class TerminalManager {
     ).length
     const requestedName = input.name ? validatedTerminalName(input.name) : null
     return requestedName || `${profileLabel} ${sameProfileCount + 1}`
+  }
+
+  private async availableSessionName(connection: Connection, baseName: string): Promise<string> {
+    const tmuxPath = await this.tmuxPathForConnection(connection)
+    if (!tmuxPath) throw new Error(`Tmux is unavailable on ${connection.name}.`)
+    // One bounded read, not one SSH round trip per suffix. Do not reuse a
+    // discovery snapshot: a previous launch may have just taken a name.
+    const args = ['-u', 'list-sessions', '-F', '#{session_name}']
+    let names: string[]
+    try {
+      const result = connection.kind === 'local'
+        ? await this.execCommand(tmuxPath, args, {
+            encoding: 'utf8', timeout: 4_000, maxBuffer: MAX_TMUX_LIST_OUTPUT
+          })
+        : await this.execCommand('ssh', [
+            '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8',
+            connection.sshAlias ?? connection.name,
+            `exec ${quote(tmuxPath)} ${args.map(quote).join(' ')}`
+          ], { encoding: 'utf8', timeout: 12_000, maxBuffer: MAX_TMUX_LIST_OUTPUT })
+      names = result.stdout.split(/\r?\n/).filter(Boolean)
+    } catch (error) {
+      const failure = error as { code?: unknown; stderr?: string; killed?: boolean; message?: string }
+      // A reachable host with no tmux server is an empty list. Authentication,
+      // network, permission and timeout failures must never mean "name free".
+      if (failure.code === 1 && /no server running|error connecting to .*\((?:No such file or directory|Connection refused)\)/i.test(failure.stderr ?? '')) {
+        names = []
+      } else {
+        if (connection.kind === 'ssh') this.remoteTmuxPaths.delete(connection.id)
+        const detail = failure.stderr?.trim() ||
+          (failure.killed ? 'The session-name check timed out.' : failure.message || 'The session-name check failed.')
+        throw new Error(`Could not read terminal names on ${connection.name}: ${detail.slice(0, 500)}`)
+      }
+    }
+    // Reserve saved names too: a new PTY returns before tmux is necessarily
+    // visible, and stopped tabs still need their own names when resumed.
+    const occupied = this.store.listReservedTmuxNames(connection.id)
+    for (const name of names) occupied.add(name)
+    if (!occupied.has(baseName)) return baseName
+    // At most occupied.size collisions can exist; no remote work in this loop.
+    for (let suffix = 2; suffix <= occupied.size + 2; suffix += 1) {
+      const suffixText = ` ${suffix}`
+      const candidate = `${baseName.slice(0, 80 - suffixText.length).trimEnd()}${suffixText}`
+      if (!occupied.has(candidate)) return candidate
+    }
+    throw new Error('Could not choose a unique terminal name. Try a different name.')
   }
 
   private async remoteTmuxSessionExists(
@@ -2467,7 +2506,7 @@ export class TerminalManager {
         session.dangerousMode,
         resumeProvider ? session.providerSessionId : null
       )
-    await this.tmuxPathForConnection(connection)
+    if (session.backend === 'tmux') await this.tmuxPathForConnection(connection)
     this.ensureProjectLaunchable(session.projectId)
     if (this.shuttingDown) throw new Error('PanePilot is closing.')
     const child = await this.spawnTerminal(session, folder, connection, command, cols, rows, create)
@@ -2743,7 +2782,7 @@ export class TerminalManager {
         const commandSuffix = create ? ` ${quote(remoteLaunchCommand)}` : ''
         remoteCommand =
           `cd ${quote(folder)} && exec ${quote(remoteTmuxPath)} ` +
-          `${tmuxAction} ${quote(tmuxTarget)}${commandSuffix}`
+          `-u ${tmuxAction} ${quote(tmuxTarget)}${commandSuffix}`
       } else {
         remoteCommand = `cd ${quote(folder)} && ${remoteLaunchCommand}`
       }
@@ -2788,8 +2827,8 @@ export class TerminalManager {
             }`
           : command
       const args = create
-        ? ['new-session', '-s', session.tmuxName, '-c', folder, persistentCommand]
-        : ['attach-session', '-t', `=${session.tmuxName}`]
+        ? ['-u', 'new-session', '-s', session.tmuxName, '-c', folder, persistentCommand]
+        : ['-u', 'attach-session', '-t', `=${session.tmuxName}`]
       return pty.spawn(this.tmuxPath, args, {
         name: 'xterm-256color',
         cols,

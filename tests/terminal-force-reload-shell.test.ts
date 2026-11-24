@@ -95,7 +95,7 @@ describe('Force reload for ordinary terminals and agent chats', () => {
       expect(pty.spawn).toHaveBeenCalledOnce()
       const [file, args, options] = vi.mocked(pty.spawn).mock.calls[0]
       expect(file).toBe(tmuxPath)
-      expect(args).toEqual(['new-session', '-s', chosen.name, '-c', root, expect.any(String)])
+      expect(args).toEqual(['-u', 'new-session', '-s', chosen.name, '-c', root, expect.any(String)])
       expect(args?.at(-1)).toContain('exec "${SHELL:-/bin/sh}" -l')
       expect(options).toMatchObject({ cwd: root, cols: 100, rows: 30 })
       expect(store.getSession(chosen.id)).toMatchObject({ id: chosen.id,
@@ -115,7 +115,7 @@ describe('Force reload for ordinary terminals and agent chats', () => {
       const [file, args] = vi.mocked(pty.spawn).mock.calls[0]
       expect(file).toBe('ssh')
       expect(args).toContain('fixture-host')
-      expect(args?.at(-1)).toContain(`cd '/srv/remote project' && exec '${tmuxPath}' new-session -s '${chosen.name}'`)
+      expect(args?.at(-1)).toContain(`cd '/srv/remote project' && exec '${tmuxPath}' -u new-session -s '${chosen.name}'`)
       expect(args?.at(-1)).toContain('SHELL:-/bin/sh')
       expect(args?.at(-1)).not.toContain('codex')
       expect(args?.at(-1)).not.toContain('claude')
